@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(gh issue:*)",
+      "Bash(find /c/git/spec-kit -name *.md -path *github/agents*)",
+      "Bash(xargs grep:*)",
+      "Bash(find /c/git/spec-kit -path */.github/agents/* -name *.md)",
+      "WebSearch",
+      "Bash(specify --version)",
+      "Bash(pip install:*)",
+      "Bash(uv tool:*)",
+      "Bash(\"C:/Users/dlukyanov/.local/bin/specify\" init:*)",
+      "Bash(PYTHONIOENCODING=utf-8 echo \"y\")",
+      "Bash(python -c \":*)"
     ]
   }
 }
