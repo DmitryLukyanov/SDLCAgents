@@ -104,6 +104,27 @@ export async function searchIssues(
   return { issues: issues.slice(0, maxResults) };
 }
 
+/** Minimal Atlassian Document Format document: one paragraph of plain text. */
+function adfDocFromPlainText(text: string): Record<string, unknown> {
+  return {
+    type: 'doc',
+    version: 1,
+    content: [
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text }],
+      },
+    ],
+  };
+}
+
+export async function addIssueComment(issueKey: string, plainText: string): Promise<void> {
+  await jiraFetch<unknown>(`/rest/api/3/issue/${encodeURIComponent(issueKey)}/comment`, {
+    method: 'POST',
+    body: JSON.stringify({ body: adfDocFromPlainText(plainText) }),
+  });
+}
+
 export async function addIssueLabel(issueKey: string, label: string): Promise<void> {
   await jiraFetch<unknown>(`/rest/api/3/issue/${encodeURIComponent(issueKey)}`, {
     method: 'PUT',

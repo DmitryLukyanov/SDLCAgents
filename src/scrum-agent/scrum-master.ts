@@ -2,8 +2,9 @@
  * Scrum Master CLI: reads env, wires real Jira + Octokit, calls runScrumMasterWithRulesOrSingleJql().
  */
 import { Octokit } from '@octokit/rest';
-import { addIssueLabel, searchIssues, transitionIssueToStatusName } from '../jira/jira-client.js';
+import { addIssueComment, addIssueLabel, searchIssues, transitionIssueToStatusName } from '../jira/jira-client.js';
 import { getPostReadTargetStatus } from '../lib/jira-status.js';
+import { messages } from '../resources/messages.js';
 import { runScrumMasterWithRulesOrSingleJql } from './scrum-master-core.js';
 
 const [owner, repo] = (process.env.GITHUB_REPOSITORY || '').split('/');
@@ -46,6 +47,11 @@ const deps = {
   addIssueLabel,
   transitionIssueToPostRead: async (issueKey: string) => {
     await transitionIssueToStatusName(issueKey, getPostReadTargetStatus());
+    try {
+      await addIssueComment(issueKey, messages.jira.takenIntoProcessingComment);
+    } catch (e) {
+      console.warn(`   ⚠️ Jira "taken into processing" comment failed for ${issueKey}:`, e);
+    }
   },
   dispatchWorkflow: async (args: WorkflowDispatchParams) => {
     try {

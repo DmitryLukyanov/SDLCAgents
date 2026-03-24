@@ -2,12 +2,9 @@
  * Dummy agent: load one Jira issue, optional related-ticket context, print, transition status.
  */
 import { fetchRelatedIssueSummaries } from '../jira/jira-related.js';
-import { getIssue, transitionIssueToStatusName } from '../jira/jira-client.js';
-import {
-  getPostReadTargetStatus,
-  getRequiredIssueStatus,
-  statusAllowsRead,
-} from '../lib/jira-status.js';
+import { addIssueComment, getIssue, transitionIssueToStatusName } from '../jira/jira-client.js';
+import { getPostReadTargetStatus, getRequiredIssueStatus, statusAllowsRead } from '../lib/jira-status.js';
+import { messages } from '../resources/messages.js';
 import { adfToPlain } from './adf-to-plain.js';
 
 /** Default 1 = linked issues + child issues (see jira-related.ts). Set TICKET_CONTEXT_DEPTH=0 to disable. */
@@ -110,5 +107,11 @@ export async function runDummyTicketAgent(): Promise<void> {
     console.log(`Moving ${issueKey} to status "${nextStatus}"...`);
     await transitionIssueToStatusName(issueKey, nextStatus);
     console.log(`Status updated to "${nextStatus}".`);
+    try {
+      await addIssueComment(issueKey, messages.jira.takenIntoProcessingComment);
+      console.log('Added comment: ticket taken into processing.');
+    } catch (e) {
+      console.warn('Could not add "taken into processing" comment (non-fatal):', e);
+    }
   }
 }
