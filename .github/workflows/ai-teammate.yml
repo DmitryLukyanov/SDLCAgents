@@ -95,7 +95,7 @@ jobs:
         run: |
           if [ ! -d ".speckit" ] && [ ! -f "specify.toml" ]; then
             echo "Spec-kit not initialized — running specify init..."
-            specify init \
+            echo "y" | specify init \
               --ai ${{ steps.manifest.outputs.agent }} \
               --script ${{ steps.manifest.outputs.script_type }} \
               --here
