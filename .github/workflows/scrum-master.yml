@@ -1,0 +1,84 @@
+# Scrum Master: loads config/sm.json rules OR legacy single JQL → dispatches ai-teammate.yml.
+name: Scrum Master
+
+concurrency:
+  group: scrum-master-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      jql:
+        description: >-
+          Optional. If set: legacy mode — single JQL + agent_config_file (ignores rules file).
+          If empty: use rules file (rules_path).
+        required: false
+        type: string
+      agent_config_file:
+        description: Legacy mode only — agent JSON path (default config/agents/dummy-ticket-agent.json)
+        required: false
+        default: config/agents/dummy-ticket-agent.json
+        type: string
+      rules_path:
+        description: Path to SM rules JSON when jql is empty
+        required: false
+        default: config/sm.json
+        type: string
+      taken_status:
+        description: Jira status tickets must be in (appended to JQL + agent check)
+        required: false
+        default: 'To Do'
+        type: string
+      status_to_move_to:
+        description: Jira status after dummy agent reads the issue
+        required: false
+        default: 'In Progress'
+        type: string
+      limit:
+        description: Global default max issues per rule (1–50); rules may override
+        required: false
+        default: '10'
+        type: string
+      jira_project:
+        description: Optional. Replaces {jiraProject} in rule JQL
+        required: false
+        type: string
+      ticket_context_depth:
+        description: >-
+          0 = primary Jira issue only; 1 = linked issues + subtasks/children in agent log (encoded for ai-teammate)
+        required: false
+        default: '1'
+        type: string
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run Scrum Master
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JQL: ${{ inputs.jql }}
+          AGENT_CONFIG_FILE: ${{ inputs.agent_config_file }}
+          SM_RULES_FILE: ${{ inputs.rules_path }}
+          GLOBAL_LIMIT: ${{ inputs.limit }}
+          REQUIRED_JIRA_STATUS: ${{ inputs.taken_status }}
+          POST_READ_STATUS: ${{ inputs.status_to_move_to }}
+          JIRA_PROJECT: ${{ inputs.jira_project }}
+          TICKET_CONTEXT_DEPTH: ${{ inputs.ticket_context_depth }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: npm run scrum-master
