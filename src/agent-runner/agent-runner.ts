@@ -21,6 +21,14 @@ interface AgentJson {
       enabled?: boolean;
       /** Relative to repo root; default spec-output/<ISSUE_KEY> */
       outputDir?: string;
+      /** Use real specify-cli instead of headless templates. */
+      cliEnabled?: boolean;
+      /** Git tag for specify-cli (e.g. "v0.4.0"). */
+      version?: string;
+      /** AI agent backend (e.g. "copilot"). */
+      agent?: string;
+      /** Script type for specify init (e.g. "sh"). */
+      scriptType?: string;
     };
   };
 }
@@ -71,10 +79,16 @@ async function main(): Promise<void> {
       : agent.params?.specKit?.enabled === true;
 
   if (specKitEnabled) {
-    const outDir = agent.params?.specKit?.outputDir?.trim();
+    const sk = agent.params?.specKit;
+    const outDir = sk?.outputDir?.trim();
     await runSpecKitPipelineWithLogging({
       issueKey,
       ...(outDir ? { outputDir: resolve(process.cwd(), outDir) } : {}),
+      cliEnabled: sk?.cliEnabled,
+      ticketContextDepth: depth,
+      cliVersion: sk?.version,
+      cliAgent: sk?.agent,
+      cliScriptType: sk?.scriptType,
     });
   }
 

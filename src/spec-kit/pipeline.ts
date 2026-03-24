@@ -1,8 +1,10 @@
 /**
- * Headless Spec Kit-style pipeline: materialize constitution, spec, plan, tasks
- * from a Jira issue + config/spec-kit/defaults.json. Does not invoke external
- * Specify CLI (that toolkit is agent-interactive); this matches the same artifacts
- * for CI until an AI step is wired.
+ * Spec Kit pipeline — two modes:
+ *
+ * 1. **Headless** (default): materialize template constitution, spec, plan, tasks
+ *    from a Jira issue + config/spec-kit/defaults.json.
+ * 2. **CLI** (`cliEnabled: true`): prepare Jira context + manifest.json so that
+ *    the workflow shell steps can invoke the real `specify` CLI.
  */
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -10,6 +12,7 @@ import { getIssue } from '../jira/jira-client.js';
 import { adfToPlain } from '../dummy-agent/adf-to-plain.js';
 import type { SpecKitDefaults, SpecKitJiraOverrides } from './spec-kit-types.js';
 import { parseSpecKitBlockFromPlainDescription } from './parse-jira-spec-kit.js';
+import { prepareSpecKitContext, type PrepareContextOptions } from './prepare-context.js';
 
 const CONSTITUTION_SOURCE = 'config/spec-kit/constitution.md';
 const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
@@ -42,6 +45,14 @@ export interface RunSpecKitPipelineOptions {
   issueKey: string;
   /** Override output root (default: spec-output/<issueKey>) */
   outputDir?: string;
+  /** When true, prepare context + manifest for the real specify CLI instead of writing templates. */
+  cliEnabled?: boolean;
+  /** Ticket context depth for related issues (default 1). */
+  ticketContextDepth?: number;
+  /** CLI config (required when cliEnabled is true). */
+  cliVersion?: string;
+  cliAgent?: string;
+  cliScriptType?: string;
 }
 
 export async function runSpecKitPipeline(opts: RunSpecKitPipelineOptions): Promise<string> {
@@ -106,6 +117,27 @@ export async function runSpecKitPipeline(opts: RunSpecKitPipelineOptions): Promi
 
 /** Log phases for Actions / local runs. */
 export async function runSpecKitPipelineWithLogging(opts: RunSpecKitPipelineOptions): Promise<void> {
+  if (opts.cliEnabled) {
+    console.log('\n=== Spec Kit pipeline (CLI mode — preparing context + manifest) ===');
+    const ctxOpts: PrepareContextOptions = {
+      issueKey: opts.issueKey,
+      cwd: opts.cwd,
+      outputDir: opts.outputDir ? resolve(opts.cwd ?? process.cwd(), opts.outputDir) : undefined,
+      ticketContextDepth: opts.ticketContextDepth,
+      cli: {
+        version: opts.cliVersion ?? 'v0.4.0',
+        agent: opts.cliAgent ?? 'copilot',
+        scriptType: opts.cliScriptType ?? 'sh',
+      },
+    };
+    const result = await prepareSpecKitContext(ctxOpts);
+    console.log(`  → context:      ${result.contextFile}`);
+    console.log(`  → constitution:  ${result.constitutionFile}`);
+    console.log(`  → manifest:      ${result.manifestFile}`);
+    console.log('  ✅ CLI mode ready — workflow shell steps will run specify commands.\n');
+    return;
+  }
+
   const phases = ['constitution', 'specify (spec.md)', 'plan (plan.md)', 'tasks (tasks.md)'] as const;
   console.log('\n=== Spec Kit pipeline (headless artifacts) ===');
   for (const p of phases) {

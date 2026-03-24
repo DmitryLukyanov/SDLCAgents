@@ -4,7 +4,11 @@
     "runner": "dummy_ticket",
     "ticketContextDepth": 1,
     "specKit": {
-      "enabled": true
+      "enabled": true,
+      "cliEnabled": true,
+      "version": "v0.4.0",
+      "agent": "copilot",
+      "scriptType": "sh"
     }
   }
 }
