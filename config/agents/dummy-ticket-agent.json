@@ -2,6 +2,9 @@
   "name": "dummy_ticket",
   "params": {
     "runner": "dummy_ticket",
-    "ticketContextDepth": 1
+    "ticketContextDepth": 1,
+    "specKit": {
+      "enabled": true
+    }
   }
 }

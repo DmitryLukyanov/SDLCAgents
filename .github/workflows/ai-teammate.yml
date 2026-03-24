@@ -38,7 +38,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Run agent from config
+      # Spec Kit phases (constitution → specify/spec.md → plan → tasks) run inside agent-runner
+      # when the agent JSON enables params.specKit (see config/agents/*.json).
+      - name: Run agent (Spec Kit artifacts + configured runner)
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -46,3 +48,11 @@ jobs:
           CONFIG_FILE: ${{ inputs.config_file }}
           ENCODED_CONFIG: ${{ inputs.encoded_config }}
         run: npm run agent-runner
+
+      - name: Upload Spec Kit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-kit-${{ inputs.concurrency_key }}
+          path: spec-output/
+          if-no-files-found: ignore
