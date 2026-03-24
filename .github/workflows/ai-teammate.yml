@@ -1,5 +1,7 @@
 # Generic agent runner: config_file + encoded_config + concurrency_key.
 # Scrum Master dispatches this workflow; agent-runner loads JSON and runs the right script.
+# When the agent JSON enables specKit.cliEnabled, the real specify-cli is installed and
+# spec-kit commands (clarify → plan → tasks) run via GitHub Copilot CLI.
 name: AI Teammate
 
 concurrency:
@@ -26,8 +28,10 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -38,9 +42,10 @@ jobs:
 
       - run: npm ci
 
-      # Spec Kit phases (constitution → specify/spec.md → plan → tasks) run inside agent-runner
-      # when the agent JSON enables params.specKit (see config/agents/*.json).
-      - name: Run agent (Spec Kit artifacts + configured runner)
+      # ── Phase 1: Node prepares Jira context + manifest ──────────────────
+      # When cliEnabled, agent-runner writes spec-output/<KEY>/manifest.json
+      # instead of headless template files.
+      - name: Run agent (Spec Kit context + configured runner)
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -49,6 +54,127 @@ jobs:
           ENCODED_CONFIG: ${{ inputs.encoded_config }}
         run: npm run agent-runner
 
+      # ── Phase 2: Read manifest to decide CLI mode ───────────────────────
+      - name: Read spec-kit manifest
+        id: manifest
+        run: |
+          MANIFEST="spec-output/${{ inputs.concurrency_key }}/manifest.json"
+          if [ -f "$MANIFEST" ]; then
+            echo "cli_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "output_dir=$(jq -r .outputDir "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "context_file=$(jq -r .contextFile "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "constitution_file=$(jq -r .constitutionFile "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "version=$(jq -r .version "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "agent=$(jq -r .agent "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "script_type=$(jq -r .scriptType "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "issue_key=$(jq -r .issueKey "$MANIFEST")" >> "$GITHUB_OUTPUT"
+          else
+            echo "cli_enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Phase 3: Install Python + uv + specify-cli ─────────────────────
+      - name: Set up Python
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        run: pip install uv
+
+      - name: Install specify-cli
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        run: |
+          uv tool install specify-cli --force \
+            --from "git+https://github.com/github/spec-kit.git@${{ steps.manifest.outputs.version }}"
+
+      # ── Phase 4: Initialize spec-kit if needed ──────────────────────────
+      - name: Initialize spec-kit (conditional)
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        run: |
+          if [ ! -d ".speckit" ] && [ ! -f "specify.toml" ]; then
+            echo "Spec-kit not initialized — running specify init..."
+            specify init \
+              --ai ${{ steps.manifest.outputs.agent }} \
+              --script ${{ steps.manifest.outputs.script_type }} \
+              --here
+          else
+            echo "Spec-kit already initialized — skipping init."
+          fi
+
+      # ── Phase 5: Seed spec-kit with Jira context ───────────────────────
+      - name: Seed spec-kit with Jira context
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        run: |
+          mkdir -p specs
+          cp "${{ steps.manifest.outputs.constitution_file }}" specs/constitution.md
+          cp "${{ steps.manifest.outputs.context_file }}" specs/context.md
+          echo "Seeded specs/ with constitution.md and context.md"
+
+      # ── Phase 6: Run spec-kit commands ──────────────────────────────────
+      - name: Run speckit.clarify
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: specify clarify --input specs/context.md || echo "⚠️ clarify returned non-zero (may be expected)"
+
+      - name: Run speckit.plan
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: specify plan || echo "⚠️ plan returned non-zero (may be expected)"
+
+      - name: Run speckit.tasks
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: specify tasks || echo "⚠️ tasks returned non-zero (may be expected)"
+
+      # ── Phase 7: Collect outputs ────────────────────────────────────────
+      - name: Copy spec-kit outputs to artifact dir
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        run: |
+          OUTPUT_DIR="${{ steps.manifest.outputs.output_dir }}"
+          cp -r specs/* "$OUTPUT_DIR/" 2>/dev/null || true
+          echo "Copied spec-kit outputs to $OUTPUT_DIR"
+
+      # ── Phase 8: Create PR with spec-kit artifacts ──────────────────────
+      - name: Create branch and PR
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_KEY="${{ steps.manifest.outputs.issue_key }}"
+          BRANCH="spec-kit/${ISSUE_KEY}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -B "$BRANCH"
+          git add specs/ spec-output/
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit — skipping PR."
+            exit 0
+          fi
+
+          git commit -m "spec-kit: generate artifacts for ${ISSUE_KEY}"
+          git push --force-with-lease origin "$BRANCH"
+
+          # Create PR only if one doesn't already exist for this branch
+          EXISTING=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            echo "PR #${EXISTING} already exists for branch $BRANCH — updated with new commits."
+          else
+            gh pr create \
+              --title "Spec Kit: ${ISSUE_KEY}" \
+              --body "Auto-generated spec-kit artifacts for Jira issue **${ISSUE_KEY}**." \
+              --base master \
+              --head "$BRANCH"
+          fi
+
+      # ── Phase 9: Upload artifacts ───────────────────────────────────────
       - name: Upload Spec Kit artifacts
         if: always()
         uses: actions/upload-artifact@v4
