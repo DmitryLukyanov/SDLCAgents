@@ -89,9 +89,14 @@ jobs:
       - name: Create issue and assign Copilot Coding Agent
         if: steps.manifest.outputs.cli_enabled == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Must be a PAT from a Copilot-enabled user (repo + issues scope).
+          # The default GITHUB_TOKEN cannot assign copilot-swe-agent via GraphQL.
+          # Add your PAT as COPILOT_PAT secret; falls back to GITHUB_TOKEN if not set.
+          GH_TOKEN: ${{ secrets.COPILOT_PAT || secrets.GITHUB_TOKEN }}
         run: |
           ISSUE_KEY="${{ steps.manifest.outputs.issue_key }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
 
           # Read Jira context to embed in the issue
           CONTEXT_FILE="${{ steps.manifest.outputs.context_file }}"
@@ -147,23 +152,93 @@ jobs:
             exit 0
           fi
 
-          # Assign Copilot Coding Agent to trigger it
-          echo "Assigning Copilot Coding Agent to issue #${ISSUE_NUM}..."
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${{ github.repository }}/issues/${ISSUE_NUM}/assignees" \
-            -f "assignees[]=copilot-swe-agent[bot]" 2>&1 || {
-            echo "⚠️ 'copilot-swe-agent[bot]' failed — trying 'copilot'..."
-            gh api \
-              --method POST \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${{ github.repository }}/issues/${ISSUE_NUM}/assignees" \
-              -f "assignees[]=copilot" 2>&1 || \
-              echo "⚠️ Could not assign Copilot. Enable it: Settings → Copilot → Coding agent"
+          # ── Assign Copilot Coding Agent via GraphQL ──
+          # REST API cannot assign bot accounts (returns 422).
+          # GraphQL with special feature header is required.
+          echo "Assigning Copilot Coding Agent to issue #${ISSUE_NUM} via GraphQL..."
+
+          # Step 1: Get copilot-swe-agent bot ID and repo ID
+          QUERY_RESULT=$(gh api graphql \
+            -H "GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection" \
+            -f query='
+              query($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                  id
+                  suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 100) {
+                    nodes {
+                      login
+                      __typename
+                      ... on Bot { id }
+                      ... on User { id }
+                    }
+                  }
+                }
+              }
+            ' -f owner="$OWNER" -f repo="$REPO" 2>&1) || {
+            echo "⚠️ GraphQL suggestedActors query failed: $QUERY_RESULT"
+            echo "Ensure COPILOT_PAT secret is a PAT from a Copilot-enabled user with repo scope."
+            exit 0
           }
 
-          echo "✅ Issue #${ISSUE_NUM} created and Copilot assigned. Copilot will create a PR with implementation."
+          REPO_ID=$(echo "$QUERY_RESULT" | jq -r '.data.repository.id')
+          BOT_ID=$(echo "$QUERY_RESULT" | jq -r '.data.repository.suggestedActors.nodes[] | select(.login == "copilot-swe-agent") | .id')
+
+          if [ -z "$BOT_ID" ] || [ "$BOT_ID" = "null" ]; then
+            echo "⚠️ copilot-swe-agent not found in suggestedActors."
+            echo "Ensure: 1) Copilot Coding Agent is enabled (Settings → Copilot → Coding agent)"
+            echo "        2) COPILOT_PAT belongs to a user with Copilot access on this repo"
+            exit 0
+          fi
+          echo "Found copilot-swe-agent bot ID: $BOT_ID (repo ID: $REPO_ID)"
+
+          # Step 2: Get the issue's GraphQL node ID
+          ISSUE_NODE_ID=$(gh api graphql \
+            -H "GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection" \
+            -f query='
+              query($owner: String!, $repo: String!, $num: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $num) { id }
+                }
+              }
+            ' -f owner="$OWNER" -f repo="$REPO" -F num="$ISSUE_NUM" \
+            --jq '.data.repository.issue.id' 2>&1)
+
+          echo "Issue node ID: $ISSUE_NODE_ID"
+
+          # Step 3: Assign Copilot to the issue
+          ASSIGN_RESULT=$(gh api graphql \
+            -H "GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection" \
+            -f query='
+              mutation($issueId: ID!, $botId: ID!, $repoId: ID!) {
+                replaceActorsForAssignable(input: {
+                  assignableId: $issueId
+                  actorIds: [$botId]
+                  agentAssignment: {
+                    targetRepositoryId: $repoId
+                    baseRef: "master"
+                  }
+                }) {
+                  assignable {
+                    ... on Issue {
+                      id
+                      title
+                      assignees(first: 5) { nodes { login } }
+                    }
+                  }
+                }
+              }
+            ' -f issueId="$ISSUE_NODE_ID" -f botId="$BOT_ID" -f repoId="$REPO_ID" 2>&1) || {
+            echo "⚠️ Assignment mutation failed: $ASSIGN_RESULT"
+            exit 0
+          }
+
+          ASSIGNEE=$(echo "$ASSIGN_RESULT" | jq -r '.data.replaceActorsForAssignable.assignable.assignees.nodes[0].login // empty')
+          if [ -n "$ASSIGNEE" ]; then
+            echo "✅ Copilot assigned to issue #${ISSUE_NUM} (assignee: $ASSIGNEE). It will run spec-kit commands and create a PR."
+          else
+            echo "⚠️ Assignment response:"
+            echo "$ASSIGN_RESULT" | jq '.' 2>/dev/null || echo "$ASSIGN_RESULT"
+          fi
 
       # ── Phase 4: Upload context artifacts for reference ─────────────────
       - name: Upload Spec Kit artifacts
