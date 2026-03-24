@@ -8,6 +8,7 @@ import {
   decodeEncodedConfig,
   extractIssueKeyFromEncoded,
 } from '../lib/encoded-config.js';
+import { runSpecKitPipelineWithLogging } from '../spec-kit/pipeline.js';
 
 interface AgentJson {
   name?: string;
@@ -15,6 +16,12 @@ interface AgentJson {
     runner?: string;
     /** 0 = primary issue only; >=1 = linked issues + subtasks. */
     ticketContextDepth?: number;
+    /** When enabled, runs Spec Kit artifact pipeline (constitution, spec, plan, tasks) before the runner. */
+    specKit?: {
+      enabled?: boolean;
+      /** Relative to repo root; default spec-output/<ISSUE_KEY> */
+      outputDir?: string;
+    };
   };
 }
 
@@ -57,6 +64,19 @@ async function main(): Promise<void> {
   console.log(
     `Agent runner: ${runner ?? '(missing)'} · config: ${configFile} · key: ${issueKey} · ticketContextDepth: ${depth}`,
   );
+
+  const specKitEnabled =
+    runner === 'dummy_ticket'
+      ? agent.params?.specKit?.enabled !== false
+      : agent.params?.specKit?.enabled === true;
+
+  if (specKitEnabled) {
+    const outDir = agent.params?.specKit?.outputDir?.trim();
+    await runSpecKitPipelineWithLogging({
+      issueKey,
+      ...(outDir ? { outputDir: resolve(process.cwd(), outDir) } : {}),
+    });
+  }
 
   if (runner === 'dummy_ticket') {
     await runDummyTicketAgent();
