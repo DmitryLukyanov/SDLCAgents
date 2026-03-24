@@ -1,4 +1,4 @@
-# Scrum Master: loads config/sm.json rules (dmtools-style) OR legacy single JQL → dispatches ai-teammate.yml.
+# Scrum Master: loads config/sm.json rules OR legacy single JQL → dispatches ai-teammate.yml.
 name: Scrum Master
 
 concurrency:

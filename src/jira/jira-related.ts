@@ -1,5 +1,5 @@
 /**
- * Related-ticket context (dmtools-style): linked issues + children of the primary issue.
+ * Related-ticket context: linked issues + children of the primary issue.
  */
 import { searchIssues } from './jira-client.js';
 
@@ -20,7 +20,7 @@ function escapeKeyForLinkedIssues(key: string): string {
 
 /**
  * Depth 1: direct links (`issue in linkedIssues(...)`) and issues where `parent` is the primary key.
- * Deeper levels are not expanded (same as typical ticketContextDepth: 1 in dmtools).
+ * Deeper levels are not expanded (default ticketContextDepth is 1).
  */
 export async function fetchRelatedIssueSummaries(
   primaryKey: string,

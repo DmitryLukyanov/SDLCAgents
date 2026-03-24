@@ -1,5 +1,5 @@
 /**
- * Generic workflow entry (dmtools-style): CONFIG_FILE + ENCODED_CONFIG → run agent by runner id.
+ * Generic workflow entry: CONFIG_FILE + ENCODED_CONFIG → run agent by runner id.
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -13,7 +13,7 @@ interface AgentJson {
   name?: string;
   params?: {
     runner?: string;
-    /** 0 = primary issue only; >=1 = linked issues + subtasks (same idea as dmtools). */
+    /** 0 = primary issue only; >=1 = linked issues + subtasks. */
     ticketContextDepth?: number;
   };
 }
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
       ? parseInt(String(depthFromCustom), 10)
       : NaN;
   const depthFromAgent = agent.params?.ticketContextDepth;
-  /** Prefer workflow/custom param, then agent JSON; default 1 so related-ticket context stays on (dmtools-style). */
+  /** Prefer workflow/custom param, then agent JSON; default 1 keeps related-ticket context on. */
   const depth =
     !Number.isNaN(depthParsed) && depthParsed >= 0
       ? depthParsed

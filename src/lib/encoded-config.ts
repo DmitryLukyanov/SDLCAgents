@@ -1,5 +1,5 @@
 /**
- * dmtools-style payload: URL-encoded JSON { params: { inputJql, customParams? } }.
+ * URL-encoded JSON payload { params: { inputJql, customParams? } }.
  * Decode side — used by agent-runner; encode builder lives under scrum-agent/.
  */
 

@@ -1,4 +1,4 @@
-# Generic agent runner (dmtools-style): config_file + encoded_config + concurrency_key.
+# Generic agent runner: config_file + encoded_config + concurrency_key.
 # Scrum Master dispatches this workflow; agent-runner loads JSON and runs the right script.
 name: AI Teammate
 

@@ -1,4 +1,4 @@
-/** Scrum Master rules (dmtools-style: JQL + agent config path + optional labels). */
+/** Scrum Master rules: JQL + agent config path + optional labels. */
 
 export interface SmRule {
   description?: string;

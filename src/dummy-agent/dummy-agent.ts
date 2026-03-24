@@ -10,7 +10,7 @@ import {
 } from '../lib/jira-status.js';
 import { adfToPlain } from './adf-to-plain.js';
 
-/** Default 1 = linked issues + child issues (see jira-related.ts), matching typical dmtools ticketContextDepth. Set TICKET_CONTEXT_DEPTH=0 to disable. */
+/** Default 1 = linked issues + child issues (see jira-related.ts). Set TICKET_CONTEXT_DEPTH=0 to disable. */
 function getTicketContextDepth(): number {
   const raw = process.env.TICKET_CONTEXT_DEPTH?.trim();
   if (!raw) return 1;
