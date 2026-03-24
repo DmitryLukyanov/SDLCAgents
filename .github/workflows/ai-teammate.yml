@@ -1,7 +1,18 @@
 # Generic agent runner: config_file + encoded_config + concurrency_key.
 # Scrum Master dispatches this workflow; agent-runner loads JSON and runs the right script.
-# When the agent JSON enables specKit.cliEnabled, the real specify-cli is installed and
-# spec-kit commands (clarify → plan → tasks) run via GitHub Copilot CLI.
+#
+# When specKit.cliEnabled is true:
+#   1. Node prepares Jira context (context.md, constitution, manifest)
+#   2. Creates a GitHub Issue with full Jira context + spec-kit instructions
+#   3. Assigns Copilot Coding Agent to the issue
+#   4. Copilot picks up the issue asynchronously, reads .github/agents/*.agent.md,
+#      runs the spec-kit workflow (specify → clarify → plan → tasks → implement),
+#      and opens its own PR with the implementation.
+#
+# Prerequisites:
+#   - Copilot Coding Agent enabled: Settings → Copilot → Coding agent
+#   - .github/agents/*.agent.md committed to master (run `specify init --ai copilot` once)
+#   - .github/workflows/copilot-setup-steps.yml committed to master
 name: AI Teammate
 
 concurrency:
@@ -32,6 +43,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
 
@@ -43,8 +55,6 @@ jobs:
       - run: npm ci
 
       # ── Phase 1: Node prepares Jira context + manifest ──────────────────
-      # When cliEnabled, agent-runner writes spec-output/<KEY>/manifest.json
-      # instead of headless template files.
       - name: Run agent (Spec Kit context + configured runner)
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
@@ -72,106 +82,11 @@ jobs:
             echo "cli_enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Phase 3: Install Python + uv + specify-cli ─────────────────────
-      - name: Set up Python
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        run: pip install uv
-
-      - name: Install specify-cli
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        run: |
-          uv tool install specify-cli --force \
-            --from "git+https://github.com/github/spec-kit.git@${{ steps.manifest.outputs.version }}"
-
-      # ── Phase 4: Initialize spec-kit if needed ──────────────────────────
-      - name: Initialize spec-kit (conditional)
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        run: |
-          if [ ! -d ".speckit" ] && [ ! -f "specify.toml" ]; then
-            echo "Spec-kit not initialized — running specify init..."
-            echo "y" | specify init \
-              --ai ${{ steps.manifest.outputs.agent }} \
-              --script ${{ steps.manifest.outputs.script_type }} \
-              --here
-          else
-            echo "Spec-kit already initialized — skipping init."
-          fi
-
-      # ── Phase 5: Run spec-kit shell scripts to scaffold feature ─────────
-      # specify init creates .github/agents/*.agent.md (Copilot agent prompts)
-      # and .specify/scripts/bash/*.sh (setup scripts). We run the scripts to
-      # create the branch + spec/plan/task templates, then seed with Jira context.
-      - name: Create spec-kit feature branch and scaffolding
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        run: |
-          ISSUE_KEY="${{ steps.manifest.outputs.issue_key }}"
-          CONTEXT_FILE="${{ steps.manifest.outputs.context_file }}"
-
-          # Use spec-kit's create-new-feature script to scaffold the feature
-          SCRIPT=".specify/scripts/bash/create-new-feature.sh"
-          if [ -f "$SCRIPT" ]; then
-            chmod +x "$SCRIPT"
-            bash "$SCRIPT" --json --short-name "${ISSUE_KEY}" "${ISSUE_KEY}" || true
-          else
-            echo "⚠️ create-new-feature.sh not found, creating specs dir manually"
-            mkdir -p "specs/${ISSUE_KEY}"
-          fi
-
-          # Find the feature directory (spec-kit creates specs/<branch-name>/)
-          FEATURE_DIR=$(find specs -maxdepth 1 -type d -name "*${ISSUE_KEY}*" | head -1)
-          if [ -z "$FEATURE_DIR" ]; then
-            FEATURE_DIR="specs/${ISSUE_KEY}"
-            mkdir -p "$FEATURE_DIR"
-          fi
-          echo "Feature dir: $FEATURE_DIR"
-
-          # Append Jira context to the spec file (keep the template header, add ticket data)
-          if [ -f "$CONTEXT_FILE" ]; then
-            if [ -f "$FEATURE_DIR/spec.md" ]; then
-              printf '\n\n---\n\n' >> "$FEATURE_DIR/spec.md"
-              cat "$CONTEXT_FILE" >> "$FEATURE_DIR/spec.md"
-              echo "Appended Jira context to $FEATURE_DIR/spec.md"
-            else
-              cp "$CONTEXT_FILE" "$FEATURE_DIR/spec.md"
-              echo "Created $FEATURE_DIR/spec.md from Jira context"
-            fi
-            # Also keep a standalone copy for reference
-            cp "$CONTEXT_FILE" "$FEATURE_DIR/jira-context.md"
-          fi
-
-          # Copy constitution
-          CONSTITUTION="${{ steps.manifest.outputs.constitution_file }}"
-          if [ -f "$CONSTITUTION" ]; then
-            mkdir -p memory
-            cp "$CONSTITUTION" memory/constitution.md
-            echo "Copied constitution to memory/constitution.md"
-          fi
-
-          echo "feature_dir=$FEATURE_DIR" >> "$GITHUB_OUTPUT"
-
-      # Run plan setup script if available
-      - name: Set up plan template
-        id: scaffold
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        run: |
-          SCRIPT=".specify/scripts/bash/setup-plan.sh"
-          if [ -f "$SCRIPT" ]; then
-            chmod +x "$SCRIPT"
-            bash "$SCRIPT" --json || true
-          else
-            echo "⚠️ setup-plan.sh not found — skipping plan scaffolding"
-          fi
-
-      # ── Phase 6: Invoke Copilot Coding Agent via issue assignment ───────
-      # Spec-kit commands are AI agent prompts (in .github/agents/*.agent.md).
-      # We create a GitHub issue and assign Copilot to drive the spec workflow.
-      - name: Create issue and assign Copilot
+      # ── Phase 3: Create GitHub Issue and assign Copilot Coding Agent ────
+      # Copilot Coding Agent is async: it picks up the issue, reads
+      # .github/agents/*.agent.md from master, and creates its own PR
+      # with the full spec-kit workflow output (specify → implement).
+      - name: Create issue and assign Copilot Coding Agent
         if: steps.manifest.outputs.cli_enabled == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -208,67 +123,49 @@ jobs:
           ISSUE_EOF
           )
 
-          # Create the issue and assign copilot
-          ISSUE_URL=$(gh issue create \
-            --title "Spec-Kit: ${ISSUE_KEY}" \
-            --body "$BODY" \
-            --assignee "@me" \
-            2>&1) || true
-          echo "Created issue: $ISSUE_URL"
+          # Check if an issue for this ticket already exists
+          EXISTING_ISSUE=$(gh issue list \
+            --search "Spec-Kit: ${ISSUE_KEY} in:title" \
+            --state open \
+            --json number --jq '.[0].number' 2>/dev/null || true)
 
-          # Try to assign Copilot (copilot-swe-agent) to the issue
-          # This triggers Copilot Coding Agent to pick up the agent definitions
-          ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oP '\d+$' || true)
-          if [ -n "$ISSUE_NUM" ]; then
-            gh issue edit "$ISSUE_NUM" --add-assignee "copilot-swe-agent[bot]" 2>/dev/null || \
-              echo "⚠️ Could not assign Copilot — enable Copilot Coding Agent in repo settings"
+          if [ -n "$EXISTING_ISSUE" ]; then
+            echo "Issue #${EXISTING_ISSUE} already exists for ${ISSUE_KEY} — updating body."
+            gh issue edit "$EXISTING_ISSUE" --body "$BODY"
+            ISSUE_NUM="$EXISTING_ISSUE"
+          else
+            ISSUE_URL=$(gh issue create \
+              --title "Spec-Kit: ${ISSUE_KEY}" \
+              --body "$BODY" \
+              2>&1) || true
+            echo "Created issue: $ISSUE_URL"
+            ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oP '\d+$' || true)
           fi
 
-      # ── Phase 7: Collect outputs ────────────────────────────────────────
-      - name: Copy spec-kit outputs to artifact dir
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        run: |
-          OUTPUT_DIR="${{ steps.manifest.outputs.output_dir }}"
-          cp -r specs/* "$OUTPUT_DIR/" 2>/dev/null || true
-          cp -r memory/* "$OUTPUT_DIR/" 2>/dev/null || true
-          echo "Copied spec-kit outputs to $OUTPUT_DIR"
-
-      # ── Phase 8: Create PR with spec-kit artifacts ──────────────────────
-      - name: Create branch and PR
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ISSUE_KEY="${{ steps.manifest.outputs.issue_key }}"
-          BRANCH="spec-kit/${ISSUE_KEY}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git checkout -B "$BRANCH"
-          git add specs/ spec-output/
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit — skipping PR."
+          if [ -z "$ISSUE_NUM" ]; then
+            echo "⚠️ Could not determine issue number — skipping Copilot assignment"
             exit 0
           fi
 
-          git commit -m "spec-kit: generate artifacts for ${ISSUE_KEY}"
-          git push --force-with-lease origin "$BRANCH"
+          # Assign Copilot Coding Agent to trigger it
+          echo "Assigning Copilot Coding Agent to issue #${ISSUE_NUM}..."
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/issues/${ISSUE_NUM}/assignees" \
+            -f "assignees[]=copilot-swe-agent[bot]" 2>&1 || {
+            echo "⚠️ 'copilot-swe-agent[bot]' failed — trying 'copilot'..."
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/issues/${ISSUE_NUM}/assignees" \
+              -f "assignees[]=copilot" 2>&1 || \
+              echo "⚠️ Could not assign Copilot. Enable it: Settings → Copilot → Coding agent"
+          }
 
-          # Create PR only if one doesn't already exist for this branch
-          EXISTING=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -n "$EXISTING" ]; then
-            echo "PR #${EXISTING} already exists for branch $BRANCH — updated with new commits."
-          else
-            gh pr create \
-              --title "Spec Kit: ${ISSUE_KEY}" \
-              --body "Auto-generated spec-kit artifacts for Jira issue **${ISSUE_KEY}**." \
-              --base master \
-              --head "$BRANCH"
-          fi
+          echo "✅ Issue #${ISSUE_NUM} created and Copilot assigned. Copilot will create a PR with implementation."
 
-      # ── Phase 9: Upload artifacts ───────────────────────────────────────
+      # ── Phase 4: Upload context artifacts for reference ─────────────────
       - name: Upload Spec Kit artifacts
         if: always()
         uses: actions/upload-artifact@v4
