@@ -96,6 +96,27 @@ const deps = {
           console.error(`   Could not list workflows: ${msg}`);
         }
       }
+      if (status === 422) {
+        const apiMsg =
+          err &&
+          typeof err === 'object' &&
+          'response' in err &&
+          err.response &&
+          typeof err.response === 'object' &&
+          'data' in err.response &&
+          err.response.data &&
+          typeof err.response.data === 'object' &&
+          'message' in err.response.data
+            ? String((err.response.data as { message: unknown }).message)
+            : '';
+        if (apiMsg.includes('workflow_dispatch')) {
+          console.error(
+            `   Hint (422): GitHub is reading .github/workflows/${args.workflow_id} from **ref "${args.ref}"**. ` +
+              `That version has no \`workflow_dispatch:\` (or YAML is invalid). Push the updated workflow to "${args.ref}" ` +
+              `or set rule.workflowRef to the branch where \`on: workflow_dispatch\` is already present.`,
+          );
+        }
+      }
       throw err;
     }
   },
