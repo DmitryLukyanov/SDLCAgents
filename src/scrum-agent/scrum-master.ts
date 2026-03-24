@@ -2,8 +2,9 @@
  * Scrum Master CLI: reads env, wires real Jira + Octokit, calls runScrumMasterWithRulesOrSingleJql().
  */
 import { Octokit } from '@octokit/rest';
-import { addIssueLabel, searchIssues, transitionIssueToStatusName } from '../jira/jira-client.js';
+import { addIssueComment, addIssueLabel, searchIssues, transitionIssueToStatusName } from '../jira/jira-client.js';
 import { getPostReadTargetStatus } from '../lib/jira-status.js';
+import { messages } from '../resources/messages.js';
 import { runScrumMasterWithRulesOrSingleJql } from './scrum-master-core.js';
 
 const [owner, repo] = (process.env.GITHUB_REPOSITORY || '').split('/');
@@ -46,6 +47,11 @@ const deps = {
   addIssueLabel,
   transitionIssueToPostRead: async (issueKey: string) => {
     await transitionIssueToStatusName(issueKey, getPostReadTargetStatus());
+    try {
+      await addIssueComment(issueKey, messages.jira.takenIntoProcessingComment);
+    } catch (e) {
+      console.warn(`   ⚠️ Jira "taken into processing" comment failed for ${issueKey}:`, e);
+    }
   },
   dispatchWorkflow: async (args: WorkflowDispatchParams) => {
     try {
@@ -94,6 +100,27 @@ const deps = {
         } catch (e2: unknown) {
           const msg = e2 instanceof Error ? e2.message : String(e2);
           console.error(`   Could not list workflows: ${msg}`);
+        }
+      }
+      if (status === 422) {
+        const apiMsg =
+          err &&
+          typeof err === 'object' &&
+          'response' in err &&
+          err.response &&
+          typeof err.response === 'object' &&
+          'data' in err.response &&
+          err.response.data &&
+          typeof err.response.data === 'object' &&
+          'message' in err.response.data
+            ? String((err.response.data as { message: unknown }).message)
+            : '';
+        if (apiMsg.includes('workflow_dispatch')) {
+          console.error(
+            `   Hint (422): GitHub is reading .github/workflows/${args.workflow_id} from **ref "${args.ref}"**. ` +
+              `That version has no \`workflow_dispatch:\` (or YAML is invalid). Push the updated workflow to "${args.ref}" ` +
+              `or set rule.workflowRef to the branch where \`on: workflow_dispatch\` is already present.`,
+          );
         }
       }
       throw err;
