@@ -1,0 +1,39 @@
+# AI Teammate — runs spec-kit pipeline and delegates to Copilot Coding Agent.
+# Triggered by Scrum Master via workflow_dispatch.
+# Delegates all logic to the shared SDLCAgents reusable workflow.
+name: AI Teammate
+run-name: "AI Teammate — ${{ inputs.concurrency_key }}"
+
+concurrency:
+  group: ai-teammate-${{ inputs.concurrency_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency_key:
+        description: "Jira issue key (used for concurrency grouping)"
+        required: true
+        type: string
+      config_file:
+        description: "Path to agent JSON in repo (e.g. config/agents/dummy-ticket-agent.json)"
+        required: true
+        type: string
+      encoded_config:
+        description: >-
+          URL-encoded JSON { "params": { "inputJql": "key = PROJ-1", "customParams": { ... } } }
+        required: true
+        type: string
+
+jobs:
+  call:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-ai-teammate.yml@master
+    with:
+      concurrency_key: ${{ inputs.concurrency_key }}
+      config_file: ${{ inputs.config_file }}
+      encoded_config: ${{ inputs.encoded_config }}
+    secrets: inherit

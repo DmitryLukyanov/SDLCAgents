@@ -1,0 +1,6 @@
+{
+  "globalDirective": "Do not assume, ask",
+  "specify": "Clarify what should be built from the Jira issue below: scope, goals, and acceptance criteria.",
+  "plan": "Use the stack already present in this repository. Favor minimal, incremental changes. Align with the constitution.",
+  "tasks": "List concrete, ordered tasks (setup, core change, tests, polish). Keep each task small enough for one focused commit or PR."
+}

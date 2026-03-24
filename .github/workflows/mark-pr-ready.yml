@@ -1,0 +1,171 @@
+# Automatically mark Copilot Coding Agent draft PRs as ready for review,
+# approve, merge, and transition the Jira ticket to Done.
+#
+# Trigger: workflow_run.completed on "Copilot coding agent" workflow.
+# This fires exactly once when the agent finishes — no polling or sleep needed.
+name: Mark Copilot PR Ready
+run-name: "Mark PR Ready — ${{ github.event.workflow_run.head_branch }}"
+
+on:
+  workflow_run:
+    workflows: ["Copilot coding agent"]
+    types: [completed]
+
+jobs:
+  mark-ready:
+    # Only proceed if the Copilot agent run succeeded
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # ── Step 1: Find and mark draft PR as ready ──────────────────────
+      - name: Find and mark draft PR as ready
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          echo "Copilot agent completed on branch: $BRANCH"
+
+          # Find open PR for this branch (draft or not)
+          PR_JSON=$(gh pr list \
+            --repo "$OWNER/$REPO" \
+            --head "$BRANCH" \
+            --state open \
+            --json number,isDraft,title \
+            --jq '.[0]' 2>/dev/null || true)
+
+          if [ -z "$PR_JSON" ] || [ "$PR_JSON" = "null" ]; then
+            echo "No open PR found for branch $BRANCH — nothing to do."
+            echo "pr_found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_NUM=$(echo "$PR_JSON" | jq -r '.number')
+          IS_DRAFT=$(echo "$PR_JSON" | jq -r '.isDraft')
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
+          echo "pr_found=true" >> "$GITHUB_OUTPUT"
+          echo "pr_num=${PR_NUM}" >> "$GITHUB_OUTPUT"
+          echo "pr_title=${PR_TITLE}" >> "$GITHUB_OUTPUT"
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Found draft PR #${PR_NUM} — marking as ready for review."
+            gh pr ready "$PR_NUM" --repo "$OWNER/$REPO"
+            echo "✅ PR #${PR_NUM} marked as ready for review."
+          else
+            echo "PR #${PR_NUM} is already ready for review."
+          fi
+
+      # ── Step 2: Approve the PR ──────────────────────────────────────
+      - name: Approve PR
+        if: steps.pr.outputs.pr_found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          PR_NUM="${{ steps.pr.outputs.pr_num }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          echo "Approving PR #${PR_NUM}..."
+          gh pr review "$PR_NUM" --repo "$OWNER/$REPO" --approve \
+            --body "Auto-approved by SDLC pipeline after successful Copilot Coding Agent run."
+          echo "✅ PR #${PR_NUM} approved."
+
+      # ── Step 3: Merge the PR ────────────────────────────────────────
+      - name: Merge PR
+        if: steps.pr.outputs.pr_found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          PR_NUM="${{ steps.pr.outputs.pr_num }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          echo "Merging PR #${PR_NUM}..."
+          gh pr merge "$PR_NUM" --repo "$OWNER/$REPO" --squash \
+            --subject "Merge PR #${PR_NUM}: ${{ steps.pr.outputs.pr_title }}"
+          echo "✅ PR #${PR_NUM} merged."
+
+      # ── Step 4: Close the GitHub Issue ─────────────────────────────
+      - name: Close GitHub Issue
+        if: steps.pr.outputs.pr_found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          PR_NUM="${{ steps.pr.outputs.pr_num }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          # Find linked issue from PR metadata (closing issues)
+          ISSUE_NUM=$(gh pr view "$PR_NUM" --repo "$OWNER/$REPO" --json closingIssuesReferences \
+            --jq '.closingIssuesReferences[0].number' 2>/dev/null || true)
+
+          if [ -z "$ISSUE_NUM" ] || [ "$ISSUE_NUM" = "null" ]; then
+            # Fallback: search PR body for "Closes #XX" / "Fixes #XX"
+            ISSUE_NUM=$(gh pr view "$PR_NUM" --repo "$OWNER/$REPO" --json body --jq '.body' \
+              | grep -oP '(?:Closes|Fixes|Resolves)\s*#(\d+)' | grep -oP '\d+' | head -1 || true)
+          fi
+
+          if [ -z "$ISSUE_NUM" ]; then
+            echo "⚠️ Could not find linked GitHub Issue — skipping close."
+            exit 0
+          fi
+
+          echo "Closing GitHub Issue #${ISSUE_NUM}..."
+          gh issue close "$ISSUE_NUM" --repo "$OWNER/$REPO" \
+            --comment "Closed by SDLC pipeline. PR #${PR_NUM} merged."
+          echo "✅ Issue #${ISSUE_NUM} closed."
+
+      # ── Step 5: Transition Jira ticket to Done ──────────────────────
+      - name: Transition Jira ticket to Done
+        if: steps.pr.outputs.pr_found == 'true'
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          # Extract Jira issue key from PR title (e.g., "TC-5: ..." or "[TC-5] ...")
+          PR_TITLE="${{ steps.pr.outputs.pr_title }}"
+          ISSUE_KEY=$(echo "$PR_TITLE" | grep -oP '[A-Z]+-\d+' | head -1 || true)
+
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "⚠️ Could not extract Jira issue key from PR title: ${PR_TITLE}"
+            echo "Skipping Jira transition."
+            exit 0
+          fi
+
+          echo "Transitioning Jira ticket ${ISSUE_KEY} to Done..."
+
+          # Get available transitions
+          TRANSITIONS=$(curl -s \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${JIRA_BASE_URL}/rest/api/3/issue/${ISSUE_KEY}/transitions")
+
+          # Find the "Done" transition ID (case-insensitive)
+          TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r '.transitions[] | select(.name | ascii_downcase == "done") | .id')
+
+          if [ -z "$TRANSITION_ID" ]; then
+            echo "⚠️ No 'Done' transition available for ${ISSUE_KEY}. Available transitions:"
+            echo "$TRANSITIONS" | jq -r '.transitions[] | "  - \(.name) (id: \(.id))"'
+            exit 0
+          fi
+
+          # Perform the transition
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "{\"transition\": {\"id\": \"${TRANSITION_ID}\"}}" \
+            "${JIRA_BASE_URL}/rest/api/3/issue/${ISSUE_KEY}/transitions")
+
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "✅ Jira ticket ${ISSUE_KEY} transitioned to Done."
+          else
+            echo "⚠️ Jira transition returned HTTP ${HTTP_CODE} for ${ISSUE_KEY}."
+          fi

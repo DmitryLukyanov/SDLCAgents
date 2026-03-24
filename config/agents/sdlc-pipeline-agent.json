@@ -1,0 +1,29 @@
+{
+  "name": "sdlc_pipeline",
+  "params": {
+    "runner": "pipeline",
+    "ticketContextDepth": 1,
+    "steps": [
+      {
+        "runner": "check_description",
+        "onEmpty": {
+          "action": "jira_transition",
+          "status": "In Review",
+          "comment": "Please provide a description before this ticket can be processed. The SDLC pipeline requires a description to generate a specification and implementation plan."
+        }
+      },
+      {
+        "runner": "dummy_ticket",
+        "specKit": {
+          "cliEnabled": true,
+          "version": "v0.4.0",
+          "agent": "copilot",
+          "scriptType": "sh"
+        }
+      },
+      {
+        "runner": "confirmation"
+      }
+    ]
+  }
+}

@@ -1,0 +1,196 @@
+# Generic agent runner: config_file + encoded_config + concurrency_key.
+# Scrum Master dispatches this workflow; agent-runner loads JSON and runs the right script.
+#
+# When specKit.cliEnabled is true:
+#   1. Node prepares Jira context (context.md, constitution, manifest)
+#   2. Builds a task prompt with spec-kit instructions
+#   3. Runs `gh copilot agent-task create` to hand the prompt to Copilot Coding Agent
+#   4. Copilot picks up the task, reads .github/agents/*.agent.md,
+#      runs the spec-kit workflow (specify → clarify → plan → tasks → implement),
+#      and opens its own PR with the implementation.
+#
+# Prerequisites:
+#   - Copilot Coding Agent enabled: Settings → Copilot → Coding agent
+#   - .github/agents/speckit.*.agent.md + .github/prompts/speckit.*.prompt.md committed
+#     to the default branch. Generate once with:
+#       uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 specify init --here
+#   - .github/workflows/copilot-setup-steps.yml committed to master
+name: AI Teammate
+run-name: "AI Teammate — ${{ inputs.concurrency_key }}"
+
+concurrency:
+  group: ai-teammate-${{ inputs.concurrency_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency_key:
+        description: Jira issue key (used for concurrency grouping; same as ticket key)
+        required: true
+        type: string
+      config_file:
+        description: Path to agent JSON in repo (e.g. config/agents/dummy-ticket-agent.json)
+        required: true
+        type: string
+      encoded_config:
+        description: >-
+          URL-encoded JSON { "params": { "inputJql": "key = PROJ-1", "customParams": { ... } } }
+        required: true
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Gate: spec-kit agents + prompts must exist in the repo ─────────
+      - name: Check spec-kit prerequisites
+        id: speckit_check
+        run: |
+          MISSING=0
+          for f in \
+            .github/agents/speckit.specify.agent.md \
+            .github/agents/speckit.implement.agent.md \
+            .github/prompts/speckit.specify.prompt.md \
+            .github/prompts/speckit.implement.prompt.md; do
+            if [ ! -f "$f" ]; then
+              echo "❌ Missing: $f"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            echo "speckit_ready=false" >> "$GITHUB_OUTPUT"
+            echo ""
+            echo "⚠️ Spec-kit agent/prompt files are missing from the repo."
+            echo "   Run once and commit to the default branch:"
+            echo "   uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 specify init --here"
+          else
+            echo "speckit_ready=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Spec-kit agent and prompt files found."
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # ── Phase 1: Node prepares Jira context + manifest ──────────────────
+      - name: Run agent (Spec Kit context + configured runner)
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+        run: npm run agent-runner
+
+      # ── Phase 2: Read manifest to decide CLI mode ───────────────────────
+      - name: Read spec-kit manifest
+        id: manifest
+        run: |
+          MANIFEST="spec-output/${{ inputs.concurrency_key }}/manifest.json"
+          if [ -f "$MANIFEST" ]; then
+            echo "cli_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "output_dir=$(jq -r .outputDir "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "context_file=$(jq -r .contextFile "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "constitution_file=$(jq -r .constitutionFile "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "version=$(jq -r .version "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "agent=$(jq -r .agent "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "script_type=$(jq -r .scriptType "$MANIFEST")" >> "$GITHUB_OUTPUT"
+            echo "issue_key=$(jq -r .issueKey "$MANIFEST")" >> "$GITHUB_OUTPUT"
+          else
+            echo "cli_enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Phase 3a: Build the task prompt ─────────────────────────────────
+      - name: Build task prompt
+        id: task_prompt
+        if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
+        env:
+          CONTEXT_FILE: ${{ steps.manifest.outputs.context_file }}
+          ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
+        run: |
+          JIRA_CONTEXT=""
+          if [ -f "$CONTEXT_FILE" ]; then
+            JIRA_CONTEXT=$(cat "$CONTEXT_FILE")
+          fi
+
+          GLOBAL_DIRECTIVE=$(jq -r '.globalDirective // empty' config/spec-kit/defaults.json)
+          DIRECTIVE_PART=""
+          if [ -n "$GLOBAL_DIRECTIVE" ]; then
+            ESC_DIRECTIVE=$(printf '%s\n' "$GLOBAL_DIRECTIVE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            DIRECTIVE_PART="${ESC_DIRECTIVE} — "
+          fi
+
+          cat <<PROMPT_EOF > "$RUNNER_TEMP/copilot-prompt.md"
+          ## Spec-Kit Workflow for ${ISSUE_KEY}
+
+          ### Jira Ticket Context
+
+          ${JIRA_CONTEXT}
+
+          ### Instructions
+
+          Run the spec-kit steps below **in order**. Execute each \`@speckit.*\` command before moving to the next; do not skip phases or replace this flow with ad-hoc exploration alone.
+
+          Each line is \`@speckit.*\` followed by one quoted argument: when a global directive is configured it appears first, then an em dash, then the step text (suitable to pass as a single argument after the agent name).
+
+          1. \`@speckit.specify\` "${DIRECTIVE_PART}Create the feature specification from the Jira context above"
+          2. \`@speckit.clarify\` "${DIRECTIVE_PART}Review the spec and identify ambiguities"
+          3. \`@speckit.plan\` "${DIRECTIVE_PART}Create a technical implementation plan"
+          4. \`@speckit.tasks\` "${DIRECTIVE_PART}Break the plan into actionable tasks"
+          5. \`@speckit.implement\` "${DIRECTIVE_PART}Execute the tasks and produce code changes"
+
+          The feature spec has been seeded in the \`specs/\` directory.
+          Commit all generated artifacts and open a PR when done.
+          PROMPT_EOF
+
+      # ── Phase 3b: Delegate task to Copilot Coding Agent via Issue ───────
+      - name: Create Issue and assign to Copilot Coding Agent
+        if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+          ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
+        run: |
+          # Read the prompt
+          PROMPT=$(cat "$RUNNER_TEMP/copilot-prompt.md")
+
+          # Step 1: Create GitHub Issue (without assignee)
+          ISSUE_URL=$(gh issue create \
+            --title "${ISSUE_KEY}: Copilot Coding Agent Task" \
+            --body "${PROMPT}")
+          echo "✅ Created issue: ${ISSUE_URL}"
+
+          # Step 2: Extract issue number and assign Copilot with orchestrator agent via API
+          ISSUE_NUMBER=$(echo "${ISSUE_URL}" | grep -oP '\d+$')
+          gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/assignees" \
+            --method POST \
+            --input - <<ASSIGN_EOF
+          {
+            "assignees": ["copilot-swe-agent[bot]"],
+            "agent_assignment": {
+              "custom_agent": "sdlc.pipeline"
+            }
+          }
+          ASSIGN_EOF
+
+          echo "✅ Assigned Copilot to issue #${ISSUE_NUMBER}"
+          echo "Copilot Coding Agent will pick up the task and open a PR when done."
+
+      # ── Phase 4: Upload context artifacts for reference ─────────────────
+      - name: Upload Spec Kit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-kit-${{ inputs.concurrency_key }}
+          path: spec-output/
+          if-no-files-found: ignore

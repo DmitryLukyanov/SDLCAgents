@@ -1,0 +1,149 @@
+# Scrum Master: loads config/sm.json rules OR legacy single JQL → dispatches ai-teammate.yml.
+name: Scrum Master
+run-name: "Scrum Master — ${{ inputs.rules_path || inputs.jql || 'default rules' }}"
+
+concurrency:
+  group: scrum-master-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      jql:
+        description: >-
+          Optional. If set: legacy mode — single JQL + agent_config_file (ignores rules file).
+          If empty: use rules file (rules_path).
+        required: false
+        type: string
+      agent_config_file:
+        description: Legacy mode only — agent JSON path (default config/agents/dummy-ticket-agent.json)
+        required: false
+        default: config/agents/dummy-ticket-agent.json
+        type: string
+      rules_path:
+        description: Path to SM rules JSON when jql is empty
+        required: false
+        default: config/sm.json
+        type: string
+      taken_status:
+        description: Jira status tickets must be in (appended to JQL + agent check)
+        required: false
+        default: 'To Do'
+        type: string
+      status_to_move_to:
+        description: Jira status after dummy agent reads the issue
+        required: false
+        default: 'In Progress'
+        type: string
+      limit:
+        description: Global default max issues per rule (1–50); rules may override
+        required: false
+        default: '10'
+        type: string
+      jira_project:
+        description: Optional. Replaces {jiraProject} in rule JQL
+        required: false
+        type: string
+      ticket_context_depth:
+        description: >-
+          0 = primary Jira issue only; 1 = linked issues + subtasks/children in agent log (encoded for ai-teammate)
+        required: false
+        default: '1'
+        type: string
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate Spec-Kit initialization
+        env:
+          SPECKIT_TARGET_VERSION: "0.4.0"
+        run: |
+          if [ ! -f ".specify/init-options.json" ]; then
+            echo "::error::Spec-Kit is not initialized. Run the following command and commit the results:"
+            echo "::error::uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            exit 1
+          fi
+
+          CURRENT=$(jq -r '.speckit_version // "0.0.0"' .specify/init-options.json)
+          if [ "$CURRENT" != "$SPECKIT_TARGET_VERSION" ]; then
+            echo "::error::Spec-Kit version mismatch: found v${CURRENT}, expected v${SPECKIT_TARGET_VERSION}."
+            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            exit 1
+          fi
+
+          echo "✅ Spec-Kit v${SPECKIT_TARGET_VERSION} is initialized"
+
+          # Validate required agent files
+          MISSING=0
+          for f in \
+            .github/agents/speckit.specify.agent.md \
+            .github/agents/speckit.clarify.agent.md \
+            .github/agents/speckit.plan.agent.md \
+            .github/agents/speckit.tasks.agent.md \
+            .github/agents/speckit.implement.agent.md \
+            .github/agents/speckit.analyze.agent.md \
+            .github/agents/speckit.constitution.agent.md \
+            .github/agents/speckit.checklist.agent.md \
+            .github/agents/speckit.taskstoissues.agent.md \
+            .github/agents/speckit.orchestrator.agent.md \
+            .github/agents/sdlc.pipeline.agent.md \
+            .github/agents/code.review.agent.md; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing agent file: $f"
+              MISSING=1
+            fi
+          done
+
+          # Validate required prompt files
+          for f in \
+            .github/prompts/speckit.specify.prompt.md \
+            .github/prompts/speckit.clarify.prompt.md \
+            .github/prompts/speckit.plan.prompt.md \
+            .github/prompts/speckit.tasks.prompt.md \
+            .github/prompts/speckit.implement.prompt.md \
+            .github/prompts/speckit.analyze.prompt.md \
+            .github/prompts/speckit.constitution.prompt.md \
+            .github/prompts/speckit.checklist.prompt.md \
+            .github/prompts/speckit.taskstoissues.prompt.md; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing prompt file: $f"
+              MISSING=1
+            fi
+          done
+
+          if [ "$MISSING" -eq 1 ]; then
+            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            exit 1
+          fi
+
+          echo "✅ All agent and prompt files present"
+
+      - name: Run Scrum Master
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JQL: ${{ inputs.jql }}
+          AGENT_CONFIG_FILE: ${{ inputs.agent_config_file }}
+          SM_RULES_FILE: ${{ inputs.rules_path }}
+          GLOBAL_LIMIT: ${{ inputs.limit }}
+          REQUIRED_JIRA_STATUS: ${{ inputs.taken_status }}
+          POST_READ_STATUS: ${{ inputs.status_to_move_to }}
+          JIRA_PROJECT: ${{ inputs.jira_project }}
+          TICKET_CONTEXT_DEPTH: ${{ inputs.ticket_context_depth }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: npm run scrum-master
