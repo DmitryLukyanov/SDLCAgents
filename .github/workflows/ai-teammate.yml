@@ -131,10 +131,18 @@ jobs:
           fi
           echo "Feature dir: $FEATURE_DIR"
 
-          # Seed the spec file with Jira context
+          # Append Jira context to the spec file (keep the template header, add ticket data)
           if [ -f "$CONTEXT_FILE" ]; then
-            cp "$CONTEXT_FILE" "$FEATURE_DIR/spec.md"
-            echo "Seeded $FEATURE_DIR/spec.md with Jira context"
+            if [ -f "$FEATURE_DIR/spec.md" ]; then
+              printf '\n\n---\n\n' >> "$FEATURE_DIR/spec.md"
+              cat "$CONTEXT_FILE" >> "$FEATURE_DIR/spec.md"
+              echo "Appended Jira context to $FEATURE_DIR/spec.md"
+            else
+              cp "$CONTEXT_FILE" "$FEATURE_DIR/spec.md"
+              echo "Created $FEATURE_DIR/spec.md from Jira context"
+            fi
+            # Also keep a standalone copy for reference
+            cp "$CONTEXT_FILE" "$FEATURE_DIR/jira-context.md"
           fi
 
           # Copy constitution
@@ -170,22 +178,35 @@ jobs:
         run: |
           ISSUE_KEY="${{ steps.manifest.outputs.issue_key }}"
 
-          # Build the issue body with spec-kit instructions for Copilot
-          BODY=$(cat <<'ISSUE_EOF'
-          ## Spec-Kit Workflow for ISSUE_PLACEHOLDER
+          # Read Jira context to embed in the issue
+          CONTEXT_FILE="${{ steps.manifest.outputs.context_file }}"
+          JIRA_CONTEXT=""
+          if [ -f "$CONTEXT_FILE" ]; then
+            JIRA_CONTEXT=$(cat "$CONTEXT_FILE")
+          fi
+
+          # Build the issue body with Jira content + spec-kit instructions
+          BODY=$(cat <<ISSUE_EOF
+          ## Spec-Kit Workflow for ${ISSUE_KEY}
+
+          ### Jira Ticket Context
+
+          ${JIRA_CONTEXT}
+
+          ### Instructions
 
           Run the following spec-kit agent commands in order:
 
-          1. `@speckit.clarify` — Review the spec in the feature directory and identify ambiguities
-          2. `@speckit.plan` — Create a technical implementation plan
-          3. `@speckit.tasks` — Break the plan into actionable tasks
-          4. `@speckit.implement` — Execute the tasks and produce code changes
+          1. \`@speckit.specify\` — Create the feature specification from the Jira context above
+          2. \`@speckit.clarify\` — Review the spec and identify ambiguities
+          3. \`@speckit.plan\` — Create a technical implementation plan
+          4. \`@speckit.tasks\` — Break the plan into actionable tasks
+          5. \`@speckit.implement\` — Execute the tasks and produce code changes
 
-          The feature spec has been seeded with Jira ticket context in the `specs/` directory.
+          The feature spec has been seeded in the \`specs/\` directory.
           Commit all generated artifacts and open a PR when done.
           ISSUE_EOF
           )
-          BODY="${BODY//ISSUE_PLACEHOLDER/$ISSUE_KEY}"
 
           # Create the issue and assign copilot
           ISSUE_URL=$(gh issue create \
