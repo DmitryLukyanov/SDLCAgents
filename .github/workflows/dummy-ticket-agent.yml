@@ -1,0 +1,56 @@
+# Dummy agent: prints one Jira issue (triggered by Scrum Master or manually).
+name: Dummy ticket agent
+
+# One dummy run per Jira key at a time — avoids double read / double transition.
+concurrency:
+  group: dummy-agent-${{ github.event.inputs.issue_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_key:
+        description: Jira issue key (e.g. PROJ-123)
+        required: true
+        type: string
+      taken_status:
+        description: Jira status required to read the issue (must match before printing)
+        required: false
+        default: 'To Do'
+        type: string
+      status_to_move_to:
+        description: Jira status to transition to after a successful read
+        required: false
+        default: 'In Progress'
+        type: string
+      ticket_context_depth:
+        description: '0 = this issue only; 1 = include linked + child issues in log'
+        required: false
+        default: '1'
+        type: string
+
+jobs:
+  print-ticket:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch and print Jira ticket
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          ISSUE_KEY: ${{ inputs.issue_key }}
+          REQUIRED_JIRA_STATUS: ${{ inputs.taken_status }}
+          POST_READ_STATUS: ${{ inputs.status_to_move_to }}
+          TICKET_CONTEXT_DEPTH: ${{ inputs.ticket_context_depth }}
+        run: npm run dummy-agent

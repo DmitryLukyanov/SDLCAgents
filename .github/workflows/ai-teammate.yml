@@ -1,0 +1,48 @@
+# Generic agent runner (dmtools-style): config_file + encoded_config + concurrency_key.
+# Scrum Master dispatches this workflow; agent-runner loads JSON and runs the right script.
+name: AI Teammate
+
+concurrency:
+  group: ai-teammate-${{ inputs.concurrency_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency_key:
+        description: Jira issue key (used for concurrency grouping; same as ticket key)
+        required: true
+        type: string
+      config_file:
+        description: Path to agent JSON in repo (e.g. config/agents/dummy-ticket-agent.json)
+        required: true
+        type: string
+      encoded_config:
+        description: >-
+          URL-encoded JSON { "params": { "inputJql": "key = PROJ-1", "customParams": { ... } } }
+        required: true
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run agent from config
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+        run: npm run agent-runner

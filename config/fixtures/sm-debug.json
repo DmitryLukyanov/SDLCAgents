@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "description": "Local debug rule (JQL is not executed — search is mocked)",
+      "jql": "project = DEBUG",
+      "configFile": "config/agents/dummy-ticket-agent.json",
+      "workflowFile": "ai-teammate.yml",
+      "limit": 10,
+      "skipIfLabel": "sm_dummy_triggered",
+      "addLabel": "sm_local_debug_done"
+    }
+  ]
+}
