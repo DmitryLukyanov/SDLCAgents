@@ -103,33 +103,105 @@ jobs:
             echo "Spec-kit already initialized — skipping init."
           fi
 
-      # ── Phase 5: Seed spec-kit with Jira context ───────────────────────
-      - name: Seed spec-kit with Jira context
+      # ── Phase 5: Run spec-kit shell scripts to scaffold feature ─────────
+      # specify init creates .github/agents/*.agent.md (Copilot agent prompts)
+      # and .specify/scripts/bash/*.sh (setup scripts). We run the scripts to
+      # create the branch + spec/plan/task templates, then seed with Jira context.
+      - name: Create spec-kit feature branch and scaffolding
         if: steps.manifest.outputs.cli_enabled == 'true'
         run: |
-          mkdir -p specs
-          cp "${{ steps.manifest.outputs.constitution_file }}" specs/constitution.md
-          cp "${{ steps.manifest.outputs.context_file }}" specs/context.md
-          echo "Seeded specs/ with constitution.md and context.md"
+          ISSUE_KEY="${{ steps.manifest.outputs.issue_key }}"
+          CONTEXT_FILE="${{ steps.manifest.outputs.context_file }}"
 
-      # ── Phase 6: Run spec-kit commands ──────────────────────────────────
-      - name: Run speckit.clarify
+          # Use spec-kit's create-new-feature script to scaffold the feature
+          SCRIPT=".specify/scripts/bash/create-new-feature.sh"
+          if [ -f "$SCRIPT" ]; then
+            chmod +x "$SCRIPT"
+            bash "$SCRIPT" --json --short-name "${ISSUE_KEY}" "${ISSUE_KEY}" || true
+          else
+            echo "⚠️ create-new-feature.sh not found, creating specs dir manually"
+            mkdir -p "specs/${ISSUE_KEY}"
+          fi
+
+          # Find the feature directory (spec-kit creates specs/<branch-name>/)
+          FEATURE_DIR=$(find specs -maxdepth 1 -type d -name "*${ISSUE_KEY}*" | head -1)
+          if [ -z "$FEATURE_DIR" ]; then
+            FEATURE_DIR="specs/${ISSUE_KEY}"
+            mkdir -p "$FEATURE_DIR"
+          fi
+          echo "Feature dir: $FEATURE_DIR"
+
+          # Seed the spec file with Jira context
+          if [ -f "$CONTEXT_FILE" ]; then
+            cp "$CONTEXT_FILE" "$FEATURE_DIR/spec.md"
+            echo "Seeded $FEATURE_DIR/spec.md with Jira context"
+          fi
+
+          # Copy constitution
+          CONSTITUTION="${{ steps.manifest.outputs.constitution_file }}"
+          if [ -f "$CONSTITUTION" ]; then
+            mkdir -p memory
+            cp "$CONSTITUTION" memory/constitution.md
+            echo "Copied constitution to memory/constitution.md"
+          fi
+
+          echo "feature_dir=$FEATURE_DIR" >> "$GITHUB_OUTPUT"
+
+      # Run plan setup script if available
+      - name: Set up plan template
+        id: scaffold
+        if: steps.manifest.outputs.cli_enabled == 'true'
+        run: |
+          SCRIPT=".specify/scripts/bash/setup-plan.sh"
+          if [ -f "$SCRIPT" ]; then
+            chmod +x "$SCRIPT"
+            bash "$SCRIPT" --json || true
+          else
+            echo "⚠️ setup-plan.sh not found — skipping plan scaffolding"
+          fi
+
+      # ── Phase 6: Invoke Copilot Coding Agent via issue assignment ───────
+      # Spec-kit commands are AI agent prompts (in .github/agents/*.agent.md).
+      # We create a GitHub issue and assign Copilot to drive the spec workflow.
+      - name: Create issue and assign Copilot
         if: steps.manifest.outputs.cli_enabled == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: specify clarify --input specs/context.md || echo "⚠️ clarify returned non-zero (may be expected)"
+        run: |
+          ISSUE_KEY="${{ steps.manifest.outputs.issue_key }}"
 
-      - name: Run speckit.plan
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: specify plan || echo "⚠️ plan returned non-zero (may be expected)"
+          # Build the issue body with spec-kit instructions for Copilot
+          BODY=$(cat <<'ISSUE_EOF'
+          ## Spec-Kit Workflow for ISSUE_PLACEHOLDER
 
-      - name: Run speckit.tasks
-        if: steps.manifest.outputs.cli_enabled == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: specify tasks || echo "⚠️ tasks returned non-zero (may be expected)"
+          Run the following spec-kit agent commands in order:
+
+          1. `@speckit.clarify` — Review the spec in the feature directory and identify ambiguities
+          2. `@speckit.plan` — Create a technical implementation plan
+          3. `@speckit.tasks` — Break the plan into actionable tasks
+          4. `@speckit.implement` — Execute the tasks and produce code changes
+
+          The feature spec has been seeded with Jira ticket context in the `specs/` directory.
+          Commit all generated artifacts and open a PR when done.
+          ISSUE_EOF
+          )
+          BODY="${BODY//ISSUE_PLACEHOLDER/$ISSUE_KEY}"
+
+          # Create the issue and assign copilot
+          ISSUE_URL=$(gh issue create \
+            --title "Spec-Kit: ${ISSUE_KEY}" \
+            --body "$BODY" \
+            --assignee "@me" \
+            2>&1) || true
+          echo "Created issue: $ISSUE_URL"
+
+          # Try to assign Copilot (copilot-swe-agent) to the issue
+          # This triggers Copilot Coding Agent to pick up the agent definitions
+          ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oP '\d+$' || true)
+          if [ -n "$ISSUE_NUM" ]; then
+            gh issue edit "$ISSUE_NUM" --add-assignee "copilot-swe-agent[bot]" 2>/dev/null || \
+              echo "⚠️ Could not assign Copilot — enable Copilot Coding Agent in repo settings"
+          fi
 
       # ── Phase 7: Collect outputs ────────────────────────────────────────
       - name: Copy spec-kit outputs to artifact dir
@@ -137,6 +209,7 @@ jobs:
         run: |
           OUTPUT_DIR="${{ steps.manifest.outputs.output_dir }}"
           cp -r specs/* "$OUTPUT_DIR/" 2>/dev/null || true
+          cp -r memory/* "$OUTPUT_DIR/" 2>/dev/null || true
           echo "Copied spec-kit outputs to $OUTPUT_DIR"
 
       # ── Phase 8: Create PR with spec-kit artifacts ──────────────────────
