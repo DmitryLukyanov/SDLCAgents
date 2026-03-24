@@ -1,0 +1,9 @@
+{
+  "issueKey": "TC-5",
+  "contextFile": "/home/runner/work/SDLCAgents/SDLCAgents/spec-output/TC-5/context.md",
+  "constitutionFile": "/home/runner/work/SDLCAgents/SDLCAgents/spec-output/TC-5/constitution.md",
+  "outputDir": "/home/runner/work/SDLCAgents/SDLCAgents/spec-output/TC-5",
+  "version": "v0.4.0",
+  "agent": "copilot",
+  "scriptType": "sh"
+}
