@@ -38,7 +38,7 @@ safe-outputs:
 
 tools:
   github:
-    toolsets: [defaults]
+    toolsets: [default]
 
 secrets:
   GH_AW_AGENT_TOKEN: ${{ secrets.COPILOT_PAT }}
