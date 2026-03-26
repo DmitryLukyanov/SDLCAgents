@@ -178,7 +178,10 @@ jobs:
           if [ -n "$PUSH_TOKEN" ]; then
             git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           fi
-          git push || echo "Push failed"
+          git push || { echo "::error::Push failed — ensure COPILOT_PAT has 'workflows' permission"; exit 1; }
+
+          # Wait for GitHub to index the new workflow file
+          sleep 5
 
           # Dispatch the compiled workflow
           ISSUE_BODY=$(cat "$RUNNER_TEMP/copilot-prompt.md")
