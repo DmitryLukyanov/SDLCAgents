@@ -3,9 +3,9 @@
 #
 # When specKit.cliEnabled is true:
 #   1. Node prepares Jira context (context.md, constitution, manifest)
-#   2. Creates a GitHub Issue with full Jira context + spec-kit instructions
-#   3. Assigns Copilot Coding Agent to the issue
-#   4. Copilot picks up the issue asynchronously, reads .github/agents/*.agent.md,
+#   2. Builds a task prompt with spec-kit instructions
+#   3. Runs `gh copilot agent-task create` to hand the prompt to Copilot Coding Agent
+#   4. Copilot picks up the task, reads .github/agents/*.agent.md,
 #      runs the spec-kit workflow (specify → clarify → plan → tasks → implement),
 #      and opens its own PR with the implementation.
 #
@@ -154,42 +154,18 @@ jobs:
           Commit all generated artifacts and open a PR when done.
           PROMPT_EOF
 
-      # ── Phase 3b: Compile gh-aw workflow and dispatch ───────────────────
-      - name: Compile and dispatch Copilot assignment workflow
+      # ── Phase 3b: Create Copilot agent task ────────────────────────────
+      - name: Create Copilot agent task
         if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT || secrets.GITHUB_TOKEN }}
-          # GITHUB_TOKEN cannot push commits that touch .github/workflows/*; PAT can (repo scope).
-          PUSH_TOKEN: ${{ secrets.COPILOT_PAT }}
           ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
         run: |
-          # Install gh-aw extension
-          gh extension install github/gh-aw || true
-
-          # Compile .md → .lock.yml
-          gh aw compile
-          echo "✅ Compiled copilot-assign.md → copilot-assign.lock.yml"
-
-          # Commit and push the lock file if it changed
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/copilot-assign.lock.yml
-          git commit -m "chore: compile copilot-assign.lock.yml" || echo "Lock file unchanged"
-          if [ -n "$PUSH_TOKEN" ]; then
-            git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          fi
-          git push || { echo "::error::Push failed — ensure COPILOT_PAT has 'workflows' permission"; exit 1; }
-
-          # Wait for GitHub to index the new workflow file
-          sleep 5
-
-          # Dispatch the compiled workflow
-          ISSUE_BODY=$(cat "$RUNNER_TEMP/copilot-prompt.md")
-          gh workflow run copilot-assign.lock.yml \
-            -f issue_title="Spec-Kit: ${ISSUE_KEY}" \
-            -f issue_body="$ISSUE_BODY" \
-            -f issue_key="${ISSUE_KEY}"
-          echo "✅ Dispatched copilot-assign workflow for ${ISSUE_KEY}"
+          PROMPT=$(cat "$RUNNER_TEMP/copilot-prompt.md")
+          gh copilot agent-task create \
+            --body "$PROMPT" \
+            --base master
+          echo "✅ Copilot agent task created for ${ISSUE_KEY}"
 
       # ── Phase 4: Upload context artifacts for reference ─────────────────
       - name: Upload Spec Kit artifacts
