@@ -154,13 +154,28 @@ jobs:
           Commit all generated artifacts and open a PR when done.
           PROMPT_EOF
 
-      # ── Phase 3b: Dispatch gh-aw workflow to create issue + assign Copilot ──
-      - name: Dispatch Copilot assignment workflow
+      # ── Phase 3b: Compile gh-aw workflow and dispatch ───────────────────
+      - name: Compile and dispatch Copilot assignment workflow
         if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT || secrets.GITHUB_TOKEN }}
           ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
         run: |
+          # Install gh-aw extension
+          gh extension install github/gh-aw || true
+
+          # Compile .md → .lock.yml
+          gh aw compile
+          echo "✅ Compiled copilot-assign.md → copilot-assign.lock.yml"
+
+          # Commit and push the lock file if it changed
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/copilot-assign.lock.yml
+          git commit -m "chore: compile copilot-assign.lock.yml" || echo "Lock file unchanged"
+          git push || echo "Push failed"
+
+          # Dispatch the compiled workflow
           ISSUE_BODY=$(cat "$RUNNER_TEMP/copilot-prompt.md")
           gh workflow run copilot-assign.lock.yml \
             -f issue_title="Spec-Kit: ${ISSUE_KEY}" \
