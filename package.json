@@ -10,7 +10,9 @@
     "scrum-master:debug": "tsx tests/scrum-agent/scrum-master.local-debug.ts",
     "dummy-agent": "tsx src/dummy-agent/dummy-agent-entry.ts",
     "agent-runner": "tsx src/agent-runner/agent-runner.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "calc": "tsx src/calculator/cli.ts",
+    "test:calculator": "node --import tsx/esm --test tests/calculator/calculator.test.ts tests/calculator/cli.test.ts"
   },
   "dependencies": {
     "@octokit/rest": "^21.0.2"
