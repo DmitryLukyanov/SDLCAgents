@@ -133,6 +133,13 @@ jobs:
             JIRA_CONTEXT=$(cat "$CONTEXT_FILE")
           fi
 
+          # Appended to each @speckit.* line as $ARGUMENTS (see config/spec-kit/defaults.json)
+          GLOBAL_DIRECTIVE=$(jq -r '.globalDirective // empty' config/spec-kit/defaults.json)
+          ARG_SUFFIX=""
+          if [ -n "$GLOBAL_DIRECTIVE" ]; then
+            ARG_SUFFIX=" ${GLOBAL_DIRECTIVE}"
+          fi
+
           # Build the issue body with Jira content + spec-kit instructions
           BODY=$(cat <<ISSUE_EOF
           ## Spec-Kit Workflow for ${ISSUE_KEY}
@@ -143,13 +150,13 @@ jobs:
 
           ### Instructions
 
-          Run the following spec-kit agent commands in order:
+          Run the following spec-kit agent commands in order (each line passes the global directive as the command argument after the agent name):
 
-          1. \`@speckit.specify\` — Create the feature specification from the Jira context above
-          2. \`@speckit.clarify\` — Review the spec and identify ambiguities
-          3. \`@speckit.plan\` — Create a technical implementation plan
-          4. \`@speckit.tasks\` — Break the plan into actionable tasks
-          5. \`@speckit.implement\` — Execute the tasks and produce code changes
+          1. \`@speckit.specify${ARG_SUFFIX}\` — Create the feature specification from the Jira context above
+          2. \`@speckit.clarify${ARG_SUFFIX}\` — Review the spec and identify ambiguities
+          3. \`@speckit.plan${ARG_SUFFIX}\` — Create a technical implementation plan
+          4. \`@speckit.tasks${ARG_SUFFIX}\` — Break the plan into actionable tasks
+          5. \`@speckit.implement${ARG_SUFFIX}\` — Execute the tasks and produce code changes
 
           The feature spec has been seeded in the \`specs/\` directory.
           Commit all generated artifacts and open a PR when done.
