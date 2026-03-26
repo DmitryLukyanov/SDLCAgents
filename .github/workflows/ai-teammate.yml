@@ -135,11 +135,6 @@ jobs:
 
           # Appended to each @speckit.* line as one quoted argument (see config/spec-kit/defaults.json globalDirective)
           GLOBAL_DIRECTIVE=$(jq -r '.globalDirective // empty' config/spec-kit/defaults.json)
-          ARG_SUFFIX=""
-          if [ -n "$GLOBAL_DIRECTIVE" ]; then
-            ESC_DIRECTIVE=$(printf '%s\n' "$GLOBAL_DIRECTIVE" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            ARG_SUFFIX=$(printf ' "%s"' "$ESC_DIRECTIVE")
-          fi
 
           # Build the issue body with Jira content + spec-kit instructions
           BODY=$(cat <<ISSUE_EOF
@@ -153,11 +148,12 @@ jobs:
 
           Run the following spec-kit agent commands in order (each line passes the global directive in quotes as a single argument after the agent name):
 
-          1. \`@speckit.specify${ARG_SUFFIX}\` — Create the feature specification from the Jira context above
-          2. \`@speckit.clarify${ARG_SUFFIX}\` — Review the spec and identify ambiguities
-          3. \`@speckit.plan${ARG_SUFFIX}\` — Create a technical implementation plan
-          4. \`@speckit.tasks${ARG_SUFFIX}\` — Break the plan into actionable tasks
-          5. \`@speckit.implement${ARG_SUFFIX}\` — Execute the tasks and produce code changes
+    TRY TO PLAY WITH ISSUE ITSELF (WITHOUT FULL FLOW!!!!)
+          1. \`@speckit.specify\` "${$GLOBAL_DIRECTIVE} — Create the feature specification from the Jira context above"
+          2. \`@speckit.clarify\` "${$GLOBAL_DIRECTIVE} — Review the spec and identify ambiguities"
+          3. \`@speckit.plan\` "${$GLOBAL_DIRECTIVE} — Create a technical implementation plan"
+          4. \`@speckit.tasks\` "${$GLOBAL_DIRECTIVE} — Break the plan into actionable tasks"
+          5. \`@speckit.implement\` "${$GLOBAL_DIRECTIVE} — Execute the tasks and produce code changes"
 
           The feature spec has been seeded in the \`specs/\` directory.
           Commit all generated artifacts and open a PR when done.
