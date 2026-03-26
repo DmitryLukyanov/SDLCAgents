@@ -20,7 +20,10 @@
       "Bash(grep -r \"draft\\\\|ready\\\\|gh pr\\\\|pull.request\\\\|open.*pr\" . --include=*.md ! -path ./node_modules/* ! -path ./.git/*)",
       "Bash(grep -i \"commit\\\\|push\\\\|pr\\\\|pull\" ./.github/prompts/*.md)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(gh api:*)",
+      "Bash(where gh:*)",
+      "Bash(cmd /c \"where gh\")"
     ]
   }
 }
