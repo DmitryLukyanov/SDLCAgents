@@ -154,18 +154,23 @@ jobs:
           Commit all generated artifacts and open a PR when done.
           PROMPT_EOF
 
-      # ── Phase 3b: Create Copilot agent task ────────────────────────────
-      - name: Create Copilot agent task
+      # ── Phase 3b: Delegate task to Copilot Coding Agent via CLI ────────
+      - name: Delegate to Copilot Coding Agent
         if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_PAT || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
         run: |
+          # Install Copilot CLI
+          npm install -g @github/copilot
+          echo "✅ Copilot CLI installed"
+
+          # Read the prompt
           PROMPT=$(cat "$RUNNER_TEMP/copilot-prompt.md")
-          gh copilot agent-task create \
-            --body "$PROMPT" \
-            --base master
-          echo "✅ Copilot agent task created for ${ISSUE_KEY}"
+
+          # Delegate to Copilot Coding Agent (cloud-based)
+          copilot --autopilot --yolo -p "/delegate ${PROMPT}"
+          echo "✅ Delegated task to Copilot Coding Agent for ${ISSUE_KEY}"
 
       # ── Phase 4: Upload context artifacts for reference ─────────────────
       - name: Upload Spec Kit artifacts
