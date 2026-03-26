@@ -16,7 +16,7 @@ export function parseSpecKitBlockFromPlainDescription(plain: string): SpecKitJir
       const o = parsed as Record<string, unknown>;
       const wrap = o.specKit && typeof o.specKit === 'object' ? (o.specKit as Record<string, unknown>) : o;
       const out: SpecKitJiraOverrides = {};
-      for (const k of ['specify', 'plan', 'tasks'] as const) {
+      for (const k of ['globalDirective', 'specify', 'plan', 'tasks'] as const) {
         const v = wrap[k];
         if (typeof v === 'string' && v.trim()) out[k] = v.trim();
       }

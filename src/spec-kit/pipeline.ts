@@ -21,10 +21,13 @@ function mergeStrings(
   base: SpecKitDefaults,
   overrides: SpecKitJiraOverrides,
 ): SpecKitDefaults {
+  const globalDirective =
+    overrides.globalDirective?.trim() || base.globalDirective?.trim() || undefined;
   return {
     specify: overrides.specify?.trim() || base.specify,
     plan: overrides.plan?.trim() || base.plan,
     tasks: overrides.tasks?.trim() || base.tasks,
+    ...(globalDirective ? { globalDirective } : {}),
   };
 }
 
@@ -34,10 +37,14 @@ async function loadDefaults(cwd: string): Promise<SpecKitDefaults> {
   const specify = typeof j.specify === 'string' && j.specify.trim() ? j.specify.trim() : '';
   const plan = typeof j.plan === 'string' && j.plan.trim() ? j.plan.trim() : '';
   const tasks = typeof j.tasks === 'string' && j.tasks.trim() ? j.tasks.trim() : '';
+  const globalDirective =
+    typeof j.globalDirective === 'string' && j.globalDirective.trim()
+      ? j.globalDirective.trim()
+      : undefined;
   if (!specify || !plan || !tasks) {
     throw new Error(`${DEFAULTS_PATH} must define non-empty specify, plan, and tasks strings`);
   }
-  return { specify, plan, tasks };
+  return { specify, plan, tasks, ...(globalDirective ? { globalDirective } : {}) };
 }
 
 export interface RunSpecKitPipelineOptions {
@@ -71,9 +78,15 @@ export async function runSpecKitPipeline(opts: RunSpecKitPipelineOptions): Promi
   const overrides = parseSpecKitBlockFromPlainDescription(descPlain);
   const merged = mergeStrings(defaults, overrides);
 
+  const globalBlock =
+    merged.globalDirective?.trim() === undefined || merged.globalDirective.trim() === ''
+      ? []
+      : ['## Global directive (all agents)', '', merged.globalDirective.trim(), ''];
+
   const specBody = [
     '# Specification',
     '',
+    ...globalBlock,
     '## Intent (Spec Kit — specify)',
     '',
     merged.specify,
@@ -93,6 +106,7 @@ export async function runSpecKitPipeline(opts: RunSpecKitPipelineOptions): Promi
   const planBody = [
     '# Implementation plan (Spec Kit — plan)',
     '',
+    ...globalBlock,
     merged.plan,
     '',
     `_Jira: ${opts.issueKey}_`,
@@ -102,6 +116,7 @@ export async function runSpecKitPipeline(opts: RunSpecKitPipelineOptions): Promi
   const tasksBody = [
     '# Tasks (Spec Kit — tasks)',
     '',
+    ...globalBlock,
     merged.tasks,
     '',
     `_Jira: ${opts.issueKey}_`,

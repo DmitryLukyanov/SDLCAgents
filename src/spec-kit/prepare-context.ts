@@ -19,10 +19,14 @@ async function loadDefaults(cwd: string): Promise<SpecKitDefaults> {
   const specify = typeof j.specify === 'string' && j.specify.trim() ? j.specify.trim() : '';
   const plan = typeof j.plan === 'string' && j.plan.trim() ? j.plan.trim() : '';
   const tasks = typeof j.tasks === 'string' && j.tasks.trim() ? j.tasks.trim() : '';
+  const globalDirective =
+    typeof j.globalDirective === 'string' && j.globalDirective.trim()
+      ? j.globalDirective.trim()
+      : undefined;
   if (!specify || !plan || !tasks) {
     throw new Error(`${DEFAULTS_PATH} must define non-empty specify, plan, and tasks strings`);
   }
-  return { specify, plan, tasks };
+  return { specify, plan, tasks, ...(globalDirective ? { globalDirective } : {}) };
 }
 
 function formatRelated(items: RelatedIssueSummary[]): string {
@@ -69,6 +73,8 @@ export async function prepareSpecKitContext(opts: PrepareContextOptions): Promis
     specify: overrides.specify?.trim() || defaults.specify,
     plan: overrides.plan?.trim() || defaults.plan,
     tasks: overrides.tasks?.trim() || defaults.tasks,
+    globalDirective:
+      overrides.globalDirective?.trim() || defaults.globalDirective?.trim() || '',
   };
 
   // Related issues
@@ -77,10 +83,16 @@ export async function prepareSpecKitContext(opts: PrepareContextOptions): Promis
     ? await fetchRelatedIssueSummaries(opts.issueKey, depth)
     : [];
 
+  const globalLines =
+    merged.globalDirective.trim() === ''
+      ? []
+      : ['## Global directive (all agents)', '', merged.globalDirective.trim(), ''];
+
   // Build context markdown
   const contextBody = [
     `# Spec Kit Context: ${opts.issueKey}`,
     '',
+    ...globalLines,
     '## Jira Issue',
     '',
     `**Key:** ${opts.issueKey}`,
