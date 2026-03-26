@@ -11,7 +11,9 @@
 #
 # Prerequisites:
 #   - Copilot Coding Agent enabled: Settings → Copilot → Coding agent
-#   - .github/agents/*.agent.md committed to master (run `specify init --ai copilot` once)
+#   - .github/agents/speckit.*.agent.md + .github/prompts/speckit.*.prompt.md committed
+#     to the default branch. Generate once with:
+#       uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 specify init --here
 #   - .github/workflows/copilot-setup-steps.yml committed to master
 name: AI Teammate
 
@@ -46,6 +48,32 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v4
+
+      # ── Gate: spec-kit agents + prompts must exist in the repo ─────────
+      - name: Check spec-kit prerequisites
+        id: speckit_check
+        run: |
+          MISSING=0
+          for f in \
+            .github/agents/speckit.specify.agent.md \
+            .github/agents/speckit.implement.agent.md \
+            .github/prompts/speckit.specify.prompt.md \
+            .github/prompts/speckit.implement.prompt.md; do
+            if [ ! -f "$f" ]; then
+              echo "❌ Missing: $f"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            echo "speckit_ready=false" >> "$GITHUB_OUTPUT"
+            echo ""
+            echo "⚠️ Spec-kit agent/prompt files are missing from the repo."
+            echo "   Run once and commit to the default branch:"
+            echo "   uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 specify init --here"
+          else
+            echo "speckit_ready=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Spec-kit agent and prompt files found."
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -87,7 +115,7 @@ jobs:
       # .github/agents/*.agent.md from master, and creates its own PR
       # with the full spec-kit workflow output (specify → implement).
       - name: Create issue and assign Copilot Coding Agent
-        if: steps.manifest.outputs.cli_enabled == 'true'
+        if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
         env:
           # Must be a PAT from a Copilot-enabled user (repo + issues scope).
           # The default GITHUB_TOKEN cannot assign copilot-swe-agent via GraphQL.

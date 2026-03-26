@@ -1,6 +1,13 @@
 # Copilot Coding Agent environment setup.
 # This workflow configures the environment that Copilot uses when
 # working on issues assigned to it. It runs before Copilot starts coding.
+#
+# Prerequisites committed to the default branch BEFORE Copilot runs:
+#   - .github/agents/speckit.*.agent.md
+#   - .github/prompts/speckit.*.prompt.md
+# Generate once with:
+#   uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 specify init --here
+#
 # See: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
 name: Copilot Setup Steps
 
@@ -18,19 +25,3 @@ jobs:
           cache: npm
 
       - run: npm ci
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install uv and specify-cli
-        run: |
-          pip install uv
-          uv tool install specify-cli --force \
-            --from "git+https://github.com/github/spec-kit.git@v0.4.0"
-
-      - name: Initialize spec-kit if needed
-        run: |
-          if [ ! -d ".speckit" ] && [ ! -f "specify.toml" ]; then
-            echo "y" | specify init --ai copilot --script sh --here
-          fi
