@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Find and mark draft PR as ready
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.COPILOT_PAT || secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="${{ github.event.workflow_run.head_branch }}"
           OWNER="${{ github.repository_owner }}"
