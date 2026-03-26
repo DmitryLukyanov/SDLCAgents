@@ -1,5 +1,6 @@
 # Scrum Master: loads config/sm.json rules OR legacy single JQL → dispatches ai-teammate.yml.
 name: Scrum Master
+run-name: "Scrum Master — ${{ inputs.rules_path || inputs.jql || 'default rules' }}"
 
 concurrency:
   group: scrum-master-${{ github.ref }}

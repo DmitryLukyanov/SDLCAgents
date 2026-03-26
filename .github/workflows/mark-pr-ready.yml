@@ -4,6 +4,7 @@
 # Trigger: workflow_run.completed on "Copilot coding agent" workflow.
 # This fires exactly once when the agent finishes — no polling or sleep needed.
 name: Mark Copilot PR Ready
+run-name: "Mark PR Ready — ${{ github.event.workflow_run.head_branch }}"
 
 on:
   workflow_run:

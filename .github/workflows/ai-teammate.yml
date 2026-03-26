@@ -16,6 +16,7 @@
 #       uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 specify init --here
 #   - .github/workflows/copilot-setup-steps.yml committed to master
 name: AI Teammate
+run-name: "AI Teammate — ${{ inputs.concurrency_key }}"
 
 concurrency:
   group: ai-teammate-${{ inputs.concurrency_key }}
