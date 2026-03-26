@@ -23,7 +23,12 @@
       "Bash(git commit:*)",
       "Bash(gh api:*)",
       "Bash(where gh:*)",
-      "Bash(cmd /c \"where gh\")"
+      "Bash(cmd /c \"where gh\")",
+      "WebFetch(domain:github.github.com)",
+      "Bash(gh extension:*)",
+      "Bash(cmd /c \"gh extension install github/gh-aw\")",
+      "Bash(cmd /c \"gh extension list\")",
+      "WebFetch(domain:docs.github.com)"
     ]
   }
 }
