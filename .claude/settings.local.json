@@ -18,7 +18,9 @@
       "Bash(grep -r \"draft\\\\|ready\\\\|PR\\\\|pull request\" . --include=*.ts --include=*.md)",
       "Bash(xargs wc:*)",
       "Bash(grep -r \"draft\\\\|ready\\\\|gh pr\\\\|pull.request\\\\|open.*pr\" . --include=*.md ! -path ./node_modules/* ! -path ./.git/*)",
-      "Bash(grep -i \"commit\\\\|push\\\\|pr\\\\|pull\" ./.github/prompts/*.md)"
+      "Bash(grep -i \"commit\\\\|push\\\\|pr\\\\|pull\" ./.github/prompts/*.md)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
