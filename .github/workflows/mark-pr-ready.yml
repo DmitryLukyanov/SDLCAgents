@@ -1,0 +1,48 @@
+# Automatically mark Copilot Coding Agent draft PRs as ready for review
+# once the agent's workflow run completes successfully.
+#
+# Trigger: workflow_run.completed on "Copilot coding agent" workflow.
+# This fires exactly once when the agent finishes — no polling or sleep needed.
+name: Mark Copilot PR Ready
+
+on:
+  workflow_run:
+    workflows: ["Copilot coding agent"]
+    types: [completed]
+
+jobs:
+  mark-ready:
+    # Only proceed if the Copilot agent run succeeded
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Find and mark draft PR as ready
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          echo "Copilot agent completed on branch: $BRANCH"
+
+          # Find the draft PR for this branch
+          PR_JSON=$(gh pr list \
+            --repo "$OWNER/$REPO" \
+            --head "$BRANCH" \
+            --state open \
+            --json number,isDraft,author \
+            --jq '.[] | select(.isDraft == true)' 2>/dev/null || true)
+
+          if [ -z "$PR_JSON" ]; then
+            echo "No open draft PR found for branch $BRANCH — nothing to do."
+            exit 0
+          fi
+
+          PR_NUM=$(echo "$PR_JSON" | jq -r '.number')
+          echo "Found draft PR #${PR_NUM} on branch $BRANCH — marking as ready for review."
+
+          gh pr ready "$PR_NUM" --repo "$OWNER/$REPO"
+          echo "PR #${PR_NUM} marked as ready for review."
