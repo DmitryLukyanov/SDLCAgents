@@ -158,7 +158,7 @@ jobs:
       - name: Delegate to Copilot Coding Agent
         if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT_FG }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT_FG }}
           ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
         run: |
           # Install Copilot CLI
@@ -169,7 +169,7 @@ jobs:
           PROMPT=$(cat "$RUNNER_TEMP/copilot-prompt.md")
 
           # Delegate to Copilot Coding Agent (cloud-based)
-          copilot --autopilot --yolo -p "/delegate ${PROMPT}"
+          copilot -p "/delegate ${PROMPT}" --no-ask-user
           echo "✅ Delegated task to Copilot Coding Agent for ${ISSUE_KEY}"
 
       # ── Phase 4: Upload context artifacts for reference ─────────────────
