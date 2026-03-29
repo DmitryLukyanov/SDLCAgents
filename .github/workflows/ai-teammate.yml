@@ -164,13 +164,24 @@ jobs:
           # Read the prompt
           PROMPT=$(cat "$RUNNER_TEMP/copilot-prompt.md")
 
-          # Create GitHub Issue assigned to Copilot Coding Agent
+          # Step 1: Create GitHub Issue (without assignee)
           ISSUE_URL=$(gh issue create \
             --title "${ISSUE_KEY}: Copilot Coding Agent Task" \
-            --body "${PROMPT}" \
-            --assignee "copilot-swe-agent[bot]")
+            --body "${PROMPT}")
+          echo "✅ Created issue: ${ISSUE_URL}"
 
-          echo "✅ Created issue and assigned to Copilot: ${ISSUE_URL}"
+          # Step 2: Extract issue number and assign Copilot via API
+          ISSUE_NUMBER=$(echo "${ISSUE_URL}" | grep -oP '\d+$')
+          gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}" \
+            --method PATCH \
+            --raw-field 'assignees=["copilot-swe-agent[bot]"]' \
+            -H "Accept: application/vnd.github+json" || \
+          gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/assignees" \
+            --method POST \
+            --raw-field '{"assignees":["Copilot"]}' \
+            -H "Accept: application/vnd.github+json"
+
+          echo "✅ Assigned Copilot to issue #${ISSUE_NUMBER}"
           echo "Copilot Coding Agent will pick up the task and open a PR when done."
 
       # ── Phase 4: Upload context artifacts for reference ─────────────────

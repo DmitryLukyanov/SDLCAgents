@@ -28,7 +28,10 @@
       "Bash(gh extension:*)",
       "Bash(cmd /c \"gh extension install github/gh-aw\")",
       "Bash(cmd /c \"gh extension list\")",
-      "WebFetch(domain:docs.github.com)"
+      "WebFetch(domain:docs.github.com)",
+      "Bash(gh run:*)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:github.blog)"
     ]
   }
 }
