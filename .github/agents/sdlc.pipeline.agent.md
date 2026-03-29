@@ -59,11 +59,16 @@ The code review agent will:
 
 Wait for the review to complete.
 
+## Critical Rule: Do NOT Over-Iterate
+
+Each phase should complete in a **single pass**. Do NOT re-run phases, loop back, or do additional work beyond the 3 phases above. Once Phase 3 is done, proceed immediately to Completion.
+
 ## Completion
 
-After all phases are complete:
+After all 3 phases are complete, you are DONE. Immediately:
 1. Verify the PR is open and marked ready for review
 2. Add a comment to the originating issue summarizing the pipeline result:
    - Spec-kit phases completed
    - PR number and link
    - Code review summary (pass/fail per requirement)
+3. **STOP.** Do not do any further work.
