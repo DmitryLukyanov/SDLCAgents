@@ -170,12 +170,18 @@ jobs:
             --body "${PROMPT}")
           echo "✅ Created issue: ${ISSUE_URL}"
 
-          # Step 2: Extract issue number and assign Copilot via API
+          # Step 2: Extract issue number and assign Copilot with orchestrator agent via API
           ISSUE_NUMBER=$(echo "${ISSUE_URL}" | grep -oP '\d+$')
           gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/assignees" \
             --method POST \
-            -f "assignees[]=copilot-swe-agent[bot]" \
-            -H "Accept: application/vnd.github+json"
+            --input - <<ASSIGN_EOF
+          {
+            "assignees": ["copilot-swe-agent[bot]"],
+            "agent_assignment": {
+              "custom_agent": "speckit.orchestrator"
+            }
+          }
+          ASSIGN_EOF
 
           echo "✅ Assigned Copilot to issue #${ISSUE_NUMBER}"
           echo "Copilot Coding Agent will pick up the task and open a PR when done."
