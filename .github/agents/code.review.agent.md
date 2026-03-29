@@ -65,15 +65,34 @@ Review all changed files for:
 
 ## Step 5: Fix Issues
 
-If you find issues that can be fixed:
+**You MUST fix every issue you find directly in the code.** Do NOT just leave comments or suggestions — apply the actual fix.
 
-1. Fix each issue directly in the code
-2. Commit each fix with: `review(fix): <description of what was fixed>`
-3. Do NOT fix issues that require architectural changes — document those instead
+For each issue:
 
-If you find issues that CANNOT be auto-fixed:
-1. Document them clearly in the review summary
-2. Mark the requirement as PARTIAL or FAIL
+1. Edit the file to fix the issue
+2. Commit: `git add -A && git commit -m "review(fix): <description of what was fixed>"`
+3. After all fixes, run tests to verify nothing is broken: `npm test` or the project's test command
+4. If tests fail after a fix, fix the test or revert the change and document it
+
+For each issue found (whether fixed or not), add an **inline review comment** on the PR at the specific file and line:
+```bash
+gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
+  --method POST \
+  -f body="**[FIXED]** <description of what was wrong and how it was fixed>" \
+  -f commit_id="$(git rev-parse HEAD)" \
+  -f path="<file_path>" \
+  -f line=<line_number> \
+  -f side="RIGHT"
+```
+
+Use these prefixes:
+- `**[FIXED]**` — issue was found and fixed in code
+- `**[TODO]**` — issue requires architectural change or is out of scope
+
+Only leave as TODO without fixing if:
+- The issue requires a major architectural change
+- The fix would change the scope of the feature
+Mark these as PARTIAL or FAIL in the review summary with a clear explanation.
 
 ## Step 6: Review Summary
 
