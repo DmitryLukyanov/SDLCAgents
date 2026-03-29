@@ -158,7 +158,7 @@ jobs:
       - name: Delegate to Copilot Coding Agent
         if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
         env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT_FG }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
         run: |
           # Install Copilot CLI
