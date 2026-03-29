@@ -122,7 +122,7 @@ function ConvertTo-CleanBranchName {
 $repoRoot = Get-RepoRoot
 
 # Check if git is available at this repo root (not a parent)
-$hasGit = false # temporary skip
+$hasGit = Test-HasGit
 
 Set-Location $repoRoot
 
