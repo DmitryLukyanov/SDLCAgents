@@ -25,8 +25,8 @@ description: "Task list for TC-5 Simple Calculator implementation"
 
 **Purpose**: Wire the calculator module into the existing project — no source files yet.
 
-- [ ] T001 Add `"calculator"` and `"test:calculator"` npm scripts to `package.json`
-- [ ] T002 [P] Create empty directories `src/calculator/` and `tests/calculator/unit/` and `tests/calculator/integration/` (add `.gitkeep` files so the tree is committed)
+- [X] T001 Add `"calculator"` and `"test:calculator"` npm scripts to `package.json`
+- [X] T002 [P] Create empty directories `src/calculator/` and `tests/calculator/unit/` and `tests/calculator/integration/` (add `.gitkeep` files so the tree is committed)
 
 **Checkpoint**: `npm run calculator` and `npm run test:calculator` resolve their entry-point paths (even before source files exist).
 
@@ -38,7 +38,7 @@ description: "Task list for TC-5 Simple Calculator implementation"
 
 **⚠️ CRITICAL**: All user story work is blocked until T003 is complete.
 
-- [ ] T003 Create `src/calculator/types.ts` — declare `Operation` enum (`+`, `-`, `*`, `/`, `sin`); `BinaryExpression`, `UnaryExpression`, `ParsedExpression` union; `ParseError`, `ParseResult` union; `SuccessResult`, `ErrorResult`, `CalculatorResult` union (all exactly as specified in `contracts/library-api.md`)
+- [X] T003 Create `src/calculator/types.ts` — declare `Operation` enum (`+`, `-`, `*`, `/`, `sin`); `BinaryExpression`, `UnaryExpression`, `ParsedExpression` union; `ParseError`, `ParseResult` union; `SuccessResult`, `ErrorResult`, `CalculatorResult` union (all exactly as specified in `contracts/library-api.md`)
 
 **Checkpoint**: `npm run check` passes with the types file in place and no implementation files yet.
 
@@ -52,18 +52,18 @@ description: "Task list for TC-5 Simple Calculator implementation"
 
 ### Tests for User Story 1 — Write FIRST, Verify They FAIL ⚠️
 
-- [ ] T004 [P] [US1] Write parser unit tests for binary expressions (happy paths: addition, subtraction, multiplication, division; integers and decimals; negative operands) in `tests/calculator/unit/parser.test.ts`
-- [ ] T005 [P] [US1] Write calculator unit tests for all four binary operations and division-by-zero error result in `tests/calculator/unit/calculator.test.ts`
-- [ ] T006 [P] [US1] Write formatter unit tests for: integer result (`8`), decimal with trailing zeros stripped (`0.5`), 10-significant-digit truncation (`0.3333333333`), and `Infinity`/`NaN` → `"Result is out of numeric range."` in `tests/calculator/unit/formatter.test.ts`
+- [X] T004 [P] [US1] Write parser unit tests for binary expressions (happy paths: addition, subtraction, multiplication, division; integers and decimals; negative operands) in `tests/calculator/unit/parser.test.ts`
+- [X] T005 [P] [US1] Write calculator unit tests for all four binary operations and division-by-zero error result in `tests/calculator/unit/calculator.test.ts`
+- [X] T006 [P] [US1] Write formatter unit tests for: integer result (`8`), decimal with trailing zeros stripped (`0.5`), 10-significant-digit truncation (`0.3333333333`), and `Infinity`/`NaN` → `"Result is out of numeric range."` in `tests/calculator/unit/formatter.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Implement `src/calculator/parser.ts` — `parse(input: string): ParseResult`: trim input; match binary regex `/^(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)$/`; return `BinaryExpression` on match; return `ParseError` with exact catalogue messages for blank input, unsupported-operator pattern, incomplete-binary pattern, and unrecognised pattern (see `data-model.md` error catalogue)
-- [ ] T008 [US1] Implement `src/calculator/calculator.ts` — `evaluate(expr: ParsedExpression): CalculatorResult` for binary ops; add `calculate(expression: string): CalculatorResult` facade that calls `parse()` then `evaluate()`; guard division by zero (`right === 0` → `ErrorResult`); guard post-compute `!isFinite(value) || isNaN(value)` → `ErrorResult`
-- [ ] T009 [US1] Implement `src/calculator/formatter.ts` — `formatNumber(value: number): string` using `parseFloat(value.toPrecision(10)).toString()`; return `"Result is out of numeric range."` for `Infinity`, `-Infinity`, or `NaN`
-- [ ] T010 [US1] Implement `src/calculator/index.ts` — re-export `calculate`, `formatNumber`, `Operation`, `CalculatorResult`, `SuccessResult`, `ErrorResult`, `ParsedExpression`, `BinaryExpression`, `UnaryExpression`, `ParseError`, `ParseResult` from their respective source files
-- [ ] T011 [US1] Implement `src/calculator/cli.ts` — interactive REPL using `node:readline`; print banner `Calculator REPL — type "exit" to quit`; loop: print `> ` prompt, read line, trim, check `exit`/`quit` (case-insensitive) → print `Goodbye.` and `process.exit(0)`; otherwise call `calculate()` and print result string; handle `close` event (EOF) → exit 0
-- [ ] T012 [US1] Write integration test covering the full parse → evaluate → format pipeline for all four basic operations and division-by-zero in `tests/calculator/integration/repl.test.ts` (import `calculate` and `formatNumber` from `src/calculator/index.ts`; do not spin up readline)
+- [X] T007 [US1] Implement `src/calculator/parser.ts` — `parse(input: string): ParseResult`: trim input; match binary regex `/^(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)$/`; return `BinaryExpression` on match; return `ParseError` with exact catalogue messages for blank input, unsupported-operator pattern, incomplete-binary pattern, and unrecognised pattern (see `data-model.md` error catalogue)
+- [X] T008 [US1] Implement `src/calculator/calculator.ts` — `evaluate(expr: ParsedExpression): CalculatorResult` for binary ops; add `calculate(expression: string): CalculatorResult` facade that calls `parse()` then `evaluate()`; guard division by zero (`right === 0` → `ErrorResult`); guard post-compute `!isFinite(value) || isNaN(value)` → `ErrorResult`
+- [X] T009 [US1] Implement `src/calculator/formatter.ts` — `formatNumber(value: number): string` using `parseFloat(value.toPrecision(10)).toString()`; return `"Result is out of numeric range."` for `Infinity`, `-Infinity`, or `NaN`
+- [X] T010 [US1] Implement `src/calculator/index.ts` — re-export `calculate`, `formatNumber`, `Operation`, `CalculatorResult`, `SuccessResult`, `ErrorResult`, `ParsedExpression`, `BinaryExpression`, `UnaryExpression`, `ParseError`, `ParseResult` from their respective source files
+- [X] T011 [US1] Implement `src/calculator/cli.ts` — interactive REPL using `node:readline`; print banner `Calculator REPL — type "exit" to quit`; loop: print `> ` prompt, read line, trim, check `exit`/`quit` (case-insensitive) → print `Goodbye.` and `process.exit(0)`; otherwise call `calculate()` and print result string; handle `close` event (EOF) → exit 0
+- [X] T012 [US1] Write integration test covering the full parse → evaluate → format pipeline for all four basic operations and division-by-zero in `tests/calculator/integration/repl.test.ts` (import `calculate` and `formatNumber` from `src/calculator/index.ts`; do not spin up readline)
 
 **Checkpoint**: `npm run test:calculator` — all Phase 3 tests pass. `npm run calculator` accepts `5 + 3` → `8` and `7 / 0` → error message, then loops.
 
@@ -77,14 +77,14 @@ description: "Task list for TC-5 Simple Calculator implementation"
 
 ### Tests for User Story 2 — Write FIRST, Verify They FAIL ⚠️
 
-- [ ] T013 [P] [US2] Extend parser unit tests: add sin() parsing cases (`sin(0)`, `sin(30)`, `sin(-90)`, `sin( 30 )` with inner whitespace) and confirm `sin` without parentheses returns a `ParseError` in `tests/calculator/unit/parser.test.ts`
-- [ ] T014 [P] [US2] Extend calculator unit tests: add `sin(0) → 0`, `sin(30) → ~0.5`, `sin(90) → 1`, `sin(-90) → -1`; confirm formatted output strips trailing zeros in `tests/calculator/unit/calculator.test.ts`
+- [X] T013 [P] [US2] Extend parser unit tests: add sin() parsing cases (`sin(0)`, `sin(30)`, `sin(-90)`, `sin( 30 )` with inner whitespace) and confirm `sin` without parentheses returns a `ParseError` in `tests/calculator/unit/parser.test.ts`
+- [X] T014 [P] [US2] Extend calculator unit tests: add `sin(0) → 0`, `sin(30) → ~0.5`, `sin(90) → 1`, `sin(-90) → -1`; confirm formatted output strips trailing zeros in `tests/calculator/unit/calculator.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Extend `src/calculator/parser.ts` — add unary sin regex `/^sin\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)$/i`; check it before the binary pattern; return `UnaryExpression { kind: 'unary', operator: Operation.Sin, operand: degrees }`; a bare `sin` or `sin 30` (no parens) must still fall through to a `ParseError`
-- [ ] T016 [US2] Extend `src/calculator/calculator.ts` — add `sinDegrees(degrees: number): number` helper (`degrees * Math.PI / 180` passed to `Math.sin`); add `UnaryExpression` branch in `evaluate()` that calls `sinDegrees` and returns `SuccessResult`
-- [ ] T017 [US2] Extend integration test with sin() scenarios (`sin(0)`, `sin(30)`, `sin(90)`, `sin(-90)`) in `tests/calculator/integration/repl.test.ts`
+- [X] T015 [US2] Extend `src/calculator/parser.ts` — add unary sin regex `/^sin\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)$/i`; check it before the binary pattern; return `UnaryExpression { kind: 'unary', operator: Operation.Sin, operand: degrees }`; a bare `sin` or `sin 30` (no parens) must still fall through to a `ParseError`
+- [X] T016 [US2] Extend `src/calculator/calculator.ts` — add `sinDegrees(degrees: number): number` helper (`degrees * Math.PI / 180` passed to `Math.sin`); add `UnaryExpression` branch in `evaluate()` that calls `sinDegrees` and returns `SuccessResult`
+- [X] T017 [US2] Extend integration test with sin() scenarios (`sin(0)`, `sin(30)`, `sin(90)`, `sin(-90)`) in `tests/calculator/integration/repl.test.ts`
 
 **Checkpoint**: `npm run test:calculator` — all Phase 3 and Phase 4 tests pass. `sin(30)` → `0.5` in the live REPL.
 
@@ -98,16 +98,16 @@ description: "Task list for TC-5 Simple Calculator implementation"
 
 ### Tests for User Story 3 — Write FIRST, Verify They FAIL (or surface gaps) ⚠️
 
-- [ ] T018 [P] [US3] Extend parser unit tests for all four `ParseError` message strings: blank/whitespace-only, unsupported function (`cos`, `%`, `^`), incomplete binary (`5 +`, `* 3`), and unrecognised pattern (`abc`, `1 + 2 + 3`) in `tests/calculator/unit/parser.test.ts`
-- [ ] T019 [P] [US3] Extend calculator unit tests for overflow/NaN paths: very large number multiplication producing `Infinity`, `0 / 0`-style NaN — confirm `ErrorResult` with `"Result is out of numeric range."` in `tests/calculator/unit/calculator.test.ts`
-- [ ] T020 [P] [US3] Extend formatter unit tests for `Infinity`, `-Infinity`, and `NaN` inputs — confirm return value is `"Result is out of numeric range."` in `tests/calculator/unit/formatter.test.ts`
+- [X] T018 [P] [US3] Extend parser unit tests for all four `ParseError` message strings: blank/whitespace-only, unsupported function (`cos`, `%`, `^`), incomplete binary (`5 +`, `* 3`), and unrecognised pattern (`abc`, `1 + 2 + 3`) in `tests/calculator/unit/parser.test.ts`
+- [X] T019 [P] [US3] Extend calculator unit tests for overflow/NaN paths: very large number multiplication producing `Infinity`, `0 / 0`-style NaN — confirm `ErrorResult` with `"Result is out of numeric range."` in `tests/calculator/unit/calculator.test.ts`
+- [X] T020 [P] [US3] Extend formatter unit tests for `Infinity`, `-Infinity`, and `NaN` inputs — confirm return value is `"Result is out of numeric range."` in `tests/calculator/unit/formatter.test.ts`
 
 ### Implementation / Verification for User Story 3
 
-- [ ] T021 [US3] Audit `src/calculator/parser.ts` — verify all four `ParseError` message strings match the catalogue verbatim (punctuation, casing, phrasing) as specified in `data-model.md`; correct any discrepancies
-- [ ] T022 [US3] Audit `src/calculator/calculator.ts` — confirm the post-compute overflow guard (`!isFinite(value) || isNaN(value)`) runs after every binary and unary evaluation branch; add guard if missing
-- [ ] T023 [US3] Audit `src/calculator/cli.ts` — confirm REPL loop does not `throw` on any input; verify `close` (EOF) and `SIGINT` (Ctrl-C) both exit with code 0 without printing a stack trace
-- [ ] T024 [US3] Extend integration test with all error scenarios: blank input, `cos(30)`, `5 +`, unrecognised pattern, and division-by-zero — assert exact error message strings in `tests/calculator/integration/repl.test.ts`
+- [X] T021 [US3] Audit `src/calculator/parser.ts` — verify all four `ParseError` message strings match the catalogue verbatim (punctuation, casing, phrasing) as specified in `data-model.md`; correct any discrepancies
+- [X] T022 [US3] Audit `src/calculator/calculator.ts` — confirm the post-compute overflow guard (`!isFinite(value) || isNaN(value)`) runs after every binary and unary evaluation branch; add guard if missing
+- [X] T023 [US3] Audit `src/calculator/cli.ts` — confirm REPL loop does not `throw` on any input; verify `close` (EOF) and `SIGINT` (Ctrl-C) both exit with code 0 without printing a stack trace
+- [X] T024 [US3] Extend integration test with all error scenarios: blank input, `cos(30)`, `5 +`, unrecognised pattern, and division-by-zero — assert exact error message strings in `tests/calculator/integration/repl.test.ts`
 
 **Checkpoint**: `npm run test:calculator` — all Phase 3, 4, and 5 tests pass. Zero crashes on any tested input.
 
@@ -117,9 +117,9 @@ description: "Task list for TC-5 Simple Calculator implementation"
 
 **Purpose**: Full suite validation, type safety, and quickstart verification.
 
-- [ ] T025 [P] Run `npm run test:calculator` — confirm all tests pass and zero failures are reported; resolve any remaining test failures
-- [ ] T026 [P] Run `npm run check` (`tsc --noEmit`) — resolve any TypeScript type errors introduced across `src/calculator/` and `tests/calculator/`
-- [ ] T027 Validate the live REPL against `contracts/cli-protocol.md` end-to-end: banner text matches exactly, `> ` prompt appears, each expression from the sample session produces the correct output line, `exit` prints `Goodbye.` and exits cleanly
+- [X] T025 [P] Run `npm run test:calculator` — confirm all tests pass and zero failures are reported; resolve any remaining test failures
+- [X] T026 [P] Run `npm run check` (`tsc --noEmit`) — resolve any TypeScript type errors introduced across `src/calculator/` and `tests/calculator/`
+- [X] T027 Validate the live REPL against `contracts/cli-protocol.md` end-to-end: banner text matches exactly, `> ` prompt appears, each expression from the sample session produces the correct output line, `exit` prints `Goodbye.` and exits cleanly
 
 ---
 
