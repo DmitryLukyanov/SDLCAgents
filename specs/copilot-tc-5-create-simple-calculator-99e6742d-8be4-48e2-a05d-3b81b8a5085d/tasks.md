@@ -20,8 +20,8 @@
 
 **Purpose**: Create the directory skeleton and wire up `package.json` scripts so every subsequent task has a known home and can be run with a single command.
 
-- [ ] T001 Create empty `src/calculator/` and `tests/calculator/` directories with a `.gitkeep` placeholder each (or any initial file) so the tree matches the layout in `plan.md`
-- [ ] T002 Add `"calculator": "tsx src/calculator/index.ts"` and `"test:calculator": "node --test tests/calculator/"` scripts to `package.json` alongside the existing scripts
+- [X] T001 Create empty `src/calculator/` and `tests/calculator/` directories with a `.gitkeep` placeholder each (or any initial file) so the tree matches the layout in `plan.md`
+- [X] T002 Add `"calculator": "tsx src/calculator/index.ts"` and `"test:calculator": "node --test tests/calculator/"` scripts to `package.json` alongside the existing scripts
 
 ---
 
@@ -31,9 +31,9 @@
 
 **⚠️ CRITICAL**: The lexer (`lexer.ts`) is imported by the parser; the formatter (`formatter.ts`) is imported by the REPL. Both must exist before any story implementation or tests are authored.
 
-- [ ] T003 Implement `TokenType` enum, `Token` type, and `Lexer` class in `src/calculator/lexer.ts` — the class must expose a `tokenise(): Token[]` method and handle: whitespace (skip), `NUMBER` (`/\d+(\.\d*)?|\.\d+/`), `IDENT` (`/[a-zA-Z_][a-zA-Z0-9_]*/`), single-char operators `+` `-` `*` `/` `(` `)`, and `EOF`; unknown characters throw `Error: Unexpected character '<ch>'`
-- [ ] T004 [P] Implement pure `format(n: number): string` function in `src/calculator/formatter.ts` — rules: (1) if `!isFinite(n)` return `String(n)`; (2) otherwise return `parseFloat(n.toPrecision(10)).toString()` — so `42` displays as `"42"`, `1/3` as `"0.3333333333"`, `sin(180)` raw value as `"1.224646799e-16"`
-- [ ] T005 [P] Write all `Lexer` unit tests in `tests/calculator/lexer.test.ts` using `node:test` and `node:assert/strict` — cover: integer literals, decimal literals (`.5`, `3.14`), all six operator/paren characters, the `sin` IDENT token, whitespace skipping between tokens, mixed expression tokenisation (`-5 + 3`, `sin(90)`, `(2+3)*4`), and the unknown-character error throw
+- [X] T003 Implement `TokenType` enum, `Token` type, and `Lexer` class in `src/calculator/lexer.ts` — the class must expose a `tokenise(): Token[]` method and handle: whitespace (skip), `NUMBER` (`/\d+(\.\d*)?|\.\d+/`), `IDENT` (`/[a-zA-Z_][a-zA-Z0-9_]*/`), single-char operators `+` `-` `*` `/` `(` `)`, and `EOF`; unknown characters throw `Error: Unexpected character '<ch>'`
+- [X] T004 [P] Implement pure `format(n: number): string` function in `src/calculator/formatter.ts` — rules: (1) if `!isFinite(n)` return `String(n)`; (2) otherwise return `parseFloat(n.toPrecision(10)).toString()` — so `42` displays as `"42"`, `1/3` as `"0.3333333333"`, `sin(180)` raw value as `"1.224646799e-16"`
+- [X] T005 [P] Write all `Lexer` unit tests in `tests/calculator/lexer.test.ts` using `node:test` and `node:assert/strict` — cover: integer literals, decimal literals (`.5`, `3.14`), all six operator/paren characters, the `sin` IDENT token, whitespace skipping between tokens, mixed expression tokenisation (`-5 + 3`, `sin(90)`, `(2+3)*4`), and the unknown-character error throw
 
 **Checkpoint**: `node --test tests/calculator/lexer.test.ts` passes; formatter is importable.
 
@@ -49,14 +49,14 @@
 
 > **Write these tests FIRST — they must FAIL before T008/T009 exist**
 
-- [ ] T006 [P] [US1] Write parser/evaluator unit tests in `tests/calculator/parser.test.ts` using `node:test` — cover every arithmetic acceptance scenario from spec.md US1: `10 + 5` → `15`, `8 - 3` → `5`, `6 * 7` → `42`, `20 / 4` → `5`, `5 / 0` throws `Division by zero`, `2 + 3 * 4` → `14` (precedence), `(2 + 3) * 4` → `20` (parens), `-5 + 3` → `-2` (unary minus), `3 * -2` → `-6` (unary in sub-expression), `1 / 3` → `"0.3333333333"` (formatter), and the error cases: unknown function, missing `)`, trailing garbage
-- [ ] T007 [P] [US1] Write REPL integration tests in `tests/calculator/repl.test.ts` using `node:test` — simulate stdin streams to cover: empty line produces no output and re-prompts silently, `exit` command exits with code 0, `quit` command exits with code 0, a parse error prints `Error: <message>` then re-prompts without crashing, SIGINT exits with code 0
+- [X] T006 [P] [US1] Write parser/evaluator unit tests in `tests/calculator/parser.test.ts` using `node:test` — cover every arithmetic acceptance scenario from spec.md US1: `10 + 5` → `15`, `8 - 3` → `5`, `6 * 7` → `42`, `20 / 4` → `5`, `5 / 0` throws `Division by zero`, `2 + 3 * 4` → `14` (precedence), `(2 + 3) * 4` → `20` (parens), `-5 + 3` → `-2` (unary minus), `3 * -2` → `-6` (unary in sub-expression), `1 / 3` → `"0.3333333333"` (formatter), and the error cases: unknown function, missing `)`, trailing garbage
+- [X] T007 [P] [US1] Write REPL integration tests in `tests/calculator/repl.test.ts` using `node:test` — simulate stdin streams to cover: empty line produces no output and re-prompts silently, `exit` command exits with code 0, `quit` command exits with code 0, a parse error prints `Error: <message>` then re-prompts without crashing, SIGINT exits with code 0
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Implement `evaluate(source: string): number` and the `Parser` class in `src/calculator/parser.ts` — implement four grammar productions exactly as specified in `data-model.md`: `expression()` for `+`/`-`, `term()` for `*`/`/` (throw `Error: Division by zero` when divisor is 0), `unary()` for unary `-`, `primary()` for `NUMBER` literals and `'(' expression ')'` — the `IDENT` / `sin` branch is **not** implemented yet (left for T012); unknown identifiers in `primary()` must throw `Error: Unknown function '<name>'`; after `expression()` completes assert next token is `EOF` else throw `Error: Unexpected token '<tok>'`; import `Lexer` from `./lexer.js` and `Token`/`TokenType` types with `import type`
-- [ ] T009 [US1] Implement `startRepl(): void` in `src/calculator/repl.ts` using `node:readline` — create `readline.Interface` on `process.stdin`/`process.stdout`; register `process.on('SIGINT', ...)` to close the interface and call `process.exit(0)`; in the recursive `prompt()` inner function: call `rl.question('> ', handler)`; in `handler`: (1) trim input, (2) if empty string re-call `prompt()` silently, (3) if `trimmed.toLowerCase()` is `'exit'` or `'quit'` call `rl.close()` then `process.exit(0)`, (4) otherwise call `evaluate(trimmed)` inside try/catch — on success call `format(result)` and write to stdout followed by newline then re-call `prompt()`, on error write `Error: <message>` to stdout then re-call `prompt()`; import `evaluate` from `./parser.js` and `format` from `./formatter.js`
-- [ ] T010 [US1] Implement the entry point in `src/calculator/index.ts` — single import of `startRepl` from `./repl.js` and a single call `startRepl()`; file must be runnable via `tsx src/calculator/index.ts` and via `npm run calculator`
+- [X] T008 [US1] Implement `evaluate(source: string): number` and the `Parser` class in `src/calculator/parser.ts` — implement four grammar productions exactly as specified in `data-model.md`: `expression()` for `+`/`-`, `term()` for `*`/`/` (throw `Error: Division by zero` when divisor is 0), `unary()` for unary `-`, `primary()` for `NUMBER` literals and `'(' expression ')'` — the `IDENT` / `sin` branch is **not** implemented yet (left for T012); unknown identifiers in `primary()` must throw `Error: Unknown function '<name>'`; after `expression()` completes assert next token is `EOF` else throw `Error: Unexpected token '<tok>'`; import `Lexer` from `./lexer.js` and `Token`/`TokenType` types with `import type`
+- [X] T009 [US1] Implement `startRepl(): void` in `src/calculator/repl.ts` using `node:readline` — create `readline.Interface` on `process.stdin`/`process.stdout`; register `process.on('SIGINT', ...)` to close the interface and call `process.exit(0)`; in the recursive `prompt()` inner function: call `rl.question('> ', handler)`; in `handler`: (1) trim input, (2) if empty string re-call `prompt()` silently, (3) if `trimmed.toLowerCase()` is `'exit'` or `'quit'` call `rl.close()` then `process.exit(0)`, (4) otherwise call `evaluate(trimmed)` inside try/catch — on success call `format(result)` and write to stdout followed by newline then re-call `prompt()`, on error write `Error: <message>` to stdout then re-call `prompt()`; import `evaluate` from `./parser.js` and `format` from `./formatter.js`
+- [X] T010 [US1] Implement the entry point in `src/calculator/index.ts` — single import of `startRepl` from `./repl.js` and a single call `startRepl()`; file must be runnable via `tsx src/calculator/index.ts` and via `npm run calculator`
 
 **Checkpoint**: `npm run calculator` launches the REPL; all US1 acceptance scenarios pass manually; `node --test tests/calculator/` passes for lexer and parser tests.
 
@@ -72,11 +72,11 @@
 
 > **Write these tests FIRST — extend the existing test file; the sin-specific cases must FAIL before T012**
 
-- [ ] T011 [P] [US2] Extend `tests/calculator/parser.test.ts` with a dedicated `sin` describe block — add test cases: `sin(0)` → `0`, `sin(90)` → `1`, `sin(30)` → `0.5`, `sin(180)` within `±0.0001` of `0`, `10 + sin(30) * 2` → `11` (embedded in larger expression), `cos(45)` throws `Error: Unknown function 'cos'`
+- [X] T011 [P] [US2] Extend `tests/calculator/parser.test.ts` with a dedicated `sin` describe block — add test cases: `sin(0)` → `0`, `sin(90)` → `1`, `sin(30)` → `0.5`, `sin(180)` within `±0.0001` of `0`, `10 + sin(30) * 2` → `11` (embedded in larger expression), `cos(45)` throws `Error: Unknown function 'cos'`
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Add `sin` handling to the `primary()` method in `src/calculator/parser.ts` — when the current token is `IDENT` and its `value` is `'sin'`: consume the IDENT token, assert next token is `LPAREN` (else throw `Error: Expected '('`), consume `LPAREN`, call `this.expression()` to evaluate the argument, assert next token is `RPAREN` (else throw `Error: Expected ')'`), consume `RPAREN`, return `Math.sin(arg * Math.PI / 180)`; if the IDENT value is anything other than `'sin'` throw `Error: Unknown function '<name>'`
+- [X] T012 [US2] Add `sin` handling to the `primary()` method in `src/calculator/parser.ts` — when the current token is `IDENT` and its `value` is `'sin'`: consume the IDENT token, assert next token is `LPAREN` (else throw `Error: Expected '('`), consume `LPAREN`, call `this.expression()` to evaluate the argument, assert next token is `RPAREN` (else throw `Error: Expected ')'`), consume `RPAREN`, return `Math.sin(arg * Math.PI / 180)`; if the IDENT value is anything other than `'sin'` throw `Error: Unknown function '<name>'`
 
 **Checkpoint**: `node --test tests/calculator/` passes all tests including the new sin block; `npm run calculator` evaluates all US2 acceptance scenarios correctly.
 
@@ -86,9 +86,9 @@
 
 **Purpose**: Type safety verification, full test pass, and manual acceptance validation against the complete spec.
 
-- [ ] T013 [P] Run `npm run check` (`tsc --noEmit`) and fix any TypeScript errors — ensure `strict: true`, `verbatimModuleSyntax`, and `NodeNext` module resolution are all satisfied; all `.js` extension imports are present in TypeScript source files (e.g., `import { Lexer } from './lexer.js'`); `import type` is used for type-only imports
-- [ ] T014 [P] Run `node --test tests/calculator/` and verify all tests pass — fix any failing tests discovered; ensure the test output matches the expected suite from `quickstart.md` (lexer, parser/evaluator, REPL describe blocks all green)
-- [ ] T015 Perform a manual smoke test against every acceptance scenario listed in `spec.md` §User Scenarios & Testing (US1 scenarios 1–11 and US2 scenarios 1–5) and every edge case in §Edge Cases — run via `npm run calculator`; document any deviation found and fix it
+- [X] T013 [P] Run `npm run check` (`tsc --noEmit`) and fix any TypeScript errors — ensure `strict: true`, `verbatimModuleSyntax`, and `NodeNext` module resolution are all satisfied; all `.js` extension imports are present in TypeScript source files (e.g., `import { Lexer } from './lexer.js'`); `import type` is used for type-only imports
+- [X] T014 [P] Run `node --test tests/calculator/` and verify all tests pass — fix any failing tests discovered; ensure the test output matches the expected suite from `quickstart.md` (lexer, parser/evaluator, REPL describe blocks all green)
+- [X] T015 Perform a manual smoke test against every acceptance scenario listed in `spec.md` §User Scenarios & Testing (US1 scenarios 1–11 and US2 scenarios 1–5) and every edge case in §Edge Cases — run via `npm run calculator`; document any deviation found and fix it
 
 ---
 
