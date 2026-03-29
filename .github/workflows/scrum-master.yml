@@ -69,7 +69,7 @@ jobs:
 
       - name: Validate Spec-Kit initialization
         env:
-          SPECKIT_TARGET_VERSION: "0.4.3"
+          SPECKIT_TARGET_VERSION: "0.4.0"
         run: |
           if [ ! -f ".specify/init-options.json" ]; then
             echo "::error::Spec-Kit is not initialized. Run the following command and commit the results:"
