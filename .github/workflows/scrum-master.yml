@@ -86,6 +86,49 @@ jobs:
 
           echo "✅ Spec-Kit v${SPECKIT_TARGET_VERSION} is initialized"
 
+          # Validate required agent files
+          MISSING=0
+          for f in \
+            .github/agents/speckit.specify.agent.md \
+            .github/agents/speckit.clarify.agent.md \
+            .github/agents/speckit.plan.agent.md \
+            .github/agents/speckit.tasks.agent.md \
+            .github/agents/speckit.implement.agent.md \
+            .github/agents/speckit.analyze.agent.md \
+            .github/agents/speckit.constitution.agent.md \
+            .github/agents/speckit.checklist.agent.md \
+            .github/agents/speckit.taskstoissues.agent.md \
+            .github/agents/speckit.orchestrator.agent.md; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing agent file: $f"
+              MISSING=1
+            fi
+          done
+
+          # Validate required prompt files
+          for f in \
+            .github/prompts/speckit.specify.prompt.md \
+            .github/prompts/speckit.clarify.prompt.md \
+            .github/prompts/speckit.plan.prompt.md \
+            .github/prompts/speckit.tasks.prompt.md \
+            .github/prompts/speckit.implement.prompt.md \
+            .github/prompts/speckit.analyze.prompt.md \
+            .github/prompts/speckit.constitution.prompt.md \
+            .github/prompts/speckit.checklist.prompt.md \
+            .github/prompts/speckit.taskstoissues.prompt.md; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing prompt file: $f"
+              MISSING=1
+            fi
+          done
+
+          if [ "$MISSING" -eq 1 ]; then
+            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            exit 1
+          fi
+
+          echo "✅ All agent and prompt files present"
+
       - name: Run Scrum Master
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
