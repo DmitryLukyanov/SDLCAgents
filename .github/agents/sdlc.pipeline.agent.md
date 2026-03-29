@@ -27,7 +27,7 @@ You MUST invoke the `speckit.orchestrator` agent with the following instruction:
 > Execute the full spec-kit workflow (specify, clarify, plan, tasks, implement) for the issue context above.
 > After EACH speckit step completes, commit all changes using:
 > ```
-> git add -A && git commit -m "speckit(<step>): <description>"
+> git add -A && git commit -m "speckit(<step>): <description>" && git push
 > ```
 > The steps and their commit messages are:
 > 1. speckit.specify → `speckit(specify): create feature specification`

@@ -21,10 +21,10 @@ Wait for each sub-agent to complete before invoking the next one.
 After EACH step below completes, you MUST commit all changed and new files with a descriptive commit message before proceeding to the next step. Use this pattern:
 
 ```
-git add -A && git commit -m "speckit(<step>): <description>"
+git add -A && git commit -m "speckit(<step>): <description>" && git push
 ```
 
-This ensures each phase's artifacts are preserved in the git history as separate commits.
+This ensures each phase's artifacts are preserved in the git history as separate commits and pushed to the remote so the PR reflects the changes.
 
 ## Workflow
 
