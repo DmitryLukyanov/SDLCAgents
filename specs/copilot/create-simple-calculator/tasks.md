@@ -20,9 +20,9 @@
 
 **Purpose**: Create the new source and test files so subsequent tasks have a target to work in.
 
-- [ ] T001 Create `src/lib/calculator.ts` with the bare module skeleton: five placeholder exports (`add`, `subtract`, `multiply`, `divide`, `sin`) typed as `(…args: number[]) => number`, no implementations yet
-- [ ] T002 [P] Create `tests/calculator/arithmetic.test.ts` as an empty Node.js `node:test` test file (import `{ test }` from `'node:test'` and `{ strict }` from `'node:assert'`; no test cases yet)
-- [ ] T003 [P] Create `tests/calculator/sin.test.ts` as an empty Node.js `node:test` test file (same imports as T002; no test cases yet)
+- [X] T001 Create `src/lib/calculator.ts` with the bare module skeleton: five placeholder exports (`add`, `subtract`, `multiply`, `divide`, `sin`) typed as `(…args: number[]) => number`, no implementations yet
+- [X] T002 [P] Create `tests/calculator/arithmetic.test.ts` as an empty Node.js `node:test` test file (import `{ test }` from `'node:test'` and `{ strict }` from `'node:assert'`; no test cases yet)
+- [X] T003 [P] Create `tests/calculator/sin.test.ts` as an empty Node.js `node:test` test file (same imports as T002; no test cases yet)
 
 **Checkpoint**: Both source and test files exist; `npx tsc --noEmit` reports no errors on the skeletons.
 
@@ -34,7 +34,7 @@
 
 **⚠️ CRITICAL**: No user story implementation can begin until this phase is complete.
 
-- [ ] T004 Implement the internal `assertNumber(value: unknown, name: string): asserts value is number` guard in `src/lib/calculator.ts` — throw `TypeError` with message `"Argument '<name>' must be a valid number; received <type>."` when `typeof value !== 'number'` or `Number.isNaN(value)`; do **not** export it
+- [X] T004 Implement the internal `assertNumber(value: unknown, name: string): asserts value is number` guard in `src/lib/calculator.ts` — throw `TypeError` with message `"Argument '<name>' must be a valid number; received <type>."` when `typeof value !== 'number'` or `Number.isNaN(value)`; do **not** export it
 
 **Checkpoint**: `assertNumber` is in place; a quick manual call `assertNumber(NaN, 'x')` throws `TypeError`; `assertNumber(Infinity, 'x')` does **not** throw.
 
@@ -48,7 +48,7 @@
 
 ### Tests for User Story 1 ⚠️ Write & Confirm Failing BEFORE Implementing
 
-- [ ] T005 [US1] Write all arithmetic unit tests in `tests/calculator/arithmetic.test.ts` covering:
+- [X] T005 [US1] Write all arithmetic unit tests in `tests/calculator/arithmetic.test.ts` covering:
   - `add(8, 5) === 13`, `add(0.1, 0.2)` (float64 result), `add(Infinity, 1) === Infinity`
   - `subtract(10, 4) === 6`, `subtract(0, 5) === -5`
   - `multiply(6, 7) === 42`, `multiply(-3, 4) === -12`
@@ -56,15 +56,15 @@
   - `divide(9, 0)` throws `Error` with message matching `"Division by zero"`
   - `add(NaN, 5)`, `add('8' as any, 5)`, `divide(9, NaN)` each throw `TypeError` with a message matching `"must be a valid number"`
   - Post-error isolation: after `divide(9, 0)` throws, `add(1, 1) === 2` succeeds (SC-006)
-- [ ] T006 [US1] Run tests and confirm they **fail** (functions not yet implemented): `node --import tsx/esm --test tests/calculator/arithmetic.test.ts`
+- [X] T006 [US1] Run tests and confirm they **fail** (functions not yet implemented): `node --import tsx/esm --test tests/calculator/arithmetic.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Implement `add(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, return `a + b`
-- [ ] T008 [US1] Implement `subtract(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, return `a - b`
-- [ ] T009 [US1] Implement `multiply(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, return `a * b`
-- [ ] T010 [US1] Implement `divide(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, then if `b === 0` throw `new Error('Division by zero: divisor must not be 0.')`, else return `a / b`
-- [ ] T011 [US1] Run arithmetic tests and confirm they all **pass**: `node --import tsx/esm --test tests/calculator/arithmetic.test.ts`
+- [X] T007 [US1] Implement `add(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, return `a + b`
+- [X] T008 [US1] Implement `subtract(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, return `a - b`
+- [X] T009 [US1] Implement `multiply(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, return `a * b`
+- [X] T010 [US1] Implement `divide(a: number, b: number): number` in `src/lib/calculator.ts` — call `assertNumber` on both arguments, then if `b === 0` throw `new Error('Division by zero: divisor must not be 0.')`, else return `a / b`
+- [X] T011 [US1] Run arithmetic tests and confirm they all **pass**: `node --import tsx/esm --test tests/calculator/arithmetic.test.ts`
 
 **Checkpoint**: User Story 1 is fully functional and independently testable. All four arithmetic functions work correctly. Division by zero and invalid inputs throw descriptive errors. Subsequent calls after errors succeed normally.
 
@@ -78,7 +78,7 @@
 
 ### Tests for User Story 2 ⚠️ Write & Confirm Failing BEFORE Implementing
 
-- [ ] T012 [US2] Write all sine unit tests in `tests/calculator/sin.test.ts` covering:
+- [X] T012 [US2] Write all sine unit tests in `tests/calculator/sin.test.ts` covering:
   - `sin(0) === 0`
   - `Math.abs(sin(Math.PI / 2) - 1) < 1e-10` (within float64 precision)
   - `Math.abs(sin(Math.PI / 6) - 0.5) < 1e-10`
@@ -86,12 +86,12 @@
   - `sin('π/2' as any)` throws `TypeError` with message matching `"must be a valid number"`
   - `sin(NaN)` throws `TypeError` with message matching `"must be a valid number"`
   - Absence of banned exports: assert `(calculator as any).cos === undefined`, same for `tan`, `cot` — import the whole module as a namespace for this check
-- [ ] T013 [US2] Run tests and confirm they **fail** (`sin` not yet implemented): `node --import tsx/esm --test tests/calculator/sin.test.ts`
+- [X] T013 [US2] Run tests and confirm they **fail** (`sin` not yet implemented): `node --import tsx/esm --test tests/calculator/sin.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Implement `sin(x: number): number` in `src/lib/calculator.ts` — call `assertNumber(x, 'x')`, then return `Math.sin(x)`; confirm no `cos`, `tan`, or `cot` symbols are exported from the module
-- [ ] T015 [US2] Run sine tests and confirm they all **pass**: `node --import tsx/esm --test tests/calculator/sin.test.ts`
+- [X] T014 [US2] Implement `sin(x: number): number` in `src/lib/calculator.ts` — call `assertNumber(x, 'x')`, then return `Math.sin(x)`; confirm no `cos`, `tan`, or `cot` symbols are exported from the module
+- [X] T015 [US2] Run sine tests and confirm they all **pass**: `node --import tsx/esm --test tests/calculator/sin.test.ts`
 
 **Checkpoint**: User Story 2 is fully functional and independently testable. The `sin` function returns correct radian results. Banned trigonometric functions (`cos`, `tan`, `cot`) are absent from the public API.
 
@@ -101,10 +101,10 @@
 
 **Purpose**: Final quality pass across both user stories.
 
-- [ ] T016 [P] Add JSDoc comments to all five exported functions in `src/lib/calculator.ts` — each comment must document: parameter types, return value, thrown errors, and radian note for `sin`
-- [ ] T017 [P] Run the full test suite and assert zero failures: `node --import tsx/esm --test tests/calculator/arithmetic.test.ts tests/calculator/sin.test.ts`
-- [ ] T018 Run TypeScript type-check with zero errors: `npx tsc --noEmit`
-- [ ] T019 [P] Validate SC-005: confirm that a `grep` or module inspection reveals no `export` of `cos`, `tan`, or `cot` in `src/lib/calculator.ts`
+- [X] T016 [P] Add JSDoc comments to all five exported functions in `src/lib/calculator.ts` — each comment must document: parameter types, return value, thrown errors, and radian note for `sin`
+- [X] T017 [P] Run the full test suite and assert zero failures: `node --import tsx/esm --test tests/calculator/arithmetic.test.ts tests/calculator/sin.test.ts`
+- [X] T018 Run TypeScript type-check with zero errors: `npx tsc --noEmit`
+- [X] T019 [P] Validate SC-005: confirm that a `grep` or module inspection reveals no `export` of `cos`, `tan`, or `cot` in `src/lib/calculator.ts`
 
 **Checkpoint**: All 19 tasks complete; both user stories pass their tests; TypeScript is error-free; the module surface is clean.
 
