@@ -40,16 +40,7 @@ You MUST invoke the `speckit.orchestrator` agent with the following instruction:
 
 Wait for the orchestrator to complete all 5 steps before proceeding.
 
-## Phase 2: Open PR and Mark Ready for Review
-
-After the spec-kit workflow completes:
-
-1. Mark the PR as ready for review:
-   ```
-   gh pr ready
-   ```
-
-## Phase 3: Code Review
+## Phase 2: Code Review
 
 You MUST invoke the `code.review` agent with the following instruction:
 > Review the implementation against the original issue requirements. Validate that all acceptance criteria are met, code quality is acceptable, and tests are present.
@@ -65,6 +56,8 @@ Wait for the review to complete.
 ## Critical Rule: Do NOT Over-Iterate
 
 Each phase should complete in a **single pass**. Do NOT re-run phases, loop back, or do additional work beyond the 3 phases above. Once Phase 3 is done, proceed immediately to Completion.
+
+**Error handling:** If any phase encounters rate limits (HTTP 429), API errors, or repeated failures — skip it, note the failure, and proceed to the next phase. Do NOT retry in a loop. Do NOT sleep and retry more than once.
 
 ## Completion
 

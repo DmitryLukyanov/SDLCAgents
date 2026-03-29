@@ -122,3 +122,10 @@ The summary MUST follow this format:
 - If all requirements pass and code quality is acceptable, verdict is APPROVED
 - If any requirement is FAIL or critical quality issues exist, verdict is CHANGES NEEDED
 - Always commit fixes before writing the review summary
+
+## Guard Rails
+
+- **Maximum 1 fix iteration.** After fixing issues and committing, do NOT re-review. Post the summary and STOP.
+- **If any command fails with a rate limit or API error, skip it.** Do not retry in a loop. Note the failure in the review summary and move on.
+- **Do not retry failed gh commands more than once.** If `gh pr comment` fails, write the summary to a file `code-review-summary.md` instead.
+- **Total review budget: single pass only.** Read files, validate, fix, summarize, STOP.
