@@ -178,7 +178,7 @@ jobs:
           {
             "assignees": ["copilot-swe-agent[bot]"],
             "agent_assignment": {
-              "custom_agent": "speckit.orchestrator"
+              "custom_agent": "sdlc.pipeline"
             }
           }
           ASSIGN_EOF

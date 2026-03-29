@@ -98,7 +98,9 @@ jobs:
             .github/agents/speckit.constitution.agent.md \
             .github/agents/speckit.checklist.agent.md \
             .github/agents/speckit.taskstoissues.agent.md \
-            .github/agents/speckit.orchestrator.agent.md; do
+            .github/agents/speckit.orchestrator.agent.md \
+            .github/agents/sdlc.pipeline.agent.md \
+            .github/agents/code.review.agent.md; do
             if [ ! -f "$f" ]; then
               echo "::error::Missing agent file: $f"
               MISSING=1
