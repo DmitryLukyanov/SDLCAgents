@@ -24,7 +24,7 @@ description: "Task list for Simple Calculator (TC-5) implementation"
 
 **Purpose**: Install the test framework and configure the project so tests can be discovered and executed.
 
-- [ ] T001 Add `vitest@4.1.2` to `devDependencies` in `package.json`; add `"test": "vitest run"` and `"test:watch": "vitest"` entries to the `scripts` block; do **not** remove or alter any existing scripts
+- [X] T001 Add `vitest@4.1.2` to `devDependencies` in `package.json`; add `"test": "vitest run"` and `"test:watch": "vitest"` entries to the `scripts` block; do **not** remove or alter any existing scripts
 
 **Checkpoint**: `npm test` exits without error (no test files yet — zero tests pass is fine at this stage)
 
@@ -36,7 +36,7 @@ description: "Task list for Simple Calculator (TC-5) implementation"
 
 **⚠️ CRITICAL**: All five exported functions call the same two private helpers. Phase 3 and Phase 4 both depend on this phase completing successfully.
 
-- [ ] T002 Create `src/lib/calculator.ts` as an ESM module skeleton with two private (non-exported) helpers:
+- [X] T002 Create `src/lib/calculator.ts` as an ESM module skeleton with two private (non-exported) helpers:
   - `assertNumber(x: unknown, argName: string): asserts x is number` — validation guard applied to every argument before any computation. Validation sequence (order matters): **(1)** if `typeof x !== 'number' || isNaN(x as number)` → `throw new TypeError(\`Invalid input: expected a finite number for '${argName}', got ${typeof x}\`)`; **(2)** if `!isFinite(x as number) || Math.abs(x as number) > Number.MAX_SAFE_INTEGER` → `throw new RangeError("Input exceeds supported numeric range")`
   - `formatResult(value: number): number` — rounding applied to every computed result before return: `return parseFloat(value.toFixed(4))` (drops trailing zeros so integers stay whole, e.g. `13.0000` → `13`; `0.3333` stays `0.3333`)
   - No exported symbols yet; the file must compile cleanly with `npm run check`
@@ -55,7 +55,7 @@ description: "Task list for Simple Calculator (TC-5) implementation"
 
 > **Write these tests FIRST — they must FAIL before implementation begins (T004–T007)**
 
-- [ ] T003 [US1] Create `tests/unit/calculator.test.ts`; import `{ add, subtract, multiply, divide }` from `'../../../src/lib/calculator.js'` (NodeNext `.js` extension required); add the following four `describe` blocks with `it` / `expect` cases:
+- [X] T003 [US1] Create `tests/unit/calculator.test.ts`; import `{ add, subtract, multiply, divide }` from `'../../../src/lib/calculator.js'` (NodeNext `.js` extension required); add the following four `describe` blocks with `it` / `expect` cases:
   - **`describe('add')`**: `add(8, 5)` → `13`; `add(0, 0)` → `0`; `add(-3, 3)` → `0`; `add(0.1, 0.2)` → `0.3`; `add(1.2345, 1.2345)` → `2.469`; passing `null` throws `TypeError`; passing `undefined` throws `TypeError`; passing `NaN` throws `TypeError`; passing `Number.MAX_SAFE_INTEGER + 1` throws `RangeError`; passing `Infinity` throws `RangeError`
   - **`describe('subtract')`**: `subtract(10, 4)` → `6`; `subtract(0, 5)` → `-5`; `subtract(5, 5)` → `0`; passing `null` throws `TypeError`; passing `Number.MAX_SAFE_INTEGER + 1` throws `RangeError`
   - **`describe('multiply')`**: `multiply(6, 7)` → `42`; `multiply(3, 1.5)` → `4.5`; `multiply(0, 999)` → `0`; `multiply(-2, 3)` → `-6`; passing `null` throws `TypeError`; passing `Infinity` throws `RangeError`
@@ -63,11 +63,11 @@ description: "Task list for Simple Calculator (TC-5) implementation"
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Implement and export `add(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; return `formatResult(a + b)`
-- [ ] T005 [US1] Implement and export `subtract(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; return `formatResult(a - b)`
-- [ ] T006 [US1] Implement and export `multiply(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; return `formatResult(a * b)`
-- [ ] T007 [US1] Implement and export `divide(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; if `b === 0` throw `new Error("Cannot divide by zero")`; return `formatResult(a / b)`
-- [ ] T008 [US1] Run `npm test` and confirm all US1 arithmetic tests pass (green); run `npm run check` and confirm zero TypeScript errors; both must be clean before proceeding to Phase 4
+- [X] T004 [US1] Implement and export `add(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; return `formatResult(a + b)`
+- [X] T005 [US1] Implement and export `subtract(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; return `formatResult(a - b)`
+- [X] T006 [US1] Implement and export `multiply(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; return `formatResult(a * b)`
+- [X] T007 [US1] Implement and export `divide(a: number, b: number): number` in `src/lib/calculator.ts`: call `assertNumber(a, 'a')` then `assertNumber(b, 'b')`; if `b === 0` throw `new Error("Cannot divide by zero")`; return `formatResult(a / b)`
+- [X] T008 [US1] Run `npm test` and confirm all US1 arithmetic tests pass (green); run `npm run check` and confirm zero TypeScript errors; both must be clean before proceeding to Phase 4
 
 **Checkpoint**: User Story 1 is fully functional — `add`, `subtract`, `multiply`, `divide` work correctly and all their tests pass independently
 
@@ -83,12 +83,12 @@ description: "Task list for Simple Calculator (TC-5) implementation"
 
 > **Write these tests FIRST — they must FAIL before implementation begins (T010)**
 
-- [ ] T009 [US2] Add `import { sinDeg }` to the existing `tests/unit/calculator.test.ts` import statement; append a `describe('sinDeg')` block with the following `it` / `expect` cases: `sinDeg(0)` → `0`; `sinDeg(90)` → `1`; `sinDeg(30)` → `0.5`; `sinDeg(-90)` → `-1`; `sinDeg(180)` → `0` (floating-point artifact resolved by 4 dp rounding); `sinDeg(45)` → `0.7071`; `sinDeg(270)` → `-1`; `sinDeg(360)` → `0`; passing a string throws `TypeError`; passing `null` throws `TypeError`; passing `Infinity` throws `RangeError`; passing `Number.MAX_SAFE_INTEGER + 1` throws `RangeError`
+- [X] T009 [US2] Add `import { sinDeg }` to the existing `tests/unit/calculator.test.ts` import statement; append a `describe('sinDeg')` block with the following `it` / `expect` cases: `sinDeg(0)` → `0`; `sinDeg(90)` → `1`; `sinDeg(30)` → `0.5`; `sinDeg(-90)` → `-1`; `sinDeg(180)` → `0` (floating-point artifact resolved by 4 dp rounding); `sinDeg(45)` → `0.7071`; `sinDeg(270)` → `-1`; `sinDeg(360)` → `0`; passing a string throws `TypeError`; passing `null` throws `TypeError`; passing `Infinity` throws `RangeError`; passing `Number.MAX_SAFE_INTEGER + 1` throws `RangeError`
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Implement and export `sinDeg(x: number): number` in `src/lib/calculator.ts`: call `assertNumber(x, 'x')`; convert degrees to radians: `const rad = x * (Math.PI / 180)`; return `formatResult(Math.sin(rad))`
-- [ ] T011 [US2] Run `npm test` and confirm all US2 sinDeg tests pass (green) including the `sinDeg(180)` → `0` floating-point case; run `npm run check` and confirm zero TypeScript errors; both must be clean
+- [X] T010 [US2] Implement and export `sinDeg(x: number): number` in `src/lib/calculator.ts`: call `assertNumber(x, 'x')`; convert degrees to radians: `const rad = x * (Math.PI / 180)`; return `formatResult(Math.sin(rad))`
+- [X] T011 [US2] Run `npm test` and confirm all US2 sinDeg tests pass (green) including the `sinDeg(180)` → `0` floating-point case; run `npm run check` and confirm zero TypeScript errors; both must be clean
 
 **Checkpoint**: User Stories 1 AND 2 are both independently functional — all 5 functions pass their full test suites
 
@@ -98,9 +98,9 @@ description: "Task list for Simple Calculator (TC-5) implementation"
 
 **Purpose**: Final contract verification, TypeScript hygiene, and export boundary enforcement.
 
-- [ ] T012 [P] Audit `src/lib/calculator.ts` named exports against `specs/001-simple-calculator/contracts/calculator-api.ts`: confirm exactly **5** exported functions (`add`, `subtract`, `multiply`, `divide`, `sinDeg`); confirm **no default export**; confirm `cos`, `tan`, `cot`, and any other trig function are **absent** (FR-006, SC-005); confirm JSDoc block comments are present on each export per the contract file; fix any discrepancy found
-- [ ] T013 [P] Verify the import path in `tests/unit/calculator.test.ts` uses the `.js` extension (`'../../../src/lib/calculator.js'`) as required by NodeNext ESM resolution (R-006); run `npm run check` as the final full-project TypeScript strict-mode gate; resolve any remaining type errors
-- [ ] T014 Run quickstart.md smoke test: execute the following via `node --input-type=module` or `tsx` to confirm live runtime behaviour matches documented examples — `divide(1, 3)` → `0.3333`; `sinDeg(45)` → `0.7071`; `sinDeg(180)` → `0`; `divide(7, 0)` throws `Error`; `add(null, 5)` throws `TypeError` with message matching `"expected a finite number"`; `add(Number.MAX_SAFE_INTEGER + 1, 0)` throws `RangeError`
+- [X] T012 [P] Audit `src/lib/calculator.ts` named exports against `specs/001-simple-calculator/contracts/calculator-api.ts`: confirm exactly **5** exported functions (`add`, `subtract`, `multiply`, `divide`, `sinDeg`); confirm **no default export**; confirm `cos`, `tan`, `cot`, and any other trig function are **absent** (FR-006, SC-005); confirm JSDoc block comments are present on each export per the contract file; fix any discrepancy found
+- [X] T013 [P] Verify the import path in `tests/unit/calculator.test.ts` uses the `.js` extension (`'../../../src/lib/calculator.js'`) as required by NodeNext ESM resolution (R-006); run `npm run check` as the final full-project TypeScript strict-mode gate; resolve any remaining type errors
+- [X] T014 Run quickstart.md smoke test: execute the following via `node --input-type=module` or `tsx` to confirm live runtime behaviour matches documented examples — `divide(1, 3)` → `0.3333`; `sinDeg(45)` → `0.7071`; `sinDeg(180)` → `0`; `divide(7, 0)` throws `Error`; `add(null, 5)` throws `TypeError` with message matching `"expected a finite number"`; `add(Number.MAX_SAFE_INTEGER + 1, 0)` throws `RangeError`
 
 **Checkpoint**: All success criteria (SC-001 through SC-005) validated — feature is shippable
 
