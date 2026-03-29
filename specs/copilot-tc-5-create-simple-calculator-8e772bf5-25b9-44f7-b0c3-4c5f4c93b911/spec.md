@@ -5,6 +5,18 @@
 **Status**: Draft  
 **Input**: User description: "Create a calculator that supports basic operations like -, +, *, /. But on top of this it must support sin (only, do not add cos, tg, ctg)."
 
+## Clarifications
+
+### Session 2026-03-29
+
+- Q: What is the delivery form factor for this calculator? → A: TypeScript library module with a CLI entry point
+- Q: How should the CLI entry point behave — interactive REPL or single-shot per invocation? → A: Interactive REPL (prompt loop until user types `exit` or `quit`)
+- Q: What programming language and runtime should the calculator be implemented in? → A: TypeScript (Node.js ≥ 20)
+- Q: How should results without a fractional part be displayed — as integers or with fixed decimal places? → A: As plain integers (e.g., `5` not `5.0000`); non-integer results show up to 10 significant digits with trailing zeros stripped
+- Q: When arithmetic produces Infinity or NaN (e.g., extremely large operands), should the raw IEEE 754 value be shown or a friendly message? → A: Display a friendly error message (e.g., "Result is out of numeric range") — no raw Infinity or NaN exposed to the user
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Perform Basic Arithmetic (Priority: P1)
@@ -62,7 +74,7 @@ A user accidentally enters an invalid expression (unknown operator, missing oper
 ### Edge Cases
 
 - What happens when the user divides by zero? → A clear, user-friendly error is displayed; no crash occurs.
-- What happens when the user enters a very large number (e.g., beyond normal numeric range)? → The calculator either returns the result or displays an overflow notice.
+- What happens when the user enters a very large number (e.g., beyond normal numeric range)? → The calculator displays a friendly error message ("Result is out of numeric range"); raw IEEE 754 `Infinity` or `NaN` values are never exposed to the user.
 - What happens when `sin` is given a very large angle? → The result is computed normally using standard trigonometric reduction (modular angle handling).
 - What happens when the user enters a decimal number as input? → Decimal (floating-point) inputs are supported for all operations.
 - What happens if the user requests `cos`, `tan`, or other trigonometric functions? → The calculator displays a message that only `sin` is supported.
@@ -79,7 +91,9 @@ A user accidentally enters an invalid expression (unknown operator, missing oper
 - **FR-006**: The calculator MUST NOT support any other trigonometric functions (cos, tan, cot, or similar).
 - **FR-007**: The calculator MUST display a clear, human-readable error message for invalid, incomplete, or unsupported inputs.
 - **FR-008**: The calculator MUST accept decimal (floating-point) numbers as operands for all supported operations.
-- **FR-009**: The calculator MUST display results with sufficient decimal precision to be meaningful to the user (at least 4 decimal places for non-integer results).
+- **FR-009**: The calculator MUST display results as plain integers when the result has no fractional part (e.g., `5` not `5.0000`). For non-integer results, display up to 10 significant digits with trailing zeros stripped (e.g., `0.5` not `0.5000`; `0.3333333333` for 1/3). The `sin` function result MUST be accurate to at least 4 decimal places.
+- **FR-010**: The CLI entry point MUST operate as an interactive REPL: after displaying a result or error, prompt the user for the next expression. The session ends when the user types `exit` or `quit`.
+- **FR-011**: The calculator MUST display a friendly error message (e.g., "Result is out of numeric range") when an arithmetic operation produces IEEE 754 `Infinity` or `NaN`; raw `Infinity`/`NaN` values MUST NOT be displayed to the user.
 
 ### Key Entities
 
@@ -92,11 +106,13 @@ A user accidentally enters an invalid expression (unknown operator, missing oper
 ### Measurable Outcomes
 
 - **SC-001**: All four basic arithmetic operations return correct results for 100% of valid numeric inputs, including integers and decimals.
-- **SC-002**: The `sin` function returns results accurate to at least 4 decimal places for any valid numeric angle input.
+- **SC-002**: The `sin` function returns results accurate to at least 4 decimal places for any valid numeric angle input. Integer-valued results (e.g., `sin(90) = 1`) are displayed as plain integers.
 - **SC-003**: Division by zero is handled gracefully in 100% of cases — no crash, always returns an error message.
 - **SC-004**: Unsupported operations (including cos, tan, and other trigonometric functions) are rejected with an informative message in 100% of cases.
 - **SC-005**: Users receive a result or a meaningful error message within 1 second of submitting any input.
 - **SC-006**: 100% of invalid or malformed inputs produce a descriptive error message rather than a crash or silent failure.
+- **SC-007**: 100% of overflow/NaN results (IEEE 754 `Infinity` or `NaN`) are presented as a friendly error message — raw IEEE 754 values are never shown.
+- **SC-008**: The interactive REPL prompts the user for a new expression after every result or error, and terminates cleanly when the user types `exit` or `quit`.
 
 ## Assumptions
 
@@ -104,5 +120,12 @@ A user accidentally enters an invalid expression (unknown operator, missing oper
 - Angle input for `sin` is interpreted in degrees (not radians), which is the most common expectation for end users.
 - The calculator supports standard floating-point numeric precision; extremely high-precision (arbitrary precision) arithmetic is out of scope.
 - Chained expressions (e.g., `1 + 2 + 3`) and expression trees are out of scope; the calculator handles one operation at a time.
-- The form factor (command-line, web UI, library API) is not prescribed by this spec and will be determined during planning.
+- The calculator is delivered as a **TypeScript library module** (the core `calculate` function is independently importable) with a **CLI entry point** (interactive REPL) for direct use. A web UI is out of scope.
 - No history, memory, or state persistence between calculations is required.
+
+## Technical Constraints
+
+- **Language / Runtime**: TypeScript, executed on Node.js ≥ 20 (consistent with the existing project in `package.json`).
+- **Module format**: ES Modules (`"type": "module"` as per existing project configuration).
+- **No external math libraries**: All arithmetic and the `sin` function MUST be implemented using built-in JavaScript/TypeScript `Math` primitives — no third-party math packages.
+- **Numeric representation**: Standard IEEE 754 double-precision floating-point (JavaScript `number`) throughout; arbitrary-precision arithmetic is out of scope.
