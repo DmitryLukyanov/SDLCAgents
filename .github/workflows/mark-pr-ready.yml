@@ -91,7 +91,37 @@ jobs:
             --subject "Merge PR #${PR_NUM}: ${{ steps.pr.outputs.pr_title }}"
           echo "✅ PR #${PR_NUM} merged."
 
-      # ── Step 4: Transition Jira ticket to Done ──────────────────────
+      # ── Step 4: Close the GitHub Issue ─────────────────────────────
+      - name: Close GitHub Issue
+        if: steps.pr.outputs.pr_found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          PR_NUM="${{ steps.pr.outputs.pr_num }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          # Find linked issue from PR metadata (closing issues)
+          ISSUE_NUM=$(gh pr view "$PR_NUM" --repo "$OWNER/$REPO" --json closingIssuesReferences \
+            --jq '.closingIssuesReferences[0].number' 2>/dev/null || true)
+
+          if [ -z "$ISSUE_NUM" ] || [ "$ISSUE_NUM" = "null" ]; then
+            # Fallback: search PR body for "Closes #XX" / "Fixes #XX"
+            ISSUE_NUM=$(gh pr view "$PR_NUM" --repo "$OWNER/$REPO" --json body --jq '.body' \
+              | grep -oP '(?:Closes|Fixes|Resolves)\s*#(\d+)' | grep -oP '\d+' | head -1 || true)
+          fi
+
+          if [ -z "$ISSUE_NUM" ]; then
+            echo "⚠️ Could not find linked GitHub Issue — skipping close."
+            exit 0
+          fi
+
+          echo "Closing GitHub Issue #${ISSUE_NUM}..."
+          gh issue close "$ISSUE_NUM" --repo "$OWNER/$REPO" \
+            --comment "Closed by SDLC pipeline. PR #${PR_NUM} merged."
+          echo "✅ Issue #${ISSUE_NUM} closed."
+
+      # ── Step 5: Transition Jira ticket to Done ──────────────────────
       - name: Transition Jira ticket to Done
         if: steps.pr.outputs.pr_found == 'true'
         env:
