@@ -231,39 +231,18 @@ if ($branchName.Length -gt $maxBranchLength) {
     Write-Warning "[specify] Truncated to: $branchName ($($branchName.Length) bytes)"
 }
 
-# Branch creation disabled — when running inside Copilot Coding Agent,
-# we stay on the branch created by the agent (e.g. copilot/tc-5-...).
-# The feature directory and spec file are still created below.
-#
-# if ($hasGit) {
-#     $branchCreated = $false
-#     try {
-#         git checkout -q -b $branchName 2>$null | Out-Null
-#         if ($LASTEXITCODE -eq 0) {
-#             $branchCreated = $true
-#         }
-#     } catch {
-#         # Exception during git command
-#     }
-#
-#     if (-not $branchCreated) {
-#         # Check if branch already exists
-#         $existingBranch = git branch --list $branchName 2>$null
-#         if ($existingBranch) {
-#             if ($Timestamp) {
-#                 Write-Error "Error: Branch '$branchName' already exists. Rerun to get a new timestamp or use a different -ShortName."
-#             } else {
-#                 Write-Error "Error: Branch '$branchName' already exists. Please use a different feature name or specify a different number with -Number."
-#             }
-#             exit 1
-#         } else {
-#             Write-Error "Error: Failed to create git branch '$branchName'. Please check your git configuration and try again."
-#             exit 1
-#         }
-#     }
-# } else {
-#     Write-Warning "[specify] Warning: Git repository not detected; skipped branch creation for $branchName"
-# }
+# Use current branch instead of creating a new one.
+# When running inside Copilot Coding Agent, a branch is already created
+# (e.g. copilot/tc-5-...). We reuse it for the feature directory name.
+if ($hasGit) {
+    $currentBranch = git branch --show-current 2>$null
+    if ($currentBranch) {
+        # Sanitize branch name for use as directory name (replace / with -)
+        $branchName = $currentBranch -replace '/', '-'
+        $featureNum = $branchName
+        Write-Output "[specify] Using current branch: $currentBranch (directory: $branchName)"
+    }
+}
 
 $featureDir = Join-Path $specsDir $branchName
 New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
