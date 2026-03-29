@@ -65,7 +65,7 @@ A developer calls the sine function on a numeric angle value expressed in radian
 - **FR-006**: The module MUST expose a `sin(angle: number): number` function that accepts an angle expressed in **radians** and returns its sine value.
 - **FR-007**: The module MUST NOT expose cosine, tangent, cotangent, or any other trigonometric function beyond sine.
 - **FR-008**: All functions MUST validate that their inputs are finite numbers and throw a descriptive error when inputs are `NaN`, `Infinity`, `-Infinity`, or any non-number type.
-- **FR-009**: All functions MUST be exported from a single module entry point so consumers can import selectively or collectively.
+- **FR-009**: All functions MUST be exported from a single module entry point using **ESM named exports** (`export function …`) so consumers can import selectively or collectively. CommonJS (`module.exports` / `require`) is not permitted, consistent with the project's `"type": "module"` and `module: NodeNext` TypeScript configuration.
 - **FR-010**: The module MUST NOT produce side effects (no I/O, no global state mutation) — all functions are pure.
 
 ### Key Entities
@@ -89,8 +89,16 @@ A developer calls the sine function on a numeric angle value expressed in radian
 
 - The calculator is a **programmatic TypeScript module** — there is no user interface (CLI, web, or otherwise) in scope for this feature.
 - All angle inputs to `sin` are in **radians**. Degree conversion is out of scope.
-- The module targets the TypeScript/Node.js ecosystem; no browser-specific or environment-specific behaviour is required.
+- The module targets the TypeScript/Node.js ecosystem with **ESM module format** (`"type": "module"` in `package.json`, `module: NodeNext` in `tsconfig.json`); no browser-specific or CJS-specific behaviour is required.
 - Floating-point arithmetic follows standard IEEE 754 double-precision rules. No arbitrary-precision or exact arithmetic is required.
 - Only the five specified operations are in scope: `+`, `-`, `*`, `/`, and `sin`. No other mathematical functions will be added in this iteration.
 - Error signalling is done via thrown `Error` instances with descriptive messages; no special error codes or result-object patterns are required unless the project's existing conventions dictate otherwise.
 - The module has no external runtime dependencies — it relies only on the JavaScript/TypeScript standard library.
+
+## Clarifications
+
+### Session 2026-03-29
+
+- Q: What module format must the TypeScript calculator module use? → A: ESM named exports (`export function …`), consistent with the project's `"type": "module"` (`package.json`) and `module: NodeNext` + `verbatimModuleSyntax: true` (`tsconfig.json`). CommonJS patterns are out of scope.
+
+All four Jira-specified requirements (`+`, `-`, `*`, `/`; `sin` only; TypeScript module; radian input) were already fully reflected in the spec prior to this session. No `[NEEDS CLARIFICATION]` markers or unresolved placeholders were present. The single gap resolved above (module format) was identified via taxonomy scan and resolved from existing project configuration — no additional interactive questions were required.
