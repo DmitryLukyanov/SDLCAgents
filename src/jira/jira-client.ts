@@ -8,6 +8,9 @@ import type {
   JiraTransitionsResponse,
 } from './jira-types.js';
 
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 500;
+
 /** One page from POST /rest/api/3/search/jql (enhanced search). */
 interface JiraSearchJqlPage {
   issues?: JiraSearchIssue[];
@@ -39,23 +42,45 @@ export async function jiraFetch<T>(path: string, init: RequestInit = {}): Promis
     Authorization: authHeader(),
     ...(init.headers as Record<string, string>),
   };
-  const res = await fetch(url, { ...init, headers });
-  const text = await res.text();
-  let body: unknown;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = text;
+
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(url, { ...init, headers });
+    const text = await res.text();
+    let body: unknown;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
+
+    if (!res.ok) {
+      const errBody = body as { errorMessages?: string[] } | string | null;
+      const msg =
+        typeof errBody === 'object' && errBody?.errorMessages?.length
+          ? errBody.errorMessages.join('; ')
+          : String(text).slice(0, 500);
+      const error = new Error(`Jira ${res.status} ${res.statusText}: ${msg}`);
+
+      if (res.status === 429) {
+        throw error;
+      }
+
+      if (attempt < MAX_RETRIES) {
+        lastError = error;
+        await new Promise((resolve) =>
+          setTimeout(resolve, BASE_RETRY_DELAY_MS * Math.pow(2, attempt)),
+        );
+        continue;
+      }
+
+      throw error;
+    }
+
+    return body as T;
   }
-  if (!res.ok) {
-    const errBody = body as { errorMessages?: string[] } | string | null;
-    const msg =
-      typeof errBody === 'object' && errBody?.errorMessages?.length
-        ? errBody.errorMessages.join('; ')
-        : String(text).slice(0, 500);
-    throw new Error(`Jira ${res.status} ${res.statusText}: ${msg}`);
-  }
-  return body as T;
+
+  throw lastError!;
 }
 
 export async function searchIssues(
