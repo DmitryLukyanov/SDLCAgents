@@ -37,7 +37,7 @@ export function divide(a: number, b: number): number {
   assertFiniteNumber(a, 'a');
   assertFiniteNumber(b, 'b');
   if (b === 0) {
-    throw new Error('Division by zero is not allowed');
+    throw new Error('Division by zero: divisor "b" must not be 0');
   }
   return a / b;
 }

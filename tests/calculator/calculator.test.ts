@@ -80,7 +80,7 @@ assert('divide(10, 2) === 5', () => assertEqual(divide(10, 2), 5));
 assert('divide(7, 2) === 3.5', () => assertEqual(divide(7, 2), 3.5));
 assert('divide(-9, 3) === -3', () => assertEqual(divide(-9, 3), -3));
 assert('divide(0, 5) === 0', () => assertEqual(divide(0, 5), 0));
-assert('divide(1, 0) throws (division by zero)', () => assertThrows(() => divide(1, 0), 'zero'));
+assert('divide(1, 0) throws (division by zero)', () => assertThrows(() => divide(1, 0), 'divisor'));
 assert('divide(NaN, 2) throws', () => assertThrows(() => divide(NaN, 2), 'NaN'));
 assert('divide(2, Infinity) throws', () => assertThrows(() => divide(2, Infinity), 'finite'));
 
