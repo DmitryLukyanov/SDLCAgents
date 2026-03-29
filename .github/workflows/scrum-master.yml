@@ -67,6 +67,25 @@ jobs:
 
       - run: npm ci
 
+      - name: Validate Spec-Kit initialization
+        env:
+          SPECKIT_TARGET_VERSION: "0.4.3"
+        run: |
+          if [ ! -f ".specify/init-options.json" ]; then
+            echo "::error::Spec-Kit is not initialized. Run the following command and commit the results:"
+            echo "::error::uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            exit 1
+          fi
+
+          CURRENT=$(jq -r '.speckit_version // "0.0.0"' .specify/init-options.json)
+          if [ "$CURRENT" != "$SPECKIT_TARGET_VERSION" ]; then
+            echo "::error::Spec-Kit version mismatch: found v${CURRENT}, expected v${SPECKIT_TARGET_VERSION}."
+            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            exit 1
+          fi
+
+          echo "✅ Spec-Kit v${SPECKIT_TARGET_VERSION} is initialized"
+
       - name: Run Scrum Master
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
