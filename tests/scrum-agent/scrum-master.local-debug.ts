@@ -1,13 +1,13 @@
 /**
  * Local Scrum Master dry-run: mock Jira search + GitHub dispatch (no network).
  * Run: npm run scrum-master:debug
- * Debug: set breakpoints in src/scrum-agent/scrum-master-core.ts or here.
+ * Debug: set breakpoints in src/workflows/scrum-master/scrum-master-core.ts or here.
  */
-import type { JiraSearchResponse } from '../../src/jira/jira-types.js';
+import type { JiraSearchResponse } from '../../src/lib/jira/jira-types.js';
 import {
   runScrumMasterWithRulesOrSingleJql,
   type ScrumMasterDeps,
-} from '../../src/scrum-agent/scrum-master-core.js';
+} from '../../src/workflows/scrum-master/scrum-master-core.js';
 
 process.env.REQUIRED_JIRA_STATUS ??= 'To Do';
 process.env.POST_READ_STATUS ??= 'In Progress';
@@ -26,7 +26,7 @@ const mockSearchIssues = async (
       { key: 'DEBUG-1', fields: { labels: [] } },
       {
         key: 'DEBUG-2',
-        fields: { labels: ['sm_dummy_triggered'] },
+        fields: { labels: ['sm_triggered'] },
       },
     ],
   };
@@ -55,9 +55,9 @@ const ctx = {
   repo: 'debug-repo',
   ref: 'main',
   globalLimit: 10,
-  smRulesFile: 'config/fixtures/sm-debug.json',
+  smRulesFile: 'tests/scrum-agent/fixtures/sm-debug.json',
   legacyJql: undefined as string | undefined,
-  legacyConfigFile: 'config/agents/dummy-ticket-agent.json',
+  legacyConfigFile: 'config/workflows/ai-teammate/ai-teammate.config',
   defaultWorkflowFile: 'ai-teammate.yml',
 };
 
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const legacy = process.env.SCRUM_LOCAL_LEGACY === '1' || process.env.SCRUM_LOCAL_LEGACY === 'true';
   if (legacy) {
     ctx.legacyJql = 'project = DEBUG AND status = "To Do"';
-    ctx.smRulesFile = 'config/fixtures/sm-debug.json';
+    ctx.smRulesFile = 'tests/scrum-agent/fixtures/sm-debug.json';
   }
 
   console.log('=== Scrum Master local test (mocks) ===\n');

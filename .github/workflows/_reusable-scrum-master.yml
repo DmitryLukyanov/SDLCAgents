@@ -15,20 +15,10 @@ on:
     inputs:
       jql:
         description: >-
-          Optional. Legacy mode — single JQL. If empty: use rules file (rules_path).
+          Optional. Legacy mode — single JQL. If empty: uses config/workflows/scrum-master/scrum-master.config rules.
         required: false
         type: string
         default: ''
-      agent_config_file:
-        description: "Legacy mode — agent JSON path (default config/agents/dummy-ticket-agent.json)"
-        required: false
-        type: string
-        default: 'config/agents/dummy-ticket-agent.json'
-      rules_path:
-        description: "Path to SM rules JSON (relative to consumer repo root)"
-        required: false
-        type: string
-        default: 'config/sm.json'
       taken_status:
         description: "Jira status tickets must be in"
         required: false
@@ -103,7 +93,7 @@ jobs:
       # ── Step 4: Validate spec-kit in consumer repo ──────────────────────
       - name: Validate Spec-Kit initialization
         env:
-          SPECKIT_TARGET_VERSION: "0.4.0"
+          SPECKIT_TARGET_VERSION: "0.5.0"
         run: |
           if [ ! -f ".specify/init-options.json" ]; then
             echo "::error::Spec-Kit is not initialized in this repo."
@@ -112,13 +102,14 @@ jobs:
           fi
 
           CURRENT=$(jq -r '.speckit_version // "0.0.0"' .specify/init-options.json)
-          if [ "$CURRENT" != "$SPECKIT_TARGET_VERSION" ]; then
-            echo "::error::Spec-Kit version mismatch: found v${CURRENT}, expected v${SPECKIT_TARGET_VERSION}."
-            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+          AGENTS_VERSION=$(jq -r '.speckit_version // "0.0.0"' .sdlc-agents/.specify/init-options.json 2>/dev/null || echo "0.0.0")
+          if [ "$CURRENT" != "$AGENTS_VERSION" ]; then
+            echo "::error::Spec-Kit version mismatch: consumer has v${CURRENT}, SDLCAgents requires v${AGENTS_VERSION}."
+            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${AGENTS_VERSION} specify init --here --ai copilot --script ps --force"
             exit 1
           fi
 
-          echo "✅ Spec-Kit v${SPECKIT_TARGET_VERSION} initialized"
+          echo "✅ Spec-Kit v${CURRENT} (matches SDLCAgents)"
 
           MISSING=0
           for f in \
@@ -165,16 +156,16 @@ jobs:
 
       # ── Step 5: Run Scrum Master (CWD = consumer workspace root) ────────
       # Scripts run from .sdlc-agents/ but process.cwd() = workspace root,
-      # so config/sm.json and config/spec-kit/*.json resolve to consumer files.
+      # so config/workflows/scrum-master/scrum-master.config and config/spec-kit/*.json resolve to consumer files.
       - name: Run Scrum Master
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/scrum-agent/scrum-master.ts
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/scrum-master/scrum-master.ts
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JQL: ${{ inputs.jql }}
-          AGENT_CONFIG_FILE: ${{ inputs.agent_config_file }}
-          SM_RULES_FILE: ${{ inputs.rules_path }}
+          AGENT_CONFIG_FILE: config/workflows/ai-teammate/ai-teammate.config
+          SM_RULES_FILE: config/workflows/scrum-master/scrum-master.config
           GLOBAL_LIMIT: ${{ inputs.limit }}
           REQUIRED_JIRA_STATUS: ${{ inputs.taken_status }}
           POST_READ_STATUS: ${{ inputs.status_to_move_to }}
@@ -182,3 +173,11 @@ jobs:
           TICKET_CONTEXT_DEPTH: ${{ inputs.ticket_context_depth }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
+          SM_SUMMARY_FILE: ${{ runner.temp }}/sm-summary.md
+
+      - name: Write job summary
+        if: always()
+        run: |
+          if [ -f "${{ runner.temp }}/sm-summary.md" ]; then
+            cat "${{ runner.temp }}/sm-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,6 +1,6 @@
 /**
  * URL-encoded JSON payload { params: { inputJql, customParams? } }.
- * Decode side — used by agent-runner; encode builder lives under scrum-agent/.
+ * Decode side — used by ai-teammate-agent; encode builder lives under workflows/scrum-master/.
  */
 
 export interface EncodedConfigParams {

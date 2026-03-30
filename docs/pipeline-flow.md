@@ -5,24 +5,24 @@
 ## Level 1 — System Context
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                                                                         │
-│   [Person]          [Person]                                            │
-│   Developer         Scrum Master                                        │
-│      │                  │                                               │
-│      │ creates ticket   │ triggers pipeline                             │
-│      ▼                  ▼                                               │
-│                                                                         │
-│   ┌──────────────────────────────┐                                      │
-│   │   [Software System]          │                                      │
-│   │   SDLC Automation Pipeline   │◄── reads tickets ──► Jira Cloud     │
-│   │                              │◄── runs agents  ──► GitHub Copilot  │
-│   │   Automates the full dev     │◄── manages code ──► GitHub Repos    │
-│   │   lifecycle from Jira ticket │                                      │
-│   │   to merged PR               │                                      │
-│   └──────────────────────────────┘                                      │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│   [Person]          [Person]                                                 │
+│   Developer         Scrum Master                                             │
+│      │                  │                                                    │
+│      │ creates ticket   │ triggers pipeline                                  │
+│      ▼                  ▼                                                    │
+│                                                                              │
+│   ┌──────────────────────────────┐                                           │
+│   │   [Software System]          │◄── reads/writes tickets ──► Jira Cloud   │
+│   │   SDLC Automation Pipeline   │◄── runs agents        ──► GitHub Copilot │
+│   │                              │◄── manages code       ──► GitHub Repos   │
+│   │   Automates the full dev     │◄── LLM analysis       ──► GitHub Models  │
+│   │   lifecycle from Jira ticket │                             (GPT-4o)      │
+│   │   to merged PR               │                                           │
+│   └──────────────────────────────┘                                           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -30,42 +30,47 @@
 ## Level 2 — Containers
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│  SDLC Automation Pipeline                                                           │
-│                                                                                     │
-│  ┌─────────────────────┐     ┌─────────────────────┐     ┌──────────────────────┐  │
-│  │   [Container]        │     │   [Container]        │     │   [Container]        │  │
-│  │   Scrum Master       │────►│   AI Teammate        │────►│   Mark PR Ready      │  │
-│  │                      │     │                      │     │                      │  │
-│  │   GitHub Actions     │     │   GitHub Actions     │     │   GitHub Actions     │  │
-│  │   workflow_dispatch  │     │   workflow_dispatch  │     │   workflow_run        │  │
-│  │                      │     │                      │     │                      │  │
-│  │   Scans Jira for     │     │   Runs Node.js       │     │   Approves, merges   │  │
-│  │   To Do tickets,     │     │   pipeline + hands   │     │   PR, closes issue,  │  │
-│  │   dispatches work    │     │   off to Copilot     │     │   updates Jira       │  │
-│  └─────────────────────┘     └──────────┬──────────┘     └──────────────────────┘  │
-│            │                            │                           ▲               │
-│            │                            │                           │               │
-│            ▼                            ▼                           │               │
-│  ┌─────────────────────┐     ┌─────────────────────┐               │               │
-│  │   [Container]        │     │   [Container]        │               │               │
-│  │   Node.js Scripts    │     │   Copilot Coding     │───────────────┘               │
-│  │                      │     │   Agent              │  opens PR / completes         │
-│  │   TypeScript / tsx   │     │                      │                               │
-│  │                      │     │   GitHub Copilot     │                               │
-│  │   Pipeline logic,    │     │   .agent.md prompts  │                               │
-│  │   Jira client,       │     │                      │                               │
-│  │   spec-kit prep      │     │   spec-kit steps +   │                               │
-│  │                      │     │   code implementation│                               │
-│  └─────────────────────┘     └─────────────────────┘                               │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-        │                                          │
-        ▼                                          ▼
-  ┌───────────┐                           ┌───────────────┐
-  │ Jira Cloud│                           │  GitHub Repos  │
-  │ [External]│                           │  [External]    │
-  └───────────┘                           └───────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│  SDLC Automation Pipeline                                                                   │
+│                                                                                             │
+│  ┌──────────────────────┐    ┌──────────────────────────────────────────────────────────┐  │
+│  │   [Container]         │    │   [Container]                                            │  │
+│  │   Scrum Master        │───►│   AI Teammate                                            │  │
+│  │                       │    │                                                          │  │
+│  │   GitHub Actions      │    │   GitHub Actions  (workflow_dispatch)                    │  │
+│  │   workflow_dispatch   │    │                                                          │  │
+│  │                       │    │   Runs TypeScript pipeline (ai-teammate-agent.ts):       │  │
+│  │   Scans Jira for      │    │   1. ensure_jira_fields_expected — validate description  │  │
+│  │   tickets, dispatches │    │   2. print_jira_context_to_stdout — spec-kit workspace   │  │
+│  │   ai-teammate.yml     │    │   3. create_github_issue — placeholder issue             │  │
+│  │   per ticket          │    │   4. run_ba_inline — GPT-4o analysis inline              │  │
+│  │                       │    │      complete → continue                                 │  │
+│  │                       │    │      incomplete → block Jira, close issue, stop          │  │
+│  │                       │    │   5. assign_copilot — fill template, assign Copilot      │  │
+│  └──────────────────────┘    └──────────────────────────────┬───────────────────────────┘  │
+│                                                              │ Copilot assigned             │
+│                                                              ▼                              │
+│                                               ┌──────────────────────┐                     │
+│                                               │   [Container]         │                     │
+│                                               │   Copilot Coding      │                     │
+│                                               │   Agent               │◄── GitHub Models    │
+│                                               │                       │    (GPT-4o)         │
+│                                               │   GitHub Copilot      │    [External]       │
+│                                               │   sdlc.pipeline       │                     │
+│                                               │   .agent.md           │                     │
+│                                               │                       │                     │
+│                                               │   spec-kit steps +    │                     │
+│                                               │   code implementation │                     │
+│                                               └──────────┬────────────┘                     │
+│                                                          │ opens PR                         │
+│                                                                                             │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+        │                                                      │
+        ▼                                                      ▼
+  ┌───────────┐                                       ┌───────────────┐
+  │ Jira Cloud│                                       │  GitHub Repos  │
+  │ [External]│                                       │  [External]    │
+  └───────────┘                                       └───────────────┘
 ```
 
 ---
@@ -73,102 +78,185 @@
 ## Level 3 — Components (AI Teammate container)
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│  AI Teammate (GitHub Actions + Node.js)                                          │
-│                                                                                  │
-│  ┌────────────────┐    ┌──────────────────────────────────────────────────────┐ │
-│  │  [Component]   │    │  [Component]                                          │ │
-│  │  agent-runner  │───►│  pipeline runner          src/runners/pipeline.ts    │ │
-│  │  .ts           │    │                                                       │ │
-│  │                │    │  ┌────────────────────────────────────────────────┐  │ │
-│  │  Entry point.  │    │  │  Step 1: check_description                     │  │ │
-│  │  Reads agent   │    │  │  src/runners/check-description.ts              │  │ │
-│  │  JSON config,  │    │  │                                                 │  │ │
-│  │  resolves      │    │  │  • getIssue() → check description field        │  │ │
-│  │  runner type   │    │  │  • empty → transitionIssue() + addComment()    │  │ │
-│  │                │    │  │  • returns STOP or CONTINUE                     │  │ │
-│  └────────────────┘    │  └────────────────────────────────────────────────┘  │ │
-│                        │                       │ CONTINUE                      │ │
-│                        │                       ▼                               │ │
-│                        │  ┌────────────────────────────────────────────────┐  │ │
-│                        │  │  Step 2: dummy_ticket                           │  │ │
-│                        │  │  src/runners/pipeline.ts                        │  │ │
-│                        │  │                                                 │  │ │
-│                        │  │  • runSpecKitPipelineWithLogging()              │  │ │
-│                        │  │    writes context.md, manifest.json to disk    │  │ │
-│                        │  │  • runDummyTicketAgent()                        │  │ │
-│                        │  │    transitions Jira → "In Progress"             │  │ │
-│                        │  │  • returns CONTINUE                             │  │ │
-│                        │  └────────────────────────────────────────────────┘  │ │
-│                        │                       │ CONTINUE                      │ │
-│                        │                       ▼                               │ │
-│                        │  ┌────────────────────────────────────────────────┐  │ │
-│                        │  │  Step 3: confirmation                           │  │ │
-│                        │  │  src/runners/confirmation.ts                    │  │ │
-│                        │  │                                                 │  │ │
-│                        │  │  • prints "✅ Pipeline complete for <key>"      │  │ │
-│                        │  │  • returns CONTINUE                             │  │ │
-│                        │  └────────────────────────────────────────────────┘  │ │
-│                        └──────────────────────────────────────────────────────┘ │
-│                                                                                  │
-│  ┌────────────────┐    ┌──────────────────┐    ┌───────────────────────────┐   │
-│  │  [Component]   │    │  [Component]      │    │  [Component]               │   │
-│  │  bash: read    │    │  bash: build      │    │  bash: create issue        │   │
-│  │  manifest.json │───►│  Copilot prompt   │───►│  assign copilot-swe-agent  │   │
-│  │                │    │                   │    │                             │   │
-│  │  reads disk    │    │  reads context.md │    │  gh issue create            │   │
-│  │  outputs.*     │    │  from disk        │    │  gh api assign              │   │
-│  └────────────────┘    └──────────────────┘    └───────────────────────────┘   │
-│                                                                                  │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│  AI Teammate  (.github/workflows/_reusable-ai-teammate.yml)                              │
+│                                                                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Run ai-teammate-agent.ts  (src/workflows/ai-teammate/ai-teammate-agent.ts)        │  │
+│  │                                                                                   │  │
+│  │  decodeEncodedConfig(ENCODED_CONFIG) → issueKey + customParams                    │  │
+│  │  runPipeline(issueKey, steps, deps)  → ai-teammate-pipeline.ts                    │  │
+│  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
+│                               │                                                          │
+│                               ▼                                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Step: ensure_jira_fields_expected                                                │  │
+│  │  src/workflows/ai-teammate/steps/ensure-jira-fields-expected.ts                   │  │
+│  │                                                                                   │  │
+│  │  getIssue(issueKey, ['summary','description'])                                    │  │
+│  │  description present → continue                                                   │  │
+│  │  description absent  → transitionIssueToStatusName() + addIssueComment() → stop  │  │
+│  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
+│                               │                                                          │
+│                               ▼                                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Step: print_jira_context_to_stdout                                               │  │
+│  │  src/workflows/ai-teammate/steps/print-jira-context-to-stdout.ts                  │  │
+│  │                                                                                   │  │
+│  │  prepareSpecKitWorkspace() → spec-output/{key}/                                   │  │
+│  │    cliEnabled=true  → manifest.json + context.md + constitution.md                │  │
+│  │    cliEnabled=false → constitution.md + spec.md + plan.md + tasks.md              │  │
+│  │  ctx.specKitContextFile ← spec-output/{key}/context.md                            │  │
+│  │  runPrintJiraContextToStdout() — logs Jira fields + related tickets to stdout     │  │
+│  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
+│                               │                                                          │
+│                               ▼                                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Step: create_github_issue                                                        │  │
+│  │  src/workflows/ai-teammate/steps/create-github-issue.ts                           │  │
+│  │                                                                                   │  │
+│  │  ensure label "jira:{KEY}" exists                                                 │  │
+│  │  octokit.rest.issues.create → "⏳ BA analysis in progress..."                     │  │
+│  │  ctx.githubIssueNumber ← new issue number                                         │  │
+│  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
+│                               │                                                          │
+│                               ▼                                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Step: run_ba_inline                                                              │  │
+│  │  src/workflows/ai-teammate/steps/run-ba-inline.ts                                 │  │
+│  │                                                                                   │  │
+│  │  getIssue() + adfToPlain()             ← jira-client.ts / adf-to-plain.ts        │  │
+│  │  extractComments() + mapRelated()      ← business-analyst-core.ts                │  │
+│  │  fetchRelatedIssueSummaries()          ← jira-related.ts                         │  │
+│  │  analyzeTicket(ctx, token, model)      ← analyze-ticket.ts → GPT-4o              │  │
+│  │                                                                                   │  │
+│  │  complete   → ctx.baOutcome ← outcome → continue                                 │  │
+│  │  incomplete → addIssueComment(questions)                                          │  │
+│  │               transitionIssueToStatusName("Blocked")                              │  │
+│  │               closeGithubIssue(githubIssueNumber) → stop                          │  │
+│  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
+│                               │ BA complete                                              │
+│                               ▼                                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Step: assign_copilot                                                             │  │
+│  │  src/workflows/ai-teammate/steps/assign-copilot.ts                                │  │
+│  │                                                                                   │  │
+│  │  read config/spec-kit/defaults.json → global directive                            │  │
+│  │  read ctx.specKitContextFile (context.md) → {{JIRA_CONTEXT}}                     │  │
+│  │  fill src/workflows/ai-teammate/templates/github-issue-with-copilot.md            │  │
+│  │  updateGithubIssue(issueNumber, {                                                 │  │
+│  │    body: filledTemplate,                                                          │  │
+│  │    assignees: ['copilot-swe-agent[bot]'],                                         │  │
+│  │    agentInstructions: "add label jira:{KEY} to PR..."                             │  │
+│  │  }) → Copilot runs sdlc.pipeline.agent.md, opens PR                               │  │
+│  └───────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                          │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Level 4 — Code (pipeline runner internals)
+## Level 4 — Code (run-ba-inline.ts + analyze-ticket.ts)
 
 ```
-  agent-runner.ts
+  run-ba-inline.ts  (src/workflows/ai-teammate/steps/run-ba-inline.ts)
   │
-  │  main()
-  │    reads CONFIG_FILE → AgentJson
-  │    sets process.env.ISSUE_KEY
-  │    resolves runner = agent.params.runner
+  │  runBaInline(ctx, deps)
   │
-  │    switch (runner):
-  │      "dummy_ticket" ──► runDummyTicketAgent()
-  │      "pipeline"     ──► runPipeline(issueKey, steps)  ◄─── src/runners/pipeline.ts
+  │    deps.getIssue(issueKey, fields)
+  │      --> src/lib/jira/jira-client.ts  jiraFetch( GET /rest/api/3/issue/{key} )
   │
-  └── runPipeline(issueKey: string, steps: PipelineStep[])
-        ctx = { issueKey }
-        for each step:
-          outcome = executeStep(ctx, step)
-          if outcome.status === 'stop' → return   (pipeline halts)
-          if outcome.status === 'continue' → next step
+  │    adfToPlain(fields.description | comment.body)
+  │      --> src/lib/adf-to-plain.ts
+  │
+  │    extractComments(issue)           ← business-analyst-core.ts
+  │      filters BA-generated vs user comments (isBAGeneratedComment flag)
+  │      presents user replies as "User Answers to BA Questions"
+  │
+  │    deps.fetchRelatedIssueSummaries(issueKey, depth)
+  │      --> src/lib/jira/jira-related.ts
+  │            searchIssues(`issue in linkedIssues("KEY")`)
+  │            searchIssues(`parent = KEY`)
+  │
+  │    mapRelated(related)              ← business-analyst-core.ts
+  │
+  │    deps.analyzeTicket(ctx, githubToken, model)
+  │      --> src/workflows/business-analyst/analyze-ticket.ts
+  │            buildPrompt(ctx)
+  │            callGitHubModels(prompt, token)
+  │              POST https://models.github.ai/inference/chat/completions
+  │              model: openai/gpt-4o, temperature: 0.1
+  │              response_format: { type: "json_object" }
+  │            parseAnalysisResponse(raw) → BaAnalysisResult
+  │              coerceToString() flattens nested LLM object responses
+  │            isComplete(result) → all 5 fields non-null?
+  │
+  │    complete:
+  │      ctx.baOutcome ← outcome
+  │      return { status: 'continue' }
+  │
+  │    incomplete:
+  │      deps.addIssueComment(issueKey, questions)
+  │      deps.transitionIssueToStatusName(issueKey, "Blocked")
+  │      deps.closeGithubIssue(owner, repo, githubIssueNumber)
+  │      return { status: 'stop', reason: "BA incomplete" }
+  │
+  └── types: BaAnalysisResult, BaOutcome, TicketContext, JiraComment
+        --> src/workflows/business-analyst/ba-types.ts
+```
 
-        executeStep(ctx, step):
-          switch (step.runner):
-            'check_description' ──► runCheckDescription(ctx, step)
-            │                         getIssue()
-            │                         adfToPlain(description)
-            │                         if empty:
-            │                           transitionIssueToStatusName()
-            │                           addIssueComment()
-            │                           return { status: 'stop' }
-            │                         return { status: 'continue' }
-            │
-            'dummy_ticket' ──────────► runSpecKitPipelineWithLogging()
-            │                           prepareSpecKitContext()
-            │                             getIssue()
-            │                             writes manifest.json  ──► disk
-            │                             writes context.md     ──► disk
-            │                         runDummyTicketAgent()
-            │                           getIssue()
-            │                           transitionIssueToStatusName()
-            │                           addIssueComment()
-            │                         return { status: 'continue' }
-            │
-            'confirmation' ──────────► runConfirmation(ctx, step)
-                                        console.log("✅ Pipeline complete...")
-                                        return { status: 'continue' }
+---
+
+## Full End-to-End Flow
+
+```
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│  1. SCRUM MASTER                                                                      │
+│                                                                                       │
+│  - Loaded rules from scrum-master.config                                              │
+│  - Searched Jira for tickets with status "To Do"                                      │
+│  - For each ticket:                                                                   │
+│      - Updated Jira status: To Do → In Progress                                       │
+│      - Added label "sm_triggered" to Jira ticket                                      │
+│      - Dispatched ai-teammate workflow                                                │
+└────────────────────────────┬──────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│  2. AI TEAMMATE  (single TypeScript pipeline run)                                     │
+│                                                                                       │
+│  Step: ensure_jira_fields_expected                                                    │
+│  - Fetched Jira ticket; verified description is non-empty                             │
+│  - (No description → transition to "In Review" + comment → stop)                     │
+│                                                                                       │
+│  Step: print_jira_context_to_stdout                                                   │
+│  - Ran spec-kit CLI → spec-output/{KEY}/context.md + manifest.json                   │
+│  - Logged Jira ticket fields and related tickets to stdout                            │
+│                                                                                       │
+│  Step: create_github_issue                                                            │
+│  - Created GitHub issue placeholder "{KEY}: Copilot Coding Agent Task"               │
+│    (label: jira:{KEY}, body: "⏳ BA analysis in progress...")                         │
+│                                                                                       │
+│  Step: run_ba_inline                                                                  │
+│  - Read Jira ticket: summary, description, comments, related tickets                  │
+│  - Called GPT-4o inline to analyze ticket requirements                                │
+│  - Path: BA complete   → stored baOutcome in pipeline context → continue              │
+│  - Path: BA incomplete → added clarification questions as Jira comment                │
+│                          updated Jira status: In Progress → Blocked                   │
+│                          closed GitHub issue as not planned → stop                    │
+│                                                                                       │
+│  Step: assign_copilot  (only reached if BA complete)                                  │
+│  - Filled github-issue-with-copilot.md template with BA results + spec-kit context   │
+│  - PATCHed GitHub issue: full prompt body + assigned copilot-swe-agent[bot]          │
+└────────────────────────────┬──────────────────────────────────────────────────────────┘
+                             │ Copilot assigned
+                             ▼
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│  3. COPILOT CODING AGENT                                                              │
+│                                                                                       │
+│  - Read GitHub issue (specify → clarify → plan → tasks → implement)                   │
+│  - Created feature branch                                                             │
+│  - Wrote code and tests                                                               │
+│  - Opened PR with label "jira:{KEY}"                                                  │
+└───────────────────────────────────────────────────────────────────────────────────────┘
 ```

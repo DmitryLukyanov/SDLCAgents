@@ -8,7 +8,7 @@
       "cwd": "${workspaceFolder}",
       "runtimeExecutable": "node",
       "runtimeArgs": ["--import", "tsx"],
-      "args": ["${workspaceFolder}/src/scrum-agent/scrum-master.ts"],
+      "args": ["${workspaceFolder}/src/workflows/scrum-master/scrum-master.ts"],
       "envFile": "${workspaceFolder}/.env.local",
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"]
@@ -21,6 +21,21 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["--import", "tsx"],
       "args": ["${workspaceFolder}/tests/scrum-agent/scrum-master.local-debug.ts"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "AI Teammate (mock Jira)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx"],
+      "args": ["${workspaceFolder}/tests/ai-teammate/ai-teammate.local-debug.ts"],
+      "envFile": "${workspaceFolder}/.env.local",
+      "env": {
+        "DEBUG_ISSUE_KEY": "SDLCSPAC-1"
+      },
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"]
     }

@@ -1,0 +1,38 @@
+# Business Analyst — reads all Jira data, classifies into spec-kit fields,
+# dispatches AI Teammate with enriched inputs or blocks the ticket.
+# Triggered by Scrum Master via workflow_dispatch.
+name: Business Analyst
+run-name: "${{ inputs.concurrency_key }} · 2/4 Business Analyst"
+
+concurrency:
+  group: ba-${{ inputs.concurrency_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency_key:
+        description: "Jira issue key (used for concurrency grouping)"
+        required: true
+        type: string
+      config_file:
+        description: "Path to agent JSON in repo (e.g. config/workflows/ai-teammate/ai-teammate.config)"
+        required: true
+        type: string
+      encoded_config:
+        description: >-
+          URL-encoded JSON { "params": { "inputJql": "key = PROJ-1", "customParams": { ... } } }
+        required: true
+        type: string
+
+jobs:
+  call:
+    permissions:
+      contents: read
+      actions: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-business-analyst.yml@master
+    with:
+      concurrency_key: ${{ inputs.concurrency_key }}
+      config_file: ${{ inputs.config_file }}
+      encoded_config: ${{ inputs.encoded_config }}
+    secrets: inherit

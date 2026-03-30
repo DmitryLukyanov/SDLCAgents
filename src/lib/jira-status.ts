@@ -1,5 +1,5 @@
 /**
- * Shared Jira workflow status env helpers (Scrum Master JQL filter + dummy agent read/transition).
+ * Shared Jira workflow status env helpers (Scrum Master JQL filter + ticket processor read/transition).
  */
 
 /** Default matches typical Jira backlog column name ("To Do"). Override with REQUIRED_JIRA_STATUS. */

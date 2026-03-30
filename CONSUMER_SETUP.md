@@ -17,17 +17,13 @@ powered by [DmitryLukyanov/SDLCAgents](https://github.com/DmitryLukyanov/SDLCAge
 
 ## Step 1 — Copy workflow files
 
-Copy all four workflow templates into your repo:
-
-```
-consumer-templates/.github/workflows/  →  .github/workflows/
-```
+Copy the following workflow files from `.github/workflows/` into your repo's `.github/workflows/`:
 
 | File | Purpose |
 |------|---------|
 | `scrum-master.yml` | Scans Jira for To-Do tickets and dispatches AI Teammate |
 | `ai-teammate.yml` | Prepares spec-kit context, creates GitHub Issue, assigns Copilot |
-| `mark-pr-ready.yml` | Fires after Copilot finishes — approves, merges, closes issue, updates Jira |
+| `pr-merged.yml` | Fires when a PR is merged — closes issue, updates Jira to Done |
 | `copilot-setup-steps.yml` | Copilot environment setup (customize for your stack) |
 
 ---
@@ -44,19 +40,19 @@ Then customize:
 
 | File | What to change |
 |------|---------------|
-| `config/sm.json` | Set your Jira JQL query (replace `{jiraProject}` with your project key, or hardcode it) |
+| `config/workflows/scrum-master/scrum-master.config` | Set your Jira JQL query (replace `{jiraProject}` with your project key, or hardcode it) |
 | `config/spec-kit/defaults.json` | Adjust `globalDirective`, `specify`, `plan`, `tasks` prompts for your project |
 | `config/spec-kit/constitution.md` | Replace with your project's coding standards and conventions |
-| `config/agents/dummy-ticket-agent.json` | No changes needed for standard use |
+| `config/workflows/ai-teammate/ai-teammate.config` | No changes needed for standard use |
 
-**Example `config/sm.json` for project key `MYPROJ`:**
+**Example `config/workflows/scrum-master/scrum-master.config` for project key `MYPROJ`:**
 ```json
 {
   "rules": [
     {
       "description": "To Do queue → Copilot Coding Agent",
       "jql": "project = MYPROJ AND status = 'To Do' ORDER BY updated ASC",
-      "configFile": "config/agents/dummy-ticket-agent.json",
+      "configFile": "config/workflows/ai-teammate/ai-teammate.config",
       "workflowFile": "ai-teammate.yml",
       "workflowRef": "main",
       "limit": 5,
@@ -74,7 +70,7 @@ Then customize:
 Run this once in your repo root and commit the result:
 
 ```bash
-uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 \
+uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
   specify init --here --ai copilot --script ps --force
 ```
 
@@ -126,7 +122,7 @@ Expected flow:
 Scrum Master
   └─► AI Teammate (per ticket)
         └─► Copilot Coding Agent (creates branch + PR)
-              └─► Mark PR Ready (approves + merges + closes issue + Jira → Done)
+                    └─► PR Merged (closes issue + Jira → Done)
 ```
 
 ---
@@ -155,4 +151,4 @@ jobs:
 | `Missing agent file` | Copy missing files from `SDLCAgents/.github/agents/` |
 | `No open PR found for branch` | Copilot may not have opened a PR yet; check the Copilot agent session |
 | Jira transition skipped | PR title must contain the Jira key, e.g. `TC-5: ...` |
-| `404` dispatching `ai-teammate.yml` | Ensure `ai-teammate.yml` is committed on the branch set in `workflowRef` in `config/sm.json` |
+| `404` dispatching `ai-teammate.yml` | Ensure `ai-teammate.yml` is committed on the branch set in `workflowRef` in `config/workflows/scrum-master/scrum-master.config` |

@@ -1,0 +1,97 @@
+# Reusable Copilot Auto Retry workflow.
+# Detects when Copilot's coding agent fails (check run named "copilot" with
+# conclusion "failure") and automatically posts a retry comment on the
+# associated PR to start a fresh agent session with a new token.
+#
+# Must be called from a workflow triggered by the `check_run` event.
+# The caller is responsible for filtering to the "copilot" check run only.
+#
+# Usage in consumer repo:
+#   on:
+#     check_run:
+#       types: [completed]
+#   jobs:
+#     call:
+#       if: |
+#         github.event.check_run.name == 'copilot' &&
+#         github.event.check_run.conclusion == 'failure' &&
+#         github.event.check_run.pull_requests[0] != null
+#       uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-copilot-auto-retry.yml@master
+#       with:
+#         pr_number: ${{ github.event.check_run.pull_requests[0].number }}
+#         max_retries: 2
+#       secrets: inherit
+name: "[Reusable] Copilot Auto Retry"
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "PR number to post the retry comment on"
+        required: true
+        type: number
+      max_retries:
+        description: "Maximum number of automatic retry attempts before giving up"
+        required: false
+        type: number
+        default: 2
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Count previous auto-retry attempts
+        id: count
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ inputs.pr_number }},
+              per_page: 100
+            });
+
+            const retryCount = comments.filter(c =>
+              c.body.includes('<!-- copilot-auto-retry -->')
+            ).length;
+
+            const maxRetries = ${{ inputs.max_retries }};
+            const shouldRetry = retryCount < maxRetries;
+
+            console.log(`PR #${{ inputs.pr_number }}: auto-retry attempts so far: ${retryCount} / ${maxRetries}`);
+            console.log(`Should retry: ${shouldRetry}`);
+
+            core.setOutput('count', retryCount);
+            core.setOutput('should_retry', shouldRetry.toString());
+
+      - name: Post retry comment
+        if: steps.count.outputs.should_retry == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const attempt = parseInt('${{ steps.count.outputs.count }}') + 1;
+            const max = ${{ inputs.max_retries }};
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ inputs.pr_number }},
+              body: [
+                '<!-- copilot-auto-retry -->',
+                `🔄 **Auto-retry ${attempt}/${max}**: The \`copilot\` check failed due to a transient Git push error (403). Starting a new agent session.`,
+                '',
+                '@github-copilot Please retry — the previous attempt failed due to a temporary permission error on push, not a code issue.'
+              ].join('\n')
+            });
+
+            console.log(`Posted retry comment on PR #${{ inputs.pr_number }} (attempt ${attempt}/${max})`);
+
+      - name: Log retry limit reached
+        if: steps.count.outputs.should_retry == 'false'
+        run: |
+          echo "⚠️ Max retries (${{ inputs.max_retries }}) reached on PR #${{ inputs.pr_number }}. Manual intervention required."

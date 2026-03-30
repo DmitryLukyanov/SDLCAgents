@@ -6,10 +6,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "scrum-master": "tsx src/scrum-agent/scrum-master.ts",
+    "scrum-master": "tsx src/workflows/scrum-master/scrum-master.ts",
     "scrum-master:debug": "tsx tests/scrum-agent/scrum-master.local-debug.ts",
-    "dummy-agent": "tsx src/dummy-agent/dummy-agent-entry.ts",
-    "agent-runner": "tsx src/agent-runner/agent-runner.ts",
+"business-analyst": "tsx src/workflows/business-analyst/business-analyst.ts",
+    "ai-teammate-agent": "tsx src/workflows/ai-teammate/ai-teammate-agent.ts",
+    "ai-teammate:debug": "tsx tests/ai-teammate/ai-teammate.local-debug.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {

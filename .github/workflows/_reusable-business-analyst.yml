@@ -1,0 +1,111 @@
+# Reusable Business Analyst workflow.
+# Reads ALL Jira data (including comments), classifies content via GitHub Models API,
+# then dispatches AI Teammate with enriched per-step inputs or blocks the ticket.
+#
+# Usage in consumer repo:
+#   jobs:
+#     call:
+#       uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-business-analyst.yml@master
+#       with:
+#         concurrency_key: ${{ inputs.concurrency_key }}
+#         config_file: ${{ inputs.config_file }}
+#         encoded_config: ${{ inputs.encoded_config }}
+#       secrets: inherit
+name: "[Reusable] Business Analyst"
+
+on:
+  workflow_call:
+    inputs:
+      concurrency_key:
+        description: "Jira issue key (used for concurrency grouping)"
+        required: true
+        type: string
+      config_file:
+        description: "Path to agent JSON in consumer repo (e.g. config/workflows/ai-teammate/ai-teammate.config)"
+        required: true
+        type: string
+      encoded_config:
+        description: "URL-encoded JSON { params: { inputJql, customParams } }"
+        required: true
+        type: string
+      sdlc_agents_ref:
+        description: "SDLCAgents branch/tag/SHA to pull scripts from"
+        required: false
+        type: string
+        default: 'master'
+      ba_model:
+        description: "GitHub Models API model override (default: openai/gpt-4o)"
+        required: false
+        type: string
+        default: ''
+      ai_teammate_workflow:
+        description: "Workflow file to dispatch for AI Teammate (default: ai-teammate.yml)"
+        required: false
+        type: string
+        default: 'ai-teammate.yml'
+      blocked_status:
+        description: "Jira status name to transition to when ticket is incomplete"
+        required: false
+        type: string
+        default: 'Blocked'
+      analyzed_label:
+        description: "Label added after BA analysis to prevent re-processing"
+        required: false
+        type: string
+        default: 'ba_analyzed'
+    secrets:
+      JIRA_BASE_URL:
+        required: true
+      JIRA_EMAIL:
+        required: true
+      JIRA_API_TOKEN:
+        required: true
+      COPILOT_PAT:
+        required: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      # ── Step 1: Checkout calling (consumer) repo at workspace root ──────
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      # ── Step 2: Checkout SDLCAgents for Node scripts ────────────────────
+      - name: Checkout SDLCAgents (scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      # ── Step 3: Node setup + install ────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      # ── Step 4: Run Business Analyst ────────────────────────────────────
+      - name: Run Business Analyst
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/business-analyst/business-analyst.ts
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+          BA_MODEL: ${{ inputs.ba_model }}
+          AI_TEAMMATE_WORKFLOW: ${{ inputs.ai_teammate_workflow }}
+          BA_BLOCKED_STATUS: ${{ inputs.blocked_status }}
+          BA_ANALYZED_LABEL: ${{ inputs.analyzed_label }}

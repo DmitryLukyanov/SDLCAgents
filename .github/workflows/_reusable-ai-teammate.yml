@@ -1,6 +1,10 @@
 # Reusable AI Teammate workflow.
 # Checks out the calling (consumer) repo for config, SDLCAgents for Node scripts.
 #
+# Runs the AI Teammate pipeline: prepares spec-kit workspace, creates a GitHub
+# issue, runs inline BA analysis (GPT-4o), and assigns Copilot to the issue.
+# All pipeline logic lives in TypeScript (ai-teammate-agent.ts).
+#
 # Usage in consumer repo:
 #   jobs:
 #     call:
@@ -20,7 +24,7 @@ on:
         required: true
         type: string
       config_file:
-        description: "Path to agent JSON in consumer repo (e.g. config/agents/dummy-ticket-agent.json)"
+        description: "Path to agent JSON in consumer repo (e.g. config/workflows/ai-teammate/ai-teammate.config)"
         required: true
         type: string
       encoded_config:
@@ -45,7 +49,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write
@@ -84,7 +88,7 @@ jobs:
             echo ""
             echo "⚠️ Spec-kit agent/prompt files are missing from this repo."
             echo "   Run once and commit to the default branch:"
-            echo "   uvx --from git+https://github.com/github/spec-kit.git@v0.4.0 specify init --here"
+            echo "   uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 specify init --here"
           else
             echo "speckit_ready=true" >> "$GITHUB_OUTPUT"
             echo "✅ Spec-kit agent and prompt files found."
@@ -102,110 +106,20 @@ jobs:
         working-directory: .sdlc-agents
 
       # ── Step 5: Run agent (CWD = consumer workspace root) ───────────────
-      # config/spec-kit/defaults.json, config/agents/*.json resolve to consumer files.
+      # All logic (spec-kit, issue creation, BA analysis, Copilot assignment) runs in TypeScript.
+      # config/spec-kit/defaults.json, config/workflows/ai-teammate/*.json resolve to consumer files.
       - name: Run agent (Spec Kit context + configured runner)
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/agent-runner/agent-runner.ts
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
           ENCODED_CONFIG: ${{ inputs.encoded_config }}
 
-      # ── Step 6: Read spec-kit manifest ──────────────────────────────────
-      - name: Read spec-kit manifest
-        id: manifest
-        run: |
-          MANIFEST="spec-output/${{ inputs.concurrency_key }}/manifest.json"
-          if [ -f "$MANIFEST" ]; then
-            echo "cli_enabled=true" >> "$GITHUB_OUTPUT"
-            echo "output_dir=$(jq -r .outputDir "$MANIFEST")" >> "$GITHUB_OUTPUT"
-            echo "context_file=$(jq -r .contextFile "$MANIFEST")" >> "$GITHUB_OUTPUT"
-            echo "constitution_file=$(jq -r .constitutionFile "$MANIFEST")" >> "$GITHUB_OUTPUT"
-            echo "version=$(jq -r .version "$MANIFEST")" >> "$GITHUB_OUTPUT"
-            echo "agent=$(jq -r .agent "$MANIFEST")" >> "$GITHUB_OUTPUT"
-            echo "script_type=$(jq -r .scriptType "$MANIFEST")" >> "$GITHUB_OUTPUT"
-            echo "issue_key=$(jq -r .issueKey "$MANIFEST")" >> "$GITHUB_OUTPUT"
-          else
-            echo "cli_enabled=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── Step 7: Build task prompt ────────────────────────────────────────
-      - name: Build task prompt
-        id: task_prompt
-        if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
-        env:
-          CONTEXT_FILE: ${{ steps.manifest.outputs.context_file }}
-          ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
-        run: |
-          JIRA_CONTEXT=""
-          if [ -f "$CONTEXT_FILE" ]; then
-            JIRA_CONTEXT=$(cat "$CONTEXT_FILE")
-          fi
-
-          GLOBAL_DIRECTIVE=$(jq -r '.globalDirective // empty' config/spec-kit/defaults.json)
-          DIRECTIVE_PART=""
-          if [ -n "$GLOBAL_DIRECTIVE" ]; then
-            ESC_DIRECTIVE=$(printf '%s\n' "$GLOBAL_DIRECTIVE" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            DIRECTIVE_PART="${ESC_DIRECTIVE} — "
-          fi
-
-          cat <<PROMPT_EOF > "$RUNNER_TEMP/copilot-prompt.md"
-          ## Spec-Kit Workflow for ${ISSUE_KEY}
-
-          ### Jira Ticket Context
-
-          ${JIRA_CONTEXT}
-
-          ### Instructions
-
-          Run the spec-kit steps below **in order**. Execute each \`@speckit.*\` command before moving to the next; do not skip phases or replace this flow with ad-hoc exploration alone.
-
-          Each line is \`@speckit.*\` followed by one quoted argument: when a global directive is configured it appears first, then an em dash, then the step text (suitable to pass as a single argument after the agent name).
-
-          1. \`@speckit.specify\` "${DIRECTIVE_PART}Create the feature specification from the Jira context above"
-          2. \`@speckit.clarify\` "${DIRECTIVE_PART}Review the spec and identify ambiguities"
-          3. \`@speckit.plan\` "${DIRECTIVE_PART}Create a technical implementation plan"
-          4. \`@speckit.tasks\` "${DIRECTIVE_PART}Break the plan into actionable tasks"
-          5. \`@speckit.implement\` "${DIRECTIVE_PART}Execute the tasks and produce code changes"
-
-          The feature spec has been seeded in the \`specs/\` directory.
-          Commit all generated artifacts and open a PR when done.
-          PROMPT_EOF
-
-      # ── Step 8: Create Issue and assign to Copilot Coding Agent ─────────
-      - name: Create Issue and assign to Copilot Coding Agent
-        if: steps.manifest.outputs.cli_enabled == 'true' && steps.speckit_check.outputs.speckit_ready == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
-          ISSUE_KEY: ${{ steps.manifest.outputs.issue_key }}
-        run: |
-          # Read the prompt
-          PROMPT=$(cat "$RUNNER_TEMP/copilot-prompt.md")
-
-          # Step 1: Create GitHub Issue (without assignee)
-          ISSUE_URL=$(gh issue create \
-            --title "${ISSUE_KEY}: Copilot Coding Agent Task" \
-            --body "${PROMPT}")
-          echo "✅ Created issue: ${ISSUE_URL}"
-
-          # Step 2: Extract issue number and assign Copilot with orchestrator agent via API
-          ISSUE_NUMBER=$(echo "${ISSUE_URL}" | grep -oP '\d+$')
-          gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/assignees" \
-            --method POST \
-            --input - <<ASSIGN_EOF
-          {
-            "assignees": ["copilot-swe-agent[bot]"],
-            "agent_assignment": {
-              "custom_agent": "sdlc.pipeline"
-            }
-          }
-          ASSIGN_EOF
-
-          echo "✅ Assigned Copilot to issue #${ISSUE_NUMBER}"
-          echo "Copilot Coding Agent will pick up the task and open a PR when done."
-
-      # ── Step 9: Upload context artifacts ────────────────────────────────
+      # ── Step 6: Upload Spec Kit artifacts ───────────────────────────────
       - name: Upload Spec Kit artifacts
         if: always()
         uses: actions/upload-artifact@v4

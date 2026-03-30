@@ -3,149 +3,150 @@ EPM AGENTS — SEQUENTIAL FLOW (raw text + code hooks)
 ================================================================================
 
 Legend:
-  [GH]     GitHub Actions workflow YAML
-  [TS:path] TypeScript module (no classes — functions listed as module.fn())
+  [GH]      GitHub Actions workflow YAML
+  [TS:path] TypeScript module (functions listed as module.fn())
   Octokit   @octokit/rest client
   -->       next step (sequential)
-  ..>       optional / parallel idea
+  ..>       optional / parallel / triggered
 
 --------------------------------------------------------------------------------
-RULES MODE — Scrum Master (workflow: jql input empty → use config/sm.json)
+SCRUM MASTER — Rules Mode (scrum-master.config present, env JQL empty)
 --------------------------------------------------------------------------------
 
   Human triggers [GH] .github/workflows/scrum-master.yml
     |
     v
   npm run scrum-master
-    --> [TS:src/scrum-agent/scrum-master.ts] runScrumMasterWithRulesOrSingleJql()  [scrum-master-core.ts]
+    --> [TS:src/workflows/scrum-master/scrum-master-core.ts] runScrumMasterWithRulesOrSingleJql()
           |
-          |  (single-JQL branch skipped: env JQL empty → load rules file)
+          |  env JQL empty → load rules file
           v
-          loadSmConfig()          [TS:src/scrum-agent/load-sm-config.ts]
-          interpolateJql()       (per rule: {jiraProject} from env)
+          loadSmConfig()          [TS:src/workflows/scrum-master/load-sm-config.ts]
+          interpolateJql()        (per rule: {jiraProject} from env)
           |
           v
   FOR each rule in SmConfig.rules:
           processRule(rule, i)
-            |
-            |  jqlRequireStatus(interpolateJql(rule.jql))
-            |    --> [TS:src/lib/jira-status.ts] getRequiredIssueStatus()
-            |        wraps: ( <jql> ) AND status = "<taken>"
-            v
+            jqlRequireStatus(interpolateJql(rule.jql))
+              --> [TS:src/lib/jira-status.ts] getRequiredIssueStatus()
+                  wraps: ( <jql> ) AND status = "<taken>"
             searchIssues(effectiveJql, limit, fields)
-              --> [TS:src/jira/jira-client.ts] jiraFetch( POST /rest/api/3/search )
+              --> [TS:src/lib/jira/jira-client.ts] jiraFetch( POST /rest/api/3/search )
             |
-            |  hasLabel(ticket, rule.skipIfLabel)  [local helper in scrum-master-core.ts]
-            v
   FOR each issue key:
             buildEncodedConfig(key)
-              --> [TS:src/scrum-agent/build-encoded-config.ts]
+              --> [TS:src/workflows/scrum-master/build-encoded-config.ts]
                   customParams: taken_status, status_to_move_to,
                   ticket_context_depth (default '1' via env TICKET_CONTEXT_DEPTH)
             |
-            v
             Octokit.rest.actions.createWorkflowDispatch({
-              workflow_id: rule.workflowFile | ai-teammate.yml,
+              workflow_id: rule.workflowFile,  ← "ai-teammate.yml" (scrum-master.config)
               inputs: { concurrency_key, config_file, encoded_config }
             })
             |
-            |  optional on success:
-            v
-            addIssueLabel(key, rule.addLabel)
-              --> [TS:src/jira/jira-client.ts] jiraFetch( PUT issue ... update labels )
+            transitionIssueToPostRead(key)    [jira-client.ts]
+            addIssueLabel(key, rule.addLabel) [jira-client.ts]
 
 --------------------------------------------------------------------------------
-SINGLE-JQL MODE — Scrum Master (env JQL non-empty, skips config/sm.json)
+SCRUM MASTER — Single-JQL Mode (env JQL non-empty, skips scrum-master.config)
 --------------------------------------------------------------------------------
 
-  [TS:src/scrum-agent/scrum-master.ts] runScrumMasterWithRulesOrSingleJql()
-    --> runScrumMasterWithSingleJqlOnly()
-          jqlRequireStatus(legacyJql)     [lib/jira-status.ts]
-          searchIssues(...)               [jira/jira-client.ts]
-          buildEncodedConfig(key)         [scrum-agent/build-encoded-config.ts]
-          Octokit...createWorkflowDispatch({ config_file: AGENT_CONFIG_FILE, ... })
+  [TS:src/workflows/scrum-master/scrum-master-core.ts] runScrumMasterWithSingleJqlOnly()
+    jqlRequireStatus(legacyJql)     [lib/jira-status.ts]
+    searchIssues(...)               [jira/jira-client.ts]
+    buildEncodedConfig(key)         [scrum-master/build-encoded-config.ts]
+    Octokit...createWorkflowDispatch({ workflow_id: ctx.defaultWorkflowFile, ... })
 
 --------------------------------------------------------------------------------
 AI TEAMMATE — one run per dispatched issue
 --------------------------------------------------------------------------------
 
-  [GH] .github/workflows/ai-teammate.yml
-    concurrency: ai-teammate-${{ inputs.concurrency_key }}
+  [GH] .github/workflows/ai-teammate.yml  (calls _reusable-ai-teammate.yml)
+    concurrency: ai-teammate-{concurrency_key}
+    |
+    ── Steps 1-2: checkout consumer repo + SDLCAgents into .sdlc-agents/
+    ── Steps 3-4: speckit_check + node setup + npm ci
     |
     v
-  npm run agent-runner
-    --> [TS:src/agent-runner/agent-runner.ts] main()
-          |
-          decodeEncodedConfig(ENCODED_CONFIG)
-            [TS:src/lib/encoded-config.ts]
-          extractIssueKeyFromEncoded(root)
-            [TS:src/lib/encoded-config.ts]
-          |
-          readFile(CONFIG_FILE) + JSON.parse  --> AgentJson (params.runner, ticketContextDepth)
-          |
-          |  env: ISSUE_KEY, REQUIRED_JIRA_STATUS, POST_READ_STATUS,
-          |       TICKET_CONTEXT_DEPTH (customParams vs agent.params vs default 1)
-          v
-          runDummyTicketAgent()
-            [TS:src/dummy-agent/dummy-agent.ts]
-          ..> (future runners: branch on agent.params.runner)
-
---------------------------------------------------------------------------------
-DUMMY AGENT — read primary ticket, optional related context, transition
---------------------------------------------------------------------------------
-
-  runDummyTicketAgent()
-    |
-    |  getTicketContextDepth()  [dummy-agent.ts]  reads env TICKET_CONTEXT_DEPTH
-    |    (agent-runner sets it; default 1 in dummy if env empty; 0 disables related block)
-    v
-  getIssue(issueKey, fields)
-    --> [TS:src/jira/jira-client.ts] jiraFetch( GET /rest/api/3/issue/{key} )
-    |
-    |  statusAllowsRead() / getRequiredIssueStatus()
-    |    [TS:src/lib/jira-status.ts]
-    v
-  (log fields) adfToPlain(description|comments)
-    --> [TS:src/dummy-agent/adf-to-plain.ts]
-    |
-    |  IF getTicketContextDepth() >= 1:
-    v
-  fetchRelatedIssueSummaries(issueKey, depth)
-    --> [TS:src/jira/jira-related.ts]
-          searchIssues(`issue in linkedIssues("KEY")`, ...)  [jira-client.ts]
-          searchIssues(`parent = KEY`, ...)                   [jira-client.ts]
-          RelatedIssueSummary[] -> console (link | child rows)
+  Step 5: tsx .../ai-teammate-agent.ts (workflow) or npm run ai-teammate-agent (SDLCAgents root)
+    --> [TS:src/workflows/ai-teammate/ai-teammate-agent.ts] → runAiTeammateAgent() [ai-teammate-core.ts]
+          decodeEncodedConfig(ENCODED_CONFIG)   [src/lib/encoded-config.ts]
+          extractIssueKeyFromEncoded(root)       [src/lib/encoded-config.ts]
+          runPipeline(issueKey, steps, deps)     [ai-teammate-pipeline.ts]
+            (steps from config/workflows/ai-teammate/ai-teammate.config)
+            For print_jira_context_to_stdout step (typical):
+              deps.prepareSpecKitWorkspace(opts)  [agent wires → prepareSpecKitWorkspaceWithLogging,
+                                                      src/agents/spec-kit/pipeline.ts]
+                cliEnabled true  → prepareSpecKitContext()
+                  manifest.json, context.md, constitution.md → spec-output/{key}/
+                cliEnabled false → writeSpecKitHeadlessArtifacts()
+                  constitution.md, spec.md, plan.md, tasks.md → spec-output/{key}/
+              runTicketProcessor(deps)            [steps/print-jira-context-to-stdout.ts]
+                getIssue(issueKey, fields)        [jira-client.ts]
+                statusAllowsRead(required status) [jira-status.ts] — exits if mismatch
+                fetchRelatedIssueSummaries(...)   [jira-related.ts] if TICKET_CONTEXT_DEPTH >= 1
+                (logs ticket body/comments; no Jira transition here)
     |
     v
-  (log comments loop, still adfToPlain)
+  Step: create_github_issue
+    --> [TS:src/workflows/ai-teammate/steps/create-github-issue.ts] runCreateGithubIssue()
+          deps.createGithubIssue(owner, repo, issueKey)
+            ensure label "jira:{KEY}" exists (create if absent)
+            octokit.rest.issues.create → placeholder "⏳ BA analysis in progress..."
+          ctx.githubIssueNumber ← new issue number
     |
     v
-  getPostReadTargetStatus()  [lib/jira-status.ts]
-  transitionIssueToStatusName(issueKey, nextStatus)
-    --> [TS:src/jira/jira-client.ts]
-          getTransitions(issueKey)
-          transitionIssue(issueKey, transitionId)
-
---------------------------------------------------------------------------------
-MANUAL ONLY — Dummy ticket agent workflow (no encoded_config)
---------------------------------------------------------------------------------
-
-  [GH] .github/workflows/dummy-ticket-agent.yml
+  Step: run_ba_inline
+    --> [TS:src/workflows/ai-teammate/steps/run-ba-inline.ts] runBaInline()
+          deps.getIssue(issueKey, fields)             [jira-client.ts]
+          adfToPlain(description / comments)          [adf-to-plain.ts]
+          extractComments(issue)                      [business-analyst-core.ts]
+          deps.fetchRelatedIssueSummaries(key, depth) [jira-related.ts]
+          mapRelated(related)                         [business-analyst-core.ts]
+          deps.analyzeTicket(ctx, githubToken, model) [analyze-ticket.ts]
+            buildPrompt(ctx)
+              user replies after BA questions → "User Answers to BA Questions"
+            callGitHubModels(prompt, token)
+              POST models.github.ai/inference/chat/completions
+              model=openai/gpt-4o, temp=0.1, response_format=json_object
+            parseAnalysisResponse(raw) → BaAnalysisResult
+              coerceToString() handles nested LLM object responses
+            isComplete() → all 5 fields populated?
+          If complete:
+            ctx.baOutcome ← outcome
+            return { status: 'continue' }
+          If incomplete:
+            deps.addIssueComment(issueKey, questions)         [jira-client.ts]
+            deps.transitionIssueToStatusName(key, "Blocked")  [jira-client.ts]
+            deps.closeGithubIssue(owner, repo, githubIssueNumber)
+            return { status: 'stop', reason: "BA incomplete" }
     |
     v
-  npm run dummy-agent
-    --> [TS:src/dummy-agent/dummy-agent-entry.ts]
-          runDummyTicketAgent()   [dummy-agent.ts]
-          (same Jira path as above; TICKET_CONTEXT_DEPTH from workflow input)
+  Step: assign_copilot
+    --> [TS:src/workflows/ai-teammate/steps/assign-copilot.ts] runAssignCopilot()
+          read config/spec-kit/defaults.json → global directive
+          read ctx.specKitContextFile (context.md) → {{JIRA_CONTEXT}}
+          fill template: src/workflows/ai-teammate/templates/github-issue-with-copilot.md
+            {{ISSUE_KEY}}, {{DIRECTIVE_PART}}, {{SPECIFY_INPUT}}, {{CLARIFY_INPUT}},
+            {{PLAN_INPUT}}, {{TASKS_INPUT}}, {{IMPLEMENT_INPUT}}
+          deps.updateGithubIssue(owner, repo, issueNumber, {
+            body: filledTemplate,
+            assignees: ['copilot-swe-agent[bot]'],
+            agentInstructions: "add label jira:{KEY} to PR..."
+          })
+          → Copilot picks up, runs sdlc.pipeline.agent.md, opens PR
 
 --------------------------------------------------------------------------------
 CONFIG / SECRETS (reference)
 --------------------------------------------------------------------------------
 
-  Rules file:        config/sm.json  (SmRule[], SmConfig)
-  Agent JSON:        config/agents/dummy-ticket-agent.json  (params.runner, ticketContextDepth)
-  GitHub secrets:   JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
-  SM needs:          GITHUB_TOKEN with actions:write for createWorkflowDispatch
+  SM rules file:      config/workflows/scrum-master/scrum-master.config  (SmRule[], SmConfig)
+                      workflowFile: "ai-teammate.yml"
+  Agent JSON:         config/workflows/ai-teammate/ai-teammate.config
+  BA agent def:       .github/agents/ba.analyst.agent.md  (SDLCClient)
+  Coding agent def:   .github/agents/sdlc.pipeline.agent.md  (SDLCClient)
+  GitHub secrets:     JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
+                      COPILOT_PAT (GitHub Models API + issues write)
 
 ================================================================================
 END
