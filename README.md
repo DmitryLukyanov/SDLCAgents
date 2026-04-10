@@ -6,7 +6,7 @@
 |----------|---|-------|-------------|
 | 🔴 Critical | 1 | **Human-in-the-loop option** | Answer questions from the model if any, and add an optional approval gate before implementation starts — post a summary comment on the PR/issue and wait for explicit approval before the Copilot agent proceeds |
 | 🔴 Critical | 2 | **More complex prompts** | Invest in richer, more detailed prompts for each agent step — better context injection, chain-of-thought guidance, domain-specific instructions, and example-driven few-shot patterns to improve output quality |
-| 🔴 Critical | 3 | **Lock on GitHub** | Prevent concurrent Copilot agent runs on the same issue/branch (GitHub concurrency groups help but need a more robust distributed lock strategy) |
+| 🔴 Critical | 3 | **Lock on GitHub flow** | Currently locked into the GitHub issue → PR → agent pattern. Explore running Codex or Claude binaries directly without requiring the GitHub issue/PR lifecycle |
 | 🟠 High | 4 | **Lightweight pipeline (no spec-kit)** | For simpler tickets that don't need the full specify→clarify→plan→tasks→implement ceremony, support a lightweight mode that goes straight to implementation |
 | 🟠 High | 5 | **Solve merge conflicts** | Automatically detect and resolve merge conflicts on Copilot branches — rebase against master, apply conflict resolution heuristics, and re-run tests before marking the PR as ready |
 | 🟡 Medium | 6 | **More complex routing** | Smarter scrum master routing: route by ticket type, priority, team, component, or estimated complexity rather than simple label-based rules |
