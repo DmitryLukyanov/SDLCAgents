@@ -1,7 +1,8 @@
 # Reusable onboarding workflow.
 #
-# Copies all required SDLC pipeline files from the reference consumer repo
-# (SDLCClient) into the calling repo and replaces the Jira project key.
+# Sources:
+#   - Workflow files       → SDLCAgents .github/consumer-templates/
+#   - Agents, prompts, configs → reference consumer repo (SDLCClient)
 #
 # Called by the consumer's onboarding.yml — do NOT modify this file in
 # the consumer repo; update it here in SDLCAgents instead.
@@ -16,12 +17,22 @@ on:
         default: "SDLCSPAC"
         type: string
       reference_repo:
-        description: "Reference consumer repo to copy files from"
+        description: "Reference consumer repo to copy agents, prompts and configs from"
         required: false
         default: "DmitryLukyanov/SDLCClient"
         type: string
       reference_ref:
         description: "Branch or tag of the reference repo"
+        required: false
+        default: "master"
+        type: string
+      agents_repo:
+        description: "SDLCAgents repo to copy workflow templates from"
+        required: false
+        default: "DmitryLukyanov/SDLCAgents"
+        type: string
+      agents_ref:
+        description: "Branch or tag of the SDLCAgents repo"
         required: false
         default: "master"
         type: string
@@ -47,7 +58,17 @@ jobs:
             specify init --here --ai copilot --script ps --force
           echo "✅ spec-kit initialised"
 
-      - name: Sparse-checkout reference repo
+      - name: Sparse-checkout SDLCAgents (workflow templates)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.agents_repo }}
+          ref: ${{ inputs.agents_ref }}
+          token: ${{ secrets.COPILOT_PAT }}
+          path: _sdlc_agents
+          sparse-checkout: |
+            .github/consumer-templates
+
+      - name: Sparse-checkout reference consumer repo (agents, prompts, configs)
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.reference_repo }}
@@ -58,13 +79,23 @@ jobs:
             .github/agents
             .github/prompts
             .github/copilot-instructions.md
-            .github/workflows
             config/spec-kit
             config/workflows
 
       - name: Copy files into consumer repo
         run: |
           PROJ="${{ inputs.jira_project_key }}"
+
+          # ── Workflows from SDLCAgents consumer-templates ───────────
+          mkdir -p .github/workflows
+          for f in _sdlc_agents/.github/consumer-templates/*.yml; do
+            fname=$(basename "$f")
+            case "$fname" in
+              onboarding.yml) continue ;;  # skip — already present
+            esac
+            cp "$f" ".github/workflows/$fname"
+            echo "  copied workflow: $fname"
+          done
 
           # ── .github/agents ────────────────────────────────────────
           mkdir -p .github/agents
@@ -76,17 +107,6 @@ jobs:
 
           # ── copilot-instructions.md ───────────────────────────────
           cp _sdlc_reference/.github/copilot-instructions.md .github/copilot-instructions.md
-
-          # ── workflows (skip _reusable-* and onboarding.yml) ───────
-          mkdir -p .github/workflows
-          for f in _sdlc_reference/.github/workflows/*.yml; do
-            fname=$(basename "$f")
-            case "$fname" in
-              _reusable-*|onboarding.yml) continue ;;
-            esac
-            cp "$f" ".github/workflows/$fname"
-            echo "  copied workflow: $fname"
-          done
 
           # .specify is handled by spec-kit init above — skip reference copy
 
@@ -109,8 +129,8 @@ jobs:
           echo "  replacing SDLCSPAC → $PROJ in configs..."
           find config/workflows -name "*.config" -exec sed -i "s/SDLCSPAC/$PROJ/g" {} \;
 
-          # ── Cleanup reference checkout ─────────────────────────────
-          rm -rf _sdlc_reference
+          # ── Cleanup checkouts ──────────────────────────────────────
+          rm -rf _sdlc_agents _sdlc_reference
 
           echo ""
           echo "✅ Onboarding complete for project: $PROJ"
