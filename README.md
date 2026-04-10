@@ -25,7 +25,7 @@
 An onboarding workflow copies all required files in a single run:
 
 1. Add a `COPILOT_PAT` secret to the new repo (Classic PAT — see scopes below).
-2. Copy [`templates/onboarding.yml`](templates/onboarding.yml) to `.github/workflows/onboarding.yml` in the new repo.
+2. Copy [`.github/consumer-templates/onboarding.yml`](.github/consumer-templates/onboarding.yml) to `.github/workflows/onboarding.yml` in the new repo.
 3. Go to **Actions → SDLC Onboarding → Run workflow**, enter your Jira project key, and click **Run**.
 4. The workflow commits all required files with the correct project key substituted.
 
