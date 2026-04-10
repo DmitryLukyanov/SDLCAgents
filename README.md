@@ -2,18 +2,18 @@
 
 ## Open Questions / Concerns / TODO
 
-| # | Topic | Description |
-|---|-------|-------------|
-| 1 | **Choose different AI models** | Allow per-step or per-workflow model selection (e.g. GPT-4o for BA analysis, Claude for implementation, smaller/cheaper models for low-stakes steps) |
-| 2 | **Use different agents** | Support pluggable implementer agents — Claude Code, OpenAI Codex, GitHub Copilot — switchable via config without changing pipeline code |
-| 3 | **Lock on GitHub** | Prevent concurrent Copilot agent runs on the same issue/branch (GitHub concurrency groups help but need a more robust distributed lock strategy) |
-| 4 | **More agents** | Expand the agent roster: security reviewer, performance profiler, documentation generator, test coverage enforcer, dependency auditor |
-| 5 | **Human-in-the-loop option** | Answering on question from the model if any and add an optional approval gate before implementation starts — post a summary comment on the PR/issue and wait for explicit approval before the Copilot agent proceeds |
-| 6 | **More complex routing** | Smarter scrum master routing: route by ticket type, priority, team, component, or estimated complexity rather than simple label-based rules |
-| 7 | **More sources than just Jira** | Support additional ticket sources: GitHub Issues native, Azure DevOps, Linear, Shortcut — with a pluggable source adapter interface |
-| 8 | **More complex prompts** | Invest in richer, more detailed prompts for each agent step — better context injection, chain-of-thought guidance, domain-specific instructions, and example-driven few-shot patterns to improve output quality |
-| 9 | **Lightweight pipeline (no spec-kit)** | For simpler tickets that don't need the full specify→clarify→plan→tasks→implement ceremony, support a lightweight mode that goes straight to implementation |
-| 10 | **Solve merge conflicts** | Automatically detect and resolve merge conflicts on Copilot branches — rebase against master, apply conflict resolution heuristics, and re-run tests before marking the PR as ready |
+| Priority | # | Topic | Description |
+|----------|---|-------|-------------|
+| 🔴 Critical | 1 | **Human-in-the-loop option** | Answer questions from the model if any, and add an optional approval gate before implementation starts — post a summary comment on the PR/issue and wait for explicit approval before the Copilot agent proceeds |
+| 🔴 Critical | 2 | **More complex prompts** | Invest in richer, more detailed prompts for each agent step — better context injection, chain-of-thought guidance, domain-specific instructions, and example-driven few-shot patterns to improve output quality |
+| 🔴 Critical | 3 | **Lock on GitHub** | Prevent concurrent Copilot agent runs on the same issue/branch (GitHub concurrency groups help but need a more robust distributed lock strategy) |
+| 🟠 High | 4 | **Lightweight pipeline (no spec-kit)** | For simpler tickets that don't need the full specify→clarify→plan→tasks→implement ceremony, support a lightweight mode that goes straight to implementation |
+| 🟠 High | 5 | **Solve merge conflicts** | Automatically detect and resolve merge conflicts on Copilot branches — rebase against master, apply conflict resolution heuristics, and re-run tests before marking the PR as ready |
+| 🟡 Medium | 6 | **More complex routing** | Smarter scrum master routing: route by ticket type, priority, team, component, or estimated complexity rather than simple label-based rules |
+| 🟡 Medium | 7 | **Use different agents** | Support pluggable implementer agents — Claude Code, OpenAI Codex, GitHub Copilot — switchable via config without changing pipeline code |
+| 🟡 Medium | 8 | **Choose different AI models** | Allow per-step or per-workflow model selection (e.g. GPT-4o for BA analysis, Claude for implementation, smaller/cheaper models for low-stakes steps) |
+| 🟢 Low | 9 | **More agents** | Expand the agent roster: security reviewer, performance profiler, documentation generator, test coverage enforcer, dependency auditor |
+| 🟢 Low | 10 | **More sources than just Jira** | Support additional ticket sources: GitHub Issues native, Azure DevOps, Linear, Shortcut — with a pluggable source adapter interface |
 
 ---
 
