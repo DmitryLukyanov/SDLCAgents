@@ -11,8 +11,9 @@ on:
   workflow_call:
     inputs:
       jira_project_key:
-        description: "Jira project key used in JQL queries (e.g. MYPROJ)"
-        required: true
+        description: "Jira project key used in JQL queries (e.g. MYPROJ). Update to match your project — defaults to the reference project SDLCSPAC."
+        required: false
+        default: "SDLCSPAC"
         type: string
       reference_repo:
         description: "Reference consumer repo to copy files from"
