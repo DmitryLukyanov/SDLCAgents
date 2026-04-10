@@ -1,0 +1,124 @@
+# Reusable onboarding workflow.
+#
+# Copies all required SDLC pipeline files from the reference consumer repo
+# (SDLCClient) into the calling repo and replaces the Jira project key.
+#
+# Called by the consumer's onboarding.yml — do NOT modify this file in
+# the consumer repo; update it here in SDLCAgents instead.
+name: _reusable-onboarding
+
+on:
+  workflow_call:
+    inputs:
+      jira_project_key:
+        description: "Jira project key used in JQL queries (e.g. MYPROJ)"
+        required: true
+        type: string
+      reference_repo:
+        description: "Reference consumer repo to copy files from"
+        required: false
+        default: "DmitryLukyanov/SDLCClient"
+        type: string
+      reference_ref:
+        description: "Branch or tag of the reference repo"
+        required: false
+        default: "master"
+        type: string
+
+jobs:
+  onboard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Sparse-checkout reference repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.reference_repo }}
+          ref: ${{ inputs.reference_ref }}
+          token: ${{ secrets.COPILOT_PAT }}
+          path: _sdlc_reference
+          sparse-checkout: |
+            .github/agents
+            .github/prompts
+            .github/copilot-instructions.md
+            .github/workflows
+            .specify
+            config/spec-kit
+            config/workflows
+
+      - name: Copy files into consumer repo
+        run: |
+          PROJ="${{ inputs.jira_project_key }}"
+
+          # ── .github/agents ────────────────────────────────────────
+          mkdir -p .github/agents
+          cp -r _sdlc_reference/.github/agents/. .github/agents/
+
+          # ── .github/prompts ───────────────────────────────────────
+          mkdir -p .github/prompts
+          cp -r _sdlc_reference/.github/prompts/. .github/prompts/
+
+          # ── copilot-instructions.md ───────────────────────────────
+          cp _sdlc_reference/.github/copilot-instructions.md .github/copilot-instructions.md
+
+          # ── workflows (skip _reusable-* and onboarding.yml) ───────
+          mkdir -p .github/workflows
+          for f in _sdlc_reference/.github/workflows/*.yml; do
+            fname=$(basename "$f")
+            case "$fname" in
+              _reusable-*|onboarding.yml) continue ;;
+            esac
+            cp "$f" ".github/workflows/$fname"
+            echo "  copied workflow: $fname"
+          done
+
+          # ── .specify (spec-kit CLI scaffolding) ───────────────────
+          if [ -d _sdlc_reference/.specify ]; then
+            cp -r _sdlc_reference/.specify .specify
+            echo "  copied .specify/"
+          fi
+
+          # ── config/spec-kit ───────────────────────────────────────
+          mkdir -p config/spec-kit
+          cp _sdlc_reference/config/spec-kit/defaults.json config/spec-kit/defaults.json
+          cp _sdlc_reference/config/spec-kit/constitution.md config/spec-kit/constitution.md
+
+          # ── config/workflows ──────────────────────────────────────
+          for dir in ai-teammate business-analyst scrum-master; do
+            mkdir -p "config/workflows/$dir"
+            src="_sdlc_reference/config/workflows/$dir"
+            if [ -d "$src" ]; then
+              cp -r "$src/." "config/workflows/$dir/"
+              echo "  copied config/workflows/$dir/"
+            fi
+          done
+
+          # ── Replace Jira project key in all configs ────────────────
+          echo "  replacing SDLCSPAC → $PROJ in configs..."
+          find config/workflows -name "*.config" -exec sed -i "s/SDLCSPAC/$PROJ/g" {} \;
+
+          # ── Cleanup reference checkout ─────────────────────────────
+          rm -rf _sdlc_reference
+
+          echo ""
+          echo "✅ Onboarding complete for project: $PROJ"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit — all files already up to date."
+          else
+            git commit -m "chore: onboard SDLC pipeline files (project: ${{ inputs.jira_project_key }})"
+            git push
+            echo "✅ Changes committed and pushed."
+          fi

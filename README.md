@@ -20,7 +20,18 @@
 
 ## Consumer Repo Setup Checklist
 
-When onboarding a new repository to use the SDLC pipeline, ensure the following are in place:
+### Automated (recommended)
+
+An onboarding workflow copies all required files in a single run:
+
+1. Add a `COPILOT_PAT` secret to the new repo (Classic PAT — see scopes below).
+2. Copy [`templates/onboarding.yml`](templates/onboarding.yml) to `.github/workflows/onboarding.yml` in the new repo.
+3. Go to **Actions → SDLC Onboarding → Run workflow**, enter your Jira project key, and click **Run**.
+4. The workflow commits all required files with the correct project key substituted.
+
+### Manual checklist
+
+If you prefer to copy files manually, ensure all of the following are in place:
 
 | # | What | Where | Notes |
 |---|------|-------|-------|

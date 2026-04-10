@@ -1,0 +1,30 @@
+# SDLC Pipeline — One-time onboarding workflow.
+#
+# HOW TO USE:
+#   1. Copy this file to .github/workflows/onboarding.yml in your repo.
+#   2. Add a COPILOT_PAT secret (Classic PAT with repo + workflow + read:org scopes).
+#   3. Go to Actions → SDLC Onboarding → Run workflow.
+#   4. Enter your Jira project key (e.g. MYPROJ) and click Run.
+#   5. The workflow will copy all required SDLC pipeline files and commit them.
+#   6. After a successful run this workflow file can be deleted or kept for re-runs.
+#
+# All pipeline logic lives in DmitryLukyanov/SDLCAgents — do NOT copy the
+# _reusable-*.yml files; they are referenced directly from SDLCAgents.
+name: SDLC Onboarding
+
+on:
+  workflow_dispatch:
+    inputs:
+      jira_project_key:
+        description: "Jira project key used in JQL queries (e.g. MYPROJ)"
+        required: true
+        type: string
+
+jobs:
+  call:
+    permissions:
+      contents: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-onboarding.yml@master
+    with:
+      jira_project_key: ${{ inputs.jira_project_key }}
+    secrets: inherit
