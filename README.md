@@ -14,6 +14,7 @@
 | 🟡 Medium | 8 | **Choose different AI models** | Allow per-step or per-workflow model selection (e.g. GPT-4o for BA analysis, Claude for implementation, smaller/cheaper models for low-stakes steps) |
 | 🟢 Low | 9 | **More agents** | Expand the agent roster: security reviewer, performance profiler, documentation generator, test coverage enforcer, dependency auditor |
 | 🟢 Low | 10 | **More sources than just Jira** | Support additional ticket sources: GitHub Issues native, Azure DevOps, Linear, Shortcut — with a pluggable source adapter interface |
+| 🟡 Medium | 11 | **AI skills and MCP servers** | Equip agents with reusable skills (e.g. run tests, query docs, search codebase) and expose pipeline capabilities as MCP servers so any MCP-compatible client can trigger or extend the SDLC workflow |
 
 ---
 
