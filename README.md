@@ -12,6 +12,8 @@
 | 6 | **More complex routing** | Smarter scrum master routing: route by ticket type, priority, team, component, or estimated complexity rather than simple label-based rules |
 | 7 | **More sources than just Jira** | Support additional ticket sources: GitHub Issues native, Azure DevOps, Linear, Shortcut — with a pluggable source adapter interface |
 | 8 | **More complex prompts** | Invest in richer, more detailed prompts for each agent step — better context injection, chain-of-thought guidance, domain-specific instructions, and example-driven few-shot patterns to improve output quality |
+| 9 | **Lightweight pipeline (no spec-kit)** | For simpler tickets that don't need the full specify→clarify→plan→tasks→implement ceremony, support a lightweight mode that goes straight to implementation |
+| 10 | **Solve merge conflicts** | Automatically detect and resolve merge conflicts on Copilot branches — rebase against master, apply conflict resolution heuristics, and re-run tests before marking the PR as ready |
 
 ---
 
