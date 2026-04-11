@@ -3,7 +3,7 @@
  *
  * 1. **Headless**: {@link writeSpecKitHeadlessArtifacts} — writes constitution + spec.md, plan.md, tasks.md
  *    from a Jira issue + config/spec-kit/defaults.json (no specify CLI).
- * 2. **CLI** (`cliEnabled: true`): {@link prepareSpecKitContext} via prepareSpecKitWorkspaceWithLogging —
+ * 2. **CLI** (`cliEnabled: true`): {@link prepareIssueContext} via prepareSpecKitWorkspaceWithLogging —
  *    context.md + constitution.md for the real `specify` CLI.
  */
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -12,7 +12,7 @@ import { getIssue } from '../../../lib/jira/jira-client.js';
 import { adfToPlain } from '../../../lib/adf-to-plain.js';
 import type { SpecKitDefaults, SpecKitJiraOverrides } from './spec-kit-types.js';
 import { parseSpecKitBlockFromPlainDescription } from './parse-jira-spec-kit.js';
-import { prepareSpecKitContext, type PrepareContextOptions } from './build-github-issue-body.js';
+import { prepareIssueContext, type PrepareContextOptions } from './issue-context.js';
 
 const CONSTITUTION_SOURCE = 'config/spec-kit/constitution.md';
 const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
@@ -144,7 +144,7 @@ export async function prepareSpecKitWorkspaceWithLogging(opts: SpecKitWorkspaceP
       outputDir: opts.outputDir ? resolve(opts.cwd ?? process.cwd(), opts.outputDir) : undefined,
       ticketContextDepth: opts.ticketContextDepth,
     };
-    const result = await prepareSpecKitContext(ctxOpts);
+    const result = await prepareIssueContext(ctxOpts);
     console.log(`  → context:      ${result.contextFile}`);
     console.log(`  → constitution:  ${result.constitutionFile}`);
     console.log('  ✅ CLI mode ready — workflow shell steps will run specify commands.\n');

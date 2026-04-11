@@ -1,6 +1,5 @@
 /**
- * Prepare Jira context + manifest for the real spec-kit CLI.
- * Node writes seed files; workflow shell steps run `specify` commands.
+ * Prepare Jira issue context files (context.md + constitution.md) for the spec-kit CLI.
  */
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -49,7 +48,7 @@ export interface PrepareContextResult {
   outputDir: string;
 }
 
-export async function prepareSpecKitContext(opts: PrepareContextOptions): Promise<PrepareContextResult> {
+export async function prepareIssueContext(opts: PrepareContextOptions): Promise<PrepareContextResult> {
   const cwd = opts.cwd ?? process.cwd();
   const outRoot = opts.outputDir ?? join(cwd, 'spec-output', opts.issueKey);
   await mkdir(outRoot, { recursive: true });
