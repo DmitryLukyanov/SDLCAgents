@@ -254,5 +254,5 @@ export async function runScrumMasterWithRulesOrSingleJql(
     }
   }
 
-  printSummaryTable(records);
+  await printSummaryTable(records);
 }
