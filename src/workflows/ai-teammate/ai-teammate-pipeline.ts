@@ -6,11 +6,10 @@
  *
  * Supported step runners:
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
- *   print_jira_context_to_stdout — logs Jira ticket details + prepares spec-kit workspace (manifest or headless files)
+ *   print_jira_context_to_stdout — logs Jira ticket details + prepares spec-kit workspace
  *   create_github_issue          — creates a GitHub issue placeholder; stores issue number in context
  *   run_ba_inline                — runs BA analysis inline; blocks + closes issue if incomplete
  *   assign_copilot               — fills prompt template with BA results + assigns Copilot to the GitHub issue
- *   dispatch_workflow            — dispatches a GitHub Actions workflow with the encoded config
  *
  * Adding a new runner:
  *   1. Create src/workflows/ai-teammate/steps/<name>.ts exporting a run<Name>() function
@@ -21,7 +20,6 @@ import { join } from 'node:path';
 import { runPrintJiraContextToStdout } from './steps/print-jira-context-to-stdout.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
-import { runDispatchWorkflow } from './steps/dispatch-workflow.js';
 import { runBaInline } from './steps/run-ba-inline.js';
 import { runAssignCopilot } from './steps/assign-copilot.js';
 import type { AiTeammateDeps, BaInlineStep, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
@@ -64,29 +62,16 @@ async function executeStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeamm
       return runAssignCopilot(ctx, deps);
     }
 
-    case 'dispatch_workflow': {
-      return runDispatchWorkflow(ctx, step, deps);
-    }
-
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, run_ba_inline, assign_copilot, dispatch_workflow.`,
+          `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, run_ba_inline, assign_copilot.`,
       );
   }
 }
 
-const INLINE_RUNNERS = new Set([
-  'ensure_jira_fields_expected',
-  'print_jira_context_to_stdout',
-  'create_github_issue',
-  'run_ba_inline',
-  'assign_copilot',
-]);
-
 interface StepRecord {
   runner: string;
-  type: 'inline' | 'dispatched';
   status: 'continue' | 'stop';
   reason?: string;
   durationMs: number;
@@ -102,7 +87,7 @@ async function writeSummary(issueKey: string, repo: string, records: StepRecord[
   const ms = (n: number) => n < 1000 ? `${n}ms` : `${(n / 1000).toFixed(1)}s`;
 
   const rows = records.map(r =>
-    `| \`${r.runner}\` | ${r.type} | ${icon(r)} ${r.status}${r.reason ? ` — ${r.reason}` : ''} | ${ms(r.durationMs)} |`
+    `| \`${r.runner}\` | ${icon(r)} ${r.status}${r.reason ? ` — ${r.reason}` : ''} | ${ms(r.durationMs)} |`
   ).join('\n');
 
   const ghRepo = process.env.GITHUB_REPOSITORY ?? repo;
@@ -122,8 +107,8 @@ async function writeSummary(issueKey: string, repo: string, records: StepRecord[
     '',
     `**Status:** ${pipelineStatus} &nbsp;|&nbsp; **GitHub Issue:** ${issueLink} &nbsp;|&nbsp; **BA:** ${baStatus}`,
     '',
-    '| Step | Type | Outcome | Duration |',
-    '|------|------|---------|----------|',
+    '| Step | Outcome | Duration |',
+    '|------|---------|----------|',
     rows,
   ].join('\n');
 
@@ -151,7 +136,6 @@ export async function runPipeline(
 
     records.push({
       runner: step.runner,
-      type: INLINE_RUNNERS.has(step.runner) ? 'inline' : 'dispatched',
       status: outcome.status,
       reason: outcome.status === 'stop' ? outcome.reason : undefined,
       durationMs,
