@@ -6,7 +6,7 @@
  */
 import type { JiraIssue } from '../../lib/jira/jira-types.js';
 import type { RelatedIssueSummary } from '../../lib/jira/jira-related.js';
-import type { SpecKitWorkspacePrepOptions } from './spec-kit/pipeline.js';
+import type { IssueContextPrepOptions } from './spec-kit/pipeline.js';
 import type { BaOutcome, TicketContext } from '../business-analyst/ba-types.js';
 
 export interface AiTeammateDeps {
@@ -15,7 +15,7 @@ export interface AiTeammateDeps {
   addJiraIssueLabel: (key: string, label: string) => Promise<void>;
   transitionIssueToStatusName: (key: string, status: string) => Promise<void>;
   fetchRelatedIssueSummaries: (key: string, depth: number) => Promise<RelatedIssueSummary[]>;
-  prepareSpecKitWorkspace: (opts: SpecKitWorkspacePrepOptions) => Promise<void>;
+  prepareSpecKitWorkspace: (opts: IssueContextPrepOptions) => Promise<void>;
   createGithubIssue: (owner: string, repo: string, issueKey: string) => Promise<number>;
   dispatchWorkflow: (args: {
     owner: string;

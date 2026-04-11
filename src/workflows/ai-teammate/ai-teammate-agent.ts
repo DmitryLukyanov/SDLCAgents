@@ -4,7 +4,7 @@
 import { Octokit } from '@octokit/rest';
 import { getIssue, addIssueComment, addIssueLabel, transitionIssueToStatusName } from '../../lib/jira/jira-client.js';
 import { fetchRelatedIssueSummaries } from '../../lib/jira/jira-related.js';
-import { prepareSpecKitWorkspaceWithLogging } from './spec-kit/pipeline.js';
+import { prepareIssueContextWithLogging } from './spec-kit/pipeline.js';
 import { analyzeTicket } from '../business-analyst/analyze-ticket.js';
 import { runAiTeammateAgent } from './ai-teammate-core.js';
 import type { AiTeammateDeps } from './runner-types.js';
@@ -18,7 +18,7 @@ const deps: AiTeammateDeps = {
   addJiraIssueLabel: addIssueLabel,
   transitionIssueToStatusName,
   fetchRelatedIssueSummaries,
-  prepareSpecKitWorkspace: prepareSpecKitWorkspaceWithLogging,
+  prepareSpecKitWorkspace: prepareIssueContextWithLogging,
   createGithubIssue: async (owner, repo, issueKey) => {
     await octokit.rest.issues.createLabel({
       owner, repo,

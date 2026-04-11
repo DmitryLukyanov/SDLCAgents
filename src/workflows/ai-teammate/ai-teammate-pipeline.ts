@@ -29,7 +29,6 @@ import type { AiTeammateDeps, BaInlineStep, PipelineStep, RunnerContext, StepOut
 /** spec-kit config as it appears on a print_jira_context_to_stdout pipeline step. */
 interface SpecKitStepConfig {
   enabled?: boolean;
-  cliEnabled?: boolean;
   outputDir?: string;
 }
 
@@ -45,7 +44,6 @@ async function executeStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeamm
       if (sk?.enabled !== false) {
         await deps.prepareSpecKitWorkspace({
           issueKey: ctx.issueKey,
-          cliEnabled: sk?.cliEnabled,
           ...(sk?.outputDir ? { outputDir: sk.outputDir } : {}),
         });
         ctx.specKitContextFile = join(process.cwd(), 'spec-output', ctx.issueKey, 'issueContext.md');
