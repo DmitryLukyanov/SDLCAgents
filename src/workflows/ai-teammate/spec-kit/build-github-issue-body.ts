@@ -8,7 +8,7 @@ import { getIssue } from '../../../lib/jira/jira-client.js';
 import { adfToPlain } from '../../../lib/adf-to-plain.js';
 import { fetchRelatedIssueSummaries, type RelatedIssueSummary } from '../../../lib/jira/jira-related.js';
 import { parseSpecKitBlockFromPlainDescription } from './parse-jira-spec-kit.js';
-import type { SpecKitCliConfig, SpecKitDefaults, SpecKitManifest } from './spec-kit-types.js';
+import type { SpecKitDefaults } from './spec-kit-types.js';
 
 const CONSTITUTION_SOURCE = 'config/spec-kit/constitution.md';
 const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
@@ -41,14 +41,12 @@ export interface PrepareContextOptions {
   cwd?: string;
   outputDir?: string;
   ticketContextDepth?: number;
-  cli: Required<Pick<SpecKitCliConfig, 'version' | 'agent' | 'scriptType'>>;
 }
 
 export interface PrepareContextResult {
   contextFile: string;
   constitutionFile: string;
   outputDir: string;
-  manifestFile: string;
 }
 
 export async function prepareSpecKitContext(opts: PrepareContextOptions): Promise<PrepareContextResult> {
@@ -125,19 +123,5 @@ export async function prepareSpecKitContext(opts: PrepareContextOptions): Promis
   const contextFile = join(outRoot, 'context.md');
   await writeFile(contextFile, contextBody, 'utf8');
 
-  // Write manifest for workflow shell steps
-  const manifest: SpecKitManifest = {
-    issueKey: opts.issueKey,
-    contextFile,
-    constitutionFile: constitutionDest,
-    outputDir: outRoot,
-    version: opts.cli.version,
-    agent: opts.cli.agent,
-    scriptType: opts.cli.scriptType,
-  };
-
-  const manifestFile = join(outRoot, 'manifest.json');
-  await writeFile(manifestFile, JSON.stringify(manifest, null, 2), 'utf8');
-
-  return { contextFile, constitutionFile: constitutionDest, outputDir: outRoot, manifestFile };
+  return { contextFile, constitutionFile: constitutionDest, outputDir: outRoot };
 }

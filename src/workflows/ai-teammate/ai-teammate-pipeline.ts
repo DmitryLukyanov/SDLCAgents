@@ -30,9 +30,6 @@ import type { AiTeammateDeps, BaInlineStep, PipelineStep, RunnerContext, StepOut
 interface SpecKitStepConfig {
   enabled?: boolean;
   cliEnabled?: boolean;
-  version?: string;
-  agent?: string;
-  scriptType?: string;
   outputDir?: string;
 }
 
@@ -50,9 +47,6 @@ async function executeStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeamm
           issueKey: ctx.issueKey,
           cliEnabled: sk?.cliEnabled,
           ...(sk?.outputDir ? { outputDir: sk.outputDir } : {}),
-          cliVersion: sk?.version,
-          cliAgent: sk?.agent,
-          cliScriptType: sk?.scriptType,
         });
         ctx.specKitContextFile = join(process.cwd(), 'spec-output', ctx.issueKey, 'context.md');
       }

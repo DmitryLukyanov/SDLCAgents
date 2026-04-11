@@ -4,7 +4,7 @@
  * 1. **Headless**: {@link writeSpecKitHeadlessArtifacts} — writes constitution + spec.md, plan.md, tasks.md
  *    from a Jira issue + config/spec-kit/defaults.json (no specify CLI).
  * 2. **CLI** (`cliEnabled: true`): {@link prepareSpecKitContext} via prepareSpecKitWorkspaceWithLogging —
- *    context.md + manifest.json for workflow shell steps that invoke the real `specify` CLI.
+ *    context.md + constitution.md for the real `specify` CLI.
  */
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -53,14 +53,10 @@ export interface SpecKitWorkspacePrepOptions {
   issueKey: string;
   /** Override output root (default: spec-output/<issueKey>) */
   outputDir?: string;
-  /** When true, prepare context + manifest for the real specify CLI instead of writing templates. */
+  /** When true, prepare context + constitution for the real specify CLI instead of writing templates. */
   cliEnabled?: boolean;
   /** Ticket context depth for related issues (default 1). */
   ticketContextDepth?: number;
-  /** CLI config (required when cliEnabled is true). */
-  cliVersion?: string;
-  cliAgent?: string;
-  cliScriptType?: string;
 }
 
 /**
@@ -147,16 +143,10 @@ export async function prepareSpecKitWorkspaceWithLogging(opts: SpecKitWorkspaceP
       cwd: opts.cwd,
       outputDir: opts.outputDir ? resolve(opts.cwd ?? process.cwd(), opts.outputDir) : undefined,
       ticketContextDepth: opts.ticketContextDepth,
-      cli: {
-        version: opts.cliVersion ?? 'v0.5.0',
-        agent: opts.cliAgent ?? 'copilot',
-        scriptType: opts.cliScriptType ?? 'sh',
-      },
     };
     const result = await prepareSpecKitContext(ctxOpts);
     console.log(`  → context:      ${result.contextFile}`);
     console.log(`  → constitution:  ${result.constitutionFile}`);
-    console.log(`  → manifest:      ${result.manifestFile}`);
     console.log('  ✅ CLI mode ready — workflow shell steps will run specify commands.\n');
     return;
   }
