@@ -1,6 +1,6 @@
 /** Optional overrides inside a Jira description fenced block. */
 export interface SpecKitJiraOverrides {
-  /** Applied to every Spec-Kit phase (context.md and headless artifacts). */
+  /** Applied to every Spec-Kit phase (issueContext.md and headless artifacts). */
   globalDirective?: string;
   specify?: string;
   plan?: string;

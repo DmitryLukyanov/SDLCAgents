@@ -48,7 +48,7 @@ async function executeStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeamm
           cliEnabled: sk?.cliEnabled,
           ...(sk?.outputDir ? { outputDir: sk.outputDir } : {}),
         });
-        ctx.specKitContextFile = join(process.cwd(), 'spec-output', ctx.issueKey, 'context.md');
+        ctx.specKitContextFile = join(process.cwd(), 'spec-output', ctx.issueKey, 'issueContext.md');
       }
       await runPrintJiraContextToStdout(deps);
       return { status: 'continue' };

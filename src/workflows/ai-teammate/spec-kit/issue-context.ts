@@ -1,5 +1,5 @@
 /**
- * Prepare Jira issue context files (context.md + constitution.md) for the spec-kit CLI.
+ * Prepare Jira issue context files (issueContext.md + constitution.md) for the spec-kit CLI.
  */
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -119,7 +119,7 @@ export async function prepareIssueContext(opts: PrepareContextOptions): Promise<
     '',
   ].join('\n');
 
-  const contextFile = join(outRoot, 'context.md');
+  const contextFile = join(outRoot, 'issueContext.md');
   await writeFile(contextFile, contextBody, 'utf8');
 
   return { contextFile, constitutionFile: constitutionDest, outputDir: outRoot };

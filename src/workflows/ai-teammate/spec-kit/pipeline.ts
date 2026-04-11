@@ -4,7 +4,7 @@
  * 1. **Headless**: {@link writeSpecKitHeadlessArtifacts} — writes constitution + spec.md, plan.md, tasks.md
  *    from a Jira issue + config/spec-kit/defaults.json (no specify CLI).
  * 2. **CLI** (`cliEnabled: true`): {@link prepareIssueContext} via prepareSpecKitWorkspaceWithLogging —
- *    context.md + constitution.md for the real `specify` CLI.
+ *    issueContext.md + constitution.md for the real `specify` CLI.
  */
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';

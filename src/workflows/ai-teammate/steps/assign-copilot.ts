@@ -47,13 +47,13 @@ export async function runAssignCopilot(
     // non-fatal — directive is optional
   }
 
-  // ── Read Jira context from context.md ───────────────────────────
+  // ── Read Jira context from issueContext.md ──────────────────────
   let jiraContext = '';
   if (ctx.specKitContextFile) {
     try {
       jiraContext = await readFile(ctx.specKitContextFile, 'utf8');
     } catch (e) {
-      console.warn('   ⚠️ Could not read context.md (non-fatal):', e);
+      console.warn('   ⚠️ Could not read issueContext.md (non-fatal):', e);
     }
   }
 
