@@ -47,7 +47,7 @@ async function loadDefaults(cwd: string): Promise<SpecKitDefaults> {
   return { specify, plan, tasks, ...(globalDirective ? { globalDirective } : {}) };
 }
 
-/** Options for preparing spec-kit workspace files (CLI manifest path vs headless markdown). */
+/** Options for preparing spec-kit workspace files (CLI issueContext.md vs headless markdown). */
 export interface SpecKitWorkspacePrepOptions {
   cwd?: string;
   issueKey: string;
@@ -132,12 +132,12 @@ export async function writeSpecKitHeadlessArtifacts(opts: SpecKitWorkspacePrepOp
 }
 
 /**
- * Prepares spec-kit workspace output: either CLI context + manifest (for workflow shell steps)
+ * Prepares spec-kit workspace output: either CLI issueContext.md + constitution.md
  * or headless markdown artifacts via {@link writeSpecKitHeadlessArtifacts}.
  */
 export async function prepareSpecKitWorkspaceWithLogging(opts: SpecKitWorkspacePrepOptions): Promise<void> {
   if (opts.cliEnabled) {
-    console.log('\n=== Spec Kit pipeline (CLI mode — preparing context + manifest) ===');
+    console.log('\n=== Spec Kit pipeline (CLI mode — preparing issueContext.md + constitution.md) ===');
     const ctxOpts: PrepareContextOptions = {
       issueKey: opts.issueKey,
       cwd: opts.cwd,
