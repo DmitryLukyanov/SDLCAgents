@@ -144,6 +144,7 @@ jobs:
             echo "Nothing to commit — all files already up to date."
           else
             git commit -m "chore: onboard SDLC pipeline files (project: ${{ inputs.jira_project_key }})"
+            git pull --rebase
             git push
             echo "✅ Changes committed and pushed."
           fi
