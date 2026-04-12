@@ -282,3 +282,8 @@ jobs:
               --head "$BRANCH"
             echo "PR created for branch: $BRANCH"
           fi
+
+      - name: Run spec-kit check
+        run: |
+          uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
+            specify check
