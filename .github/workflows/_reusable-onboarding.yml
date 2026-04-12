@@ -135,6 +135,69 @@ jobs:
           echo ""
           echo "✅ Onboarding complete for project: $PROJ"
 
+      - name: Verify spec-kit configuration
+        run: |
+          echo "=== Spec-Kit Configuration Status ==="
+          ok=true
+
+          check_file() {
+            local label="$1" path="$2"
+            if [ -f "$path" ]; then
+              echo "  ✅ $label"
+            else
+              echo "  ❌ $label  ($path)"
+              ok=false
+            fi
+          }
+
+          check_dir() {
+            local label="$1" path="$2"
+            if [ -d "$path" ]; then
+              echo "  ✅ $label"
+            else
+              echo "  ❌ $label  ($path)"
+              ok=false
+            fi
+          }
+
+          echo ""
+          echo "── spec-kit init ─────────────────────────────"
+          check_file "init-options.json"                .specify/init-options.json
+          check_file "create-new-feature.ps1"           .specify/scripts/powershell/create-new-feature.ps1
+          check_file "check-prerequisites.ps1"          .specify/scripts/powershell/check-prerequisites.ps1
+          check_file "common.ps1"                       .specify/scripts/powershell/common.ps1
+          check_file "spec-template.md"                 .specify/templates/spec-template.md
+          check_file "copilot manifest"                 .specify/integrations/copilot/copilot.manifest.json
+
+          echo ""
+          echo "── GitHub workflows ──────────────────────────"
+          check_file "ai-teammate.yml"                  .github/workflows/ai-teammate.yml
+          check_file "scrum-master.yml"                 .github/workflows/scrum-master.yml
+          check_file "copilot-setup-steps.yml"          .github/workflows/copilot-setup-steps.yml
+          check_file "pr-merged.yml"                    .github/workflows/pr-merged.yml
+
+          echo ""
+          echo "── Agents ────────────────────────────────────"
+          check_dir  ".github/agents/"                  .github/agents
+          check_file "speckit.specify.agent.md"         .github/agents/speckit.specify.agent.md
+          check_file "speckit.plan.agent.md"            .github/agents/speckit.plan.agent.md
+          check_file "speckit.implement.agent.md"       .github/agents/speckit.implement.agent.md
+
+          echo ""
+          echo "── Config ────────────────────────────────────"
+          check_file "defaults.json"                    config/spec-kit/defaults.json
+          check_file "constitution.md"                  config/spec-kit/constitution.md
+          check_file "ai-teammate.config"               config/workflows/ai-teammate/ai-teammate.config
+          check_file "scrum-master.config"              config/workflows/scrum-master/scrum-master.config
+
+          echo ""
+          if [ "$ok" = true ]; then
+            echo "✅ All checks passed — spec-kit is ready."
+          else
+            echo "❌ Some files are missing — review the errors above."
+            exit 1
+          fi
+
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
