@@ -58,7 +58,7 @@ jobs:
             specify init --here --ai copilot --script ps --force
           echo "✅ spec-kit initialised"
 
-      - name: Sparse-checkout SDLCAgents (workflow templates)
+      - name: Sparse-checkout SDLCAgents (workflow templates, agents, prompts)
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.agents_repo }}
@@ -67,8 +67,10 @@ jobs:
           path: _sdlc_agents
           sparse-checkout: |
             .github/consumer-templates
+            .github/agents
+            .github/prompts
 
-      - name: Sparse-checkout reference consumer repo (agents, prompts, configs)
+      - name: Sparse-checkout reference consumer repo (configs)
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.reference_repo }}
@@ -76,8 +78,6 @@ jobs:
           token: ${{ secrets.COPILOT_PAT }}
           path: _sdlc_reference
           sparse-checkout: |
-            .github/agents
-            .github/prompts
             .github/copilot-instructions.md
             config/spec-kit
             config/workflows
@@ -97,13 +97,13 @@ jobs:
             echo "  copied workflow: $fname"
           done
 
-          # ── .github/agents ────────────────────────────────────────
+          # ── .github/agents (from SDLCAgents — source of truth) ───────
           mkdir -p .github/agents
-          cp -r _sdlc_reference/.github/agents/. .github/agents/
+          cp -r _sdlc_agents/.github/agents/. .github/agents/
 
-          # ── .github/prompts ───────────────────────────────────────
+          # ── .github/prompts (from SDLCAgents — source of truth) ───────
           mkdir -p .github/prompts
-          cp -r _sdlc_reference/.github/prompts/. .github/prompts/
+          cp -r _sdlc_agents/.github/prompts/. .github/prompts/
 
           # ── copilot-instructions.md ───────────────────────────────
           cp _sdlc_reference/.github/copilot-instructions.md .github/copilot-instructions.md
