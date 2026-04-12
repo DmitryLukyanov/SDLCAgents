@@ -42,7 +42,7 @@ If you prefer to copy files manually, ensure all of the following are in place:
 | 5 | `.github/prompts/` | All `speckit.*.prompt.md` files | Prompt templates |
 | 6 | `config/spec-kit/constitution.md` | Repo root | Project-specific guidelines for the BA and spec agents |
 | 7 | `config/spec-kit/defaults.json` | Repo root | Global directive and defaults |
-| 8 | `config/workflows/` | `ai-teammate/`, `business-analyst/`, `scrum-master/` configs | Update Jira project key in JQL |
+| 8 | `config/workflows/` | `ai-teammate/`, `scrum-master/` configs | Update Jira project key in JQL |
 
 > **PowerShell note:** `copilot-setup-steps.yml` must include an `Install PowerShell` step (`sudo apt-get install -y powershell`). Without it, the spec-kit scripts silently fail and no spec artifacts (`specs/<branch>/`) are committed during the pipeline run.
 
@@ -66,52 +66,33 @@ The workflows require a **GitHub Classic PAT** stored as the `COPILOT_PAT` repos
 
 ## AI Teammate — Issue & Agent Flow
 
+This matches the TypeScript pipeline in `src/workflows/ai-teammate/` (see `docs/pipeline-flow.md`). BA runs **inline** in the `run_ba_inline` step (GitHub Models / GPT-4o), not via a separate workflow or sub-issue.
+
 ```mermaid
 sequenceDiagram
-    participant AT  as AI Teammate<br/>(_reusable-ai-teammate.yml)
-    participant GH  as GitHub Issues API
-    participant BA  as BA Sub-issue Handler<br/>(ba-subissue.yml)
-    participant COP as Copilot Coding Agent<br/>(sdlc.pipeline)
+    participant AT as AI Teammate<br/>(_reusable-ai-teammate.yml)
+    participant J as Jira
+    participant GH as GitHub Issues
+    participant LLM as BA inline<br/>(analyze-ticket.ts)
+    participant COP as Copilot<br/>(sdlc.pipeline)
 
-    Note over AT: Step 5 — ai-teammate-agent.ts<br/>runPipeline: prepareSpecKitWorkspace<br/>(manifest+context if cliEnabled),<br/>then runTicketProcessor (log Jira)
+    Note over AT: runPipeline steps from ai-teammate.config
 
-    Note over AT: Step 6 — reads manifest<br/>extracts issue_key, context_file
-
-    AT->>GH: POST /issues<br/>title: "{KEY}: Copilot Coding Agent Task"<br/>body: "⏳ BA analysis in progress..."<br/>label: jira:{KEY}
-    GH-->>AT: parent_issue_number, parent_id
-
-    AT->>GH: POST /issues<br/>title: "{KEY}: BA Analysis"<br/>label: ba-analysis
-    GH-->>AT: ba_issue_number, ba_issue_id
-
-    AT->>GH: POST /issues/{parent}/sub_issues<br/>sub_issue_id: ba_issue_id
-    Note over GH: BA sub-issue linked<br/>as child of parent
-
-    GH-)BA: label "ba-analysis" event<br/>triggers ba-subissue.yml
-
-    Note over AT: Step B — polls every 30s<br/>GET /issues/{ba_number}<br/>waiting for state == "closed"
-
-    BA->>BA: Fetch Jira data
-    BA->>BA: Call GPT-4o
-    BA->>GH: POST comment with BA result JSON
-    BA->>GH: PATCH /issues/{ba_number} state=closed
-    BA->>BA: Add label ba_analyzed to Jira
-
-    GH-->>AT: state == "closed" ✅
-
-    Note over AT: Step C — reads BA result comment<br/>extracts JSON between markers
-
+    AT->>J: ensure_jira_fields_expected — summary + description
+    AT->>AT: print_jira_context — spec-output/{KEY}/issueContext.md
+    AT->>GH: create_github_issue — placeholder + jira:KEY label
+    AT->>J: run_ba_inline — ticket + related context
+    AT->>LLM: analyzeTicket → JSON outcome
     alt BA complete
-        Note over AT: Step 7 — builds Copilot prompt<br/>injects BA fields into template
-
-        AT->>GH: PATCH /issues/{parent_number}<br/>body: full Copilot prompt<br/>assignees: copilot-swe-agent[bot]<br/>agent_assignment: sdlc.pipeline
-        GH-->>COP: issue assigned → agent starts
-
-        COP->>COP: spec-kit workflow<br/>(specify→clarify→plan→tasks→implement)
-        COP->>COP: code review loop
-        COP->>GH: gh pr ready
-    else BA incomplete or timed out
-        AT->>GH: PATCH /issues/{parent_number}<br/>state=closed, reason=not_planned
-        Note over AT: Jira ticket → Blocked
+        LLM-->>AT: five-field result
+        AT->>J: optional ba_analyzed label
+        AT->>GH: assign_copilot — body + copilot-swe-agent[bot]
+        GH-->>COP: agent session starts
+        COP->>COP: spec-kit → implement → PR
+    else BA incomplete
+        LLM-->>AT: questions / partial
+        AT->>J: comment + transition Blocked
+        AT->>GH: close placeholder not_planned
     end
 ```
 
@@ -122,58 +103,30 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
+    participant SM as Scrum Master
+    participant AT as AI Teammate
+    participant J as Jira
+    participant GH as GitHub
+    participant COP as Copilot
+    participant PM as PR merged workflow
 
-    participant SM  as Scrum Master
-    participant AT  as AI Teammate
-    participant BA  as BA Sub-issue Handler
-    participant COP as Copilot Agent
-    participant MR  as PR Merged
+    SM->>SM: Load scrum-master.config, search Jira
+    SM->>J: transition + sm_triggered (per rule)
+    SM->>AT: workflow_dispatch + encoded_config
 
-    SM->>SM: Load rules from scrum-master.config
-    SM->>SM: Search Jira for tickets (To Do)
-    SM->>SM: Update Jira status: To Do → In Progress
-    SM->>SM: Add label sm_triggered to Jira
-    SM->>AT: Dispatch ai-teammate workflow
-
-    AT->>AT: Prepare spec-kit workspace (Node pipeline)
-    AT->>AT: Read manifest
-    AT->>AT: Create parent GitHub issue
-    AT->>AT: Create BA sub-issue (label: ba-analysis)
-    AT->>AT: Link BA sub-issue as child of parent
-    AT-)BA: label ba-analysis triggers ba-subissue.yml
-
-    BA->>BA: Read Jira ticket (summary, description, comments)
-    BA->>BA: Read related Jira tickets
-    BA->>BA: Call GPT-4o to analyze requirements
-    BA->>BA: Post BA result comment to sub-issue
-    BA->>BA: Add label ba_analyzed to Jira ticket
-    BA->>BA: Post BA result comment to Jira ticket
-    BA->>AT: Close BA sub-issue
-
-    AT->>AT: Poll until sub-issue closed (every 30s, up to 20 min)
-    AT->>AT: Read BA result from sub-issue comment
-
+    AT->>J: validate fields, build spec context
+    AT->>GH: placeholder issue
+    Note over AT: run_ba_inline — GitHub Models in-process
     alt BA complete
-        AT->>AT: Build Copilot prompt from BA result
-        AT->>AT: Update parent issue with full prompt
-        AT->>COP: Assign Copilot agent (sdlc.pipeline)
-
-        COP->>COP: Read parent issue
-        COP->>COP: Create feature branch
-        COP->>COP: Write code and tests
-        COP->>COP: Code review
-        COP->>COP: Mark PR as ready
-        COP->>MR: PR ready for review (human approves & merges)
-
-    else BA incomplete or timed out
-        AT->>AT: Post clarification questions to Jira
-        AT->>AT: Update Jira status: In Progress → Blocked
-        AT->>AT: Close parent GitHub issue as not planned
+        AT->>GH: Copilot prompt + assignee
+        COP->>GH: branch, implement, PR (jira:KEY)
+    else BA incomplete
+        AT->>J: questions, Blocked
+        AT->>GH: close issue not_planned
     end
 
-    MR->>MR: PR approved and merged (manual)
-    MR->>MR: Close linked GitHub issue
-    MR->>MR: Update Jira status: In Progress → Done
+    Note over PM: Consumer wires PR merge → _reusable-pr-merged.yml
+    PM->>J: Done + comment
 ```
 
 ---
@@ -182,110 +135,35 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    %% ── Scrum Master ──────────────────────────────────────────────
-    subgraph SM [" 🔁  Scrum Master — scrum-master.yml"]
-        SM1[Load rules from scrum-master.config]
-        SM2[Search Jira for tickets\nwith status 'To Do']
-        SM3[Update Jira status:\nTo Do → In Progress]
-        SM4[Add label 'sm_triggered'\nto Jira ticket]
-        SM5[Dispatch ai-teammate workflow]
-        SM1 --> SM2 --> SM3 --> SM4 --> SM5
+    subgraph SM [Scrum Master — scrum-master.yml]
+        SM1[Load scrum-master.config]
+        SM2[Search Jira per rules]
+        SM3[Dispatch consumer ai-teammate.yml]
+        SM1 --> SM2 --> SM3
     end
 
-    %% ── AI Teammate — pre-BA ──────────────────────────────────────
-    subgraph AT_PRE [" 🤖  AI Teammate — ai-teammate.yml (Steps 5, 6, A)"]
-        AT2[prepareSpecKitWorkspace +\nrunTicketProcessor]
-        AT3[Read manifest:\nissue key, context file]
-        AT4[Create GitHub issue:\nparent placeholder]
-        AT5[Create GitHub sub-issue:\nBA Analysis]
-        AT6[Link BA sub-issue\nas child of parent]
-        AT2 --> AT3 --> AT4 --> AT5 --> AT6
+    subgraph AT [AI Teammate — ai-teammate-agent.ts]
+        A1[ensure_jira_fields_expected]
+        A2[print_jira_context_to_stdout\n+ spec-output issueContext.md]
+        A3[create_github_issue]
+        A4[run_ba_inline → GPT-4o]
+        A5[assign_copilot]
+        A1 --> A2 --> A3 --> A4 --> A5
     end
 
-    SM5 --> AT2
+    SM3 --> A1
 
-    %% ── BA Sub-issue Handler ──────────────────────────────────────
-    subgraph BA [" 🔍  BA Sub-issue Handler — ba-subissue.yml"]
-        BA2[Read Jira ticket:\nsummary, description, comments]
-        BA3[Read related Jira tickets]
-        BA4[Call GPT-4o to analyze\nticket requirements]
-        BA5[Post BA result comment\nto sub-issue]
-        BA6[Close BA sub-issue]
-        BA2 --> BA3 --> BA4 --> BA5 --> BA6
+    A4 -->|incomplete| X1[Jira comment + Blocked]
+    A4 -->|incomplete| X2[Close GitHub issue not_planned]
+    X1 --> END_BAD([End])
+
+    A5 --> COP[Copilot — sdlc.pipeline.agent.md\n→ PR with jira:KEY]
+
+    subgraph PM [PR merged — pr-merged.yml]
+        P1[GitHub issue cleanup]
+        P2[Jira → Done]
+        P1 --> P2
     end
 
-    AT6 -- "label 'ba-analysis'\ntriggers ba-subissue.yml" --> BA2
-
-    %% ── AI Teammate — poll & route ────────────────────────────────
-    subgraph AT_POLL [" 🤖  AI Teammate — Steps B, C"]
-        POLL[Poll BA sub-issue state every 30s\nuntil closed or 20 min timeout]
-        READ[Read BA result from\nsub-issue comment]
-        ROUTE{BA result?}
-        POLL --> READ --> ROUTE
-    end
-
-    BA6 --> POLL
-
-    %% ── Incomplete path ───────────────────────────────────────────
-    subgraph BLOCKED [" 🚫  Blocked"]
-        BLOCK1[Add clarification questions\nas Jira comment]
-        BLOCK2[Update Jira status:\nIn Progress → Blocked]
-        BLOCK3[Add label 'ba_analyzed'\nto Jira ticket]
-        BLOCK4[Close parent GitHub issue\nas not planned]
-        END_BLOCK([End])
-        BLOCK1 --> BLOCK2 --> BLOCK3 --> BLOCK4 --> END_BLOCK
-    end
-
-    ROUTE -- "BA incomplete\nor timed out" --> BLOCK1
-
-    %% ── AI Teammate — post-BA ─────────────────────────────────────
-    subgraph AT_POST [" 🤖  AI Teammate resumed — Steps 7, 8"]
-        AT8[Build Copilot prompt\nfrom BA result]
-        AT9[Update parent GitHub issue\nwith full Copilot prompt]
-        AT10[Assign Copilot coding agent\nsdlc.pipeline]
-        AT8 --> AT9 --> AT10
-    end
-
-    ROUTE -- "BA complete" --> AT8
-
-    %% ── Copilot Coding Agent ──────────────────────────────────────
-    subgraph COP [" 💻  Copilot Coding Agent — sdlc.pipeline.agent.md"]
-        COP2[Read parent issue\nspecify → clarify → plan → tasks → implement]
-        COP3[Create feature branch]
-        COP4[Write code and tests]
-        COP5[Code review]
-        COP6[Open draft PR]
-        COP2 --> COP3 --> COP4 --> COP5 --> COP6
-    end
-
-    AT10 --> COP2
-
-    %% ── Mark PR Ready ─────────────────────────────────────────────
-    subgraph MR [" ✅  PR Merged — pr-merged.yml"]
-        MR2[Close parent GitHub issue]
-        MR3[Update Jira status:\nIn Progress → Done]
-        END_OK([End])
-        MR2 --> MR3 --> END_OK
-    end
-
-    COP6 --> MR2
-
-    %% ── Subgraph styles ───────────────────────────────────────────
-    style SM       fill:#e8f5e9,stroke:#43a047,color:#1b5e20
-    style AT_PRE   fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
-    style BA       fill:#f3e5f5,stroke:#8e24aa,color:#4a148c
-    style AT_POLL  fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
-    style BLOCKED  fill:#fce4ec,stroke:#e53935,color:#b71c1c
-    style AT_POST  fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
-    style COP      fill:#e0f7fa,stroke:#00acc1,color:#006064
-    style MR       fill:#e8f5e9,stroke:#43a047,color:#1b5e20
-
-    %% ── Node styles ───────────────────────────────────────────────
-    classDef action fill:#fff,stroke:#90a4ae,color:#263238
-    classDef decision fill:#fff8e1,stroke:#f9a825,color:#33691e
-    classDef terminal fill:#ef9a9a,stroke:#e53935,color:#b71c1c,font-weight:bold
-
-    class SM1,SM2,SM3,SM4,SM5,AT2,AT3,AT4,AT5,AT6,BA2,BA3,BA4,BA5,BA6,POLL,READ,AT8,AT9,AT10,COP2,COP3,COP4,COP5,COP6,MR2,MR3,BLOCK1,BLOCK2,BLOCK3,BLOCK4 action
-    class ROUTE decision
-    class END_BLOCK,END_OK terminal
+    COP --> PM
 ```

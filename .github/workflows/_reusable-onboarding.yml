@@ -152,7 +152,7 @@ jobs:
           cp _sdlc_reference/config/spec-kit/constitution.md config/spec-kit/constitution.md
 
           # ── config/workflows ──────────────────────────────────────
-          for dir in ai-teammate business-analyst scrum-master; do
+          for dir in ai-teammate scrum-master; do
             mkdir -p "config/workflows/$dir"
             src="_sdlc_reference/config/workflows/$dir"
             if [ -d "$src" ]; then

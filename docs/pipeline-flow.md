@@ -103,10 +103,9 @@
 │  │  Step: print_jira_context_to_stdout                                               │  │
 │  │  src/workflows/ai-teammate/steps/print-jira-context-to-stdout.ts                  │  │
 │  │                                                                                   │  │
-│  │  prepareSpecKitWorkspace() → spec-output/{key}/                                   │  │
-│  │    cliEnabled=true  → manifest.json + context.md + constitution.md                │  │
-│  │    cliEnabled=false → constitution.md + spec.md + plan.md + tasks.md              │  │
-│  │  ctx.specKitContextFile ← spec-output/{key}/context.md                            │  │
+│  │  prepareSpecKitWorkspace() → prepareIssueContext() → spec-output/{key}/            │  │
+│  │    issueContext.md (Jira + directives) + constitution.md (from config/spec-kit)    │  │
+│  │  ctx.specKitContextFile ← spec-output/{key}/issueContext.md                       │  │
 │  │  runPrintJiraContextToStdout() — logs Jira fields + related tickets to stdout     │  │
 │  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
 │                               │                                                          │
@@ -142,7 +141,7 @@
 │  │  src/workflows/ai-teammate/steps/assign-copilot.ts                                │  │
 │  │                                                                                   │  │
 │  │  read config/spec-kit/defaults.json → global directive                            │  │
-│  │  read ctx.specKitContextFile (context.md) → {{JIRA_CONTEXT}}                     │  │
+│  │  read ctx.specKitContextFile (issueContext.md) → {{JIRA_CONTEXT}}                │  │
 │  │  fill src/workflows/ai-teammate/templates/github-issue-with-copilot.md            │  │
 │  │  updateGithubIssue(issueNumber, {                                                 │  │
 │  │    body: filledTemplate,                                                          │  │
@@ -230,7 +229,7 @@
 │  - (No description → transition to "In Review" + comment → stop)                     │
 │                                                                                       │
 │  Step: print_jira_context_to_stdout                                                   │
-│  - Ran spec-kit CLI → spec-output/{KEY}/context.md + manifest.json                   │
+│  - prepareIssueContext → spec-output/{KEY}/issueContext.md + constitution.md         │
 │  - Logged Jira ticket fields and related tickets to stdout                            │
 │                                                                                       │
 │  Step: create_github_issue                                                            │

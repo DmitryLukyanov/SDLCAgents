@@ -17,13 +17,6 @@ export interface AiTeammateDeps {
   fetchRelatedIssueSummaries: (key: string, depth: number) => Promise<RelatedIssueSummary[]>;
   prepareSpecKitWorkspace: (opts: IssueContextPrepOptions) => Promise<void>;
   createGithubIssue: (owner: string, repo: string, issueKey: string) => Promise<number>;
-  dispatchWorkflow: (args: {
-    owner: string;
-    repo: string;
-    workflow_id: string;
-    ref: string;
-    inputs: Record<string, string>;
-  }) => Promise<void>;
   analyzeTicket: (ticketCtx: TicketContext, githubToken: string, model?: string) => Promise<BaOutcome>;
   updateGithubIssue: (owner: string, repo: string, issueNumber: number, payload: {
     body: string;

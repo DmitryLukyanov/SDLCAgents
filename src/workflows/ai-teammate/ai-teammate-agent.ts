@@ -36,9 +36,6 @@ const deps: AiTeammateDeps = {
     });
     return response.data.number;
   },
-  dispatchWorkflow: async (args) => {
-    await octokit.rest.actions.createWorkflowDispatch(args);
-  },
   analyzeTicket,
   updateGithubIssue: async (owner, repo, issueNumber, payload) => {
     await octokit.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {

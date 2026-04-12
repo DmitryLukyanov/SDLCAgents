@@ -84,10 +84,6 @@ const mockDeps: AiTeammateDeps = {
     return 999;
   },
 
-  dispatchWorkflow: async (args) => {
-    console.log(`[mock] dispatchWorkflow(${args.workflow_id})`);
-  },
-
   analyzeTicket: async (ticketCtx) => {
     console.log(`[mock] analyzeTicket(${ticketCtx.issueKey}) → complete`);
     return {

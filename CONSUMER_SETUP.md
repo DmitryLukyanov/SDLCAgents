@@ -30,11 +30,7 @@ Copy the following workflow files from `.github/workflows/` into your repo's `.g
 
 ## Step 2 — Copy config files
 
-Copy the config templates into your repo:
-
-```
-consumer-templates/config/  →  config/
-```
+Copy the `config/` directory from the [SDLCAgents](https://github.com/DmitryLukyanov/SDLCAgents) repository root into your repo as `config/` (layout: `config/spec-kit/`, `config/workflows/`).
 
 Then customize:
 

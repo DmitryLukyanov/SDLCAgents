@@ -8,7 +8,6 @@
   "scripts": {
     "scrum-master": "tsx src/workflows/scrum-master/scrum-master.ts",
     "scrum-master:debug": "tsx tests/scrum-agent/scrum-master.local-debug.ts",
-"business-analyst": "tsx src/workflows/business-analyst/business-analyst.ts",
     "ai-teammate-agent": "tsx src/workflows/ai-teammate/ai-teammate-agent.ts",
     "ai-teammate:debug": "tsx tests/ai-teammate/ai-teammate.local-debug.ts",
     "check": "tsc --noEmit"

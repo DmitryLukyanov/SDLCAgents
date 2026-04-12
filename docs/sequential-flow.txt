@@ -75,13 +75,11 @@ AI TEAMMATE — one run per dispatched issue
           runPipeline(issueKey, steps, deps)     [ai-teammate-pipeline.ts]
             (steps from config/workflows/ai-teammate/ai-teammate.config)
             For print_jira_context_to_stdout step (typical):
-              deps.prepareSpecKitWorkspace(opts)  [agent wires → prepareSpecKitWorkspaceWithLogging,
-                                                      src/agents/spec-kit/pipeline.ts]
-                cliEnabled true  → prepareSpecKitContext()
-                  manifest.json, context.md, constitution.md → spec-output/{key}/
-                cliEnabled false → writeSpecKitHeadlessArtifacts()
-                  constitution.md, spec.md, plan.md, tasks.md → spec-output/{key}/
-              runTicketProcessor(deps)            [steps/print-jira-context-to-stdout.ts]
+              deps.prepareSpecKitWorkspace(opts)  [ai-teammate-agent wires →
+                                                      prepareIssueContextWithLogging in spec-kit/pipeline.ts]
+                → prepareIssueContext() in spec-kit/issue-context.ts
+                  issueContext.md + constitution.md → spec-output/{key}/
+              runPrintJiraContextToStdout(deps)   [steps/print-jira-context-to-stdout.ts]
                 getIssue(issueKey, fields)        [jira-client.ts]
                 statusAllowsRead(required status) [jira-status.ts] — exits if mismatch
                 fetchRelatedIssueSummaries(...)   [jira-related.ts] if TICKET_CONTEXT_DEPTH >= 1
@@ -125,7 +123,7 @@ AI TEAMMATE — one run per dispatched issue
   Step: assign_copilot
     --> [TS:src/workflows/ai-teammate/steps/assign-copilot.ts] runAssignCopilot()
           read config/spec-kit/defaults.json → global directive
-          read ctx.specKitContextFile (context.md) → {{JIRA_CONTEXT}}
+          read ctx.specKitContextFile (issueContext.md) → {{JIRA_CONTEXT}}
           fill template: src/workflows/ai-teammate/templates/github-issue-with-copilot.md
             {{ISSUE_KEY}}, {{DIRECTIVE_PART}}, {{SPECIFY_INPUT}}, {{CLARIFY_INPUT}},
             {{PLAN_INPUT}}, {{TASKS_INPUT}}, {{IMPLEMENT_INPUT}}
@@ -143,7 +141,7 @@ CONFIG / SECRETS (reference)
   SM rules file:      config/workflows/scrum-master/scrum-master.config  (SmRule[], SmConfig)
                       workflowFile: "ai-teammate.yml"
   Agent JSON:         config/workflows/ai-teammate/ai-teammate.config
-  BA agent def:       .github/agents/ba.analyst.agent.md  (SDLCClient)
+  BA (inline):        src/workflows/business-analyst/analyze-ticket.ts → GitHub Models (no separate BA workflow)
   Coding agent def:   .github/agents/sdlc.pipeline.agent.md  (SDLCClient)
   GitHub secrets:     JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
                       COPILOT_PAT (GitHub Models API + issues write)
