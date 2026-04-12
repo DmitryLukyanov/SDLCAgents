@@ -29,7 +29,7 @@ function authHeader(): string {
   return `Basic ${b64}`;
 }
 
-export async function jiraFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function jiraFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const url = path.startsWith('http')
     ? path
     : `${base()}${path.startsWith('/') ? '' : '/'}${path}`;
@@ -163,13 +163,13 @@ export async function getIssue(issueKey: string, fields: string[]): Promise<Jira
   return jiraFetch<JiraIssue>(path);
 }
 
-export async function getTransitions(issueKey: string): Promise<JiraTransitionsResponse> {
+async function getTransitions(issueKey: string): Promise<JiraTransitionsResponse> {
   return jiraFetch<JiraTransitionsResponse>(
     `/rest/api/3/issue/${encodeURIComponent(issueKey)}/transitions`,
   );
 }
 
-export async function transitionIssue(issueKey: string, transitionId: string): Promise<void> {
+async function transitionIssue(issueKey: string, transitionId: string): Promise<void> {
   await jiraFetch<unknown>(`/rest/api/3/issue/${encodeURIComponent(issueKey)}/transitions`, {
     method: 'POST',
     body: JSON.stringify({

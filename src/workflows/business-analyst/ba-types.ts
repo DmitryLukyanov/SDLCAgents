@@ -30,12 +30,12 @@ export interface BaAnalysisResult {
 /*  Outcome                                                            */
 /* ------------------------------------------------------------------ */
 
-export interface BaOutcomeComplete {
+interface BaOutcomeComplete {
   status: 'complete';
   result: BaAnalysisResult;
 }
 
-export interface BaOutcomeIncomplete {
+interface BaOutcomeIncomplete {
   status: 'incomplete';
   /** Markdown-formatted questions to post back to Jira. */
   questions: string;

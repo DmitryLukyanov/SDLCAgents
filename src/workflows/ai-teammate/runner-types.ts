@@ -76,8 +76,3 @@ export interface BaInlineStep extends PipelineStep {
   addLabel?: string;
 }
 
-/** Top-level shape of a pipeline agent config. */
-export interface PipelineAgentParams {
-  runner: 'pipeline';
-  steps: PipelineStep[];
-}

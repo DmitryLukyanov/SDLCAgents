@@ -7,14 +7,14 @@ import type { RelatedIssueSummary } from '../../lib/jira/jira-related.js';
 import { adfToPlain } from '../../lib/adf-to-plain.js';
 import type { JiraComment, RelatedIssueBrief } from './ba-types.js';
 
-export const BA_COMMENT_MARKERS = [
+const BA_COMMENT_MARKERS = [
   '🤖 Business Analyst — Missing Information',
   'Business Analyst — Missing Information',
   'Business Analyst analysis complete',
   'Ticket taken into processing',
 ];
 
-export function isBAGeneratedComment(body: string): boolean {
+function isBAGeneratedComment(body: string): boolean {
   return BA_COMMENT_MARKERS.some((marker) => body.includes(marker));
 }
 

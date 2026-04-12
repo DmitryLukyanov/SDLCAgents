@@ -11,7 +11,7 @@
 import { adfToPlain } from '../../../lib/adf-to-plain.js';
 import type { AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types.js';
 
-export interface CheckDescriptionOnEmpty {
+interface CheckDescriptionOnEmpty {
   action: 'jira_transition';
   /** Target Jira status name (case-insensitive match), e.g. "In Review". */
   status: string;
@@ -19,7 +19,7 @@ export interface CheckDescriptionOnEmpty {
   comment: string;
 }
 
-export interface CheckDescriptionStep {
+interface CheckDescriptionStep {
   runner: 'ensure_jira_fields_expected';
   onEmpty: CheckDescriptionOnEmpty;
 }
