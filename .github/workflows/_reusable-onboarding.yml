@@ -213,31 +213,40 @@ jobs:
           BRANCH="onboarding/${{ inputs.jira_project_key }}"
           git checkout -b "$BRANCH"
           git commit -m "chore: onboard SDLC pipeline files (project: ${{ inputs.jira_project_key }})"
-          git push origin "$BRANCH"
+          git push origin "$BRANCH" --force
 
-          gh pr create \
-            --title "chore: onboard SDLC pipeline (project: ${{ inputs.jira_project_key }})" \
-            --body "$(cat <<'EOF'
-          ## SDLC Pipeline Onboarding
+          PR_BODY="$(cat <<'EOF'
+## SDLC Pipeline Onboarding
 
-          This PR was created automatically by the onboarding workflow.
+This PR was created automatically by the onboarding workflow.
 
-          ### What's included
-          - `.specify/` — spec-kit scripts, templates, and integrations
-          - `.github/workflows/` — ai-teammate, scrum-master, copilot-setup-steps, pr-merged
-          - `.github/agents/` — spec-kit and pipeline agent files
-          - `.github/prompts/` — spec-kit prompt files
-          - `.github/copilot-instructions.md`
-          - `config/spec-kit/` — defaults and constitution
-          - `config/workflows/` — ai-teammate and scrum-master configs
+### What's included
+- `.specify/` — spec-kit scripts, templates, and integrations
+- `.github/workflows/` — ai-teammate, scrum-master, copilot-setup-steps, pr-merged
+- `.github/agents/` — spec-kit and pipeline agent files
+- `.github/prompts/` — spec-kit prompt files
+- `.github/copilot-instructions.md`
+- `config/spec-kit/` — defaults and constitution
+- `config/workflows/` — ai-teammate and scrum-master configs
 
-          ### Next steps
-          1. Review the config files under `config/workflows/` for your project settings
-          2. Ensure the `COPILOT_PAT` secret is set in this repo
-          3. Merge this PR to activate the pipeline
-          EOF
-          )" \
-            --base master \
-            --head "$BRANCH"
+### Next steps
+1. Review the config files under `config/workflows/` for your project settings
+2. Ensure the `COPILOT_PAT` secret is set in this repo
+3. Merge this PR to activate the pipeline
+EOF
+          )"
 
-          echo "✅ PR created for branch: $BRANCH"
+          # Reopen existing PR if present (closed without merging), otherwise create new one
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --state all --json number,state --jq '.[0] | select(.state != "MERGED") | .number')
+          if [ -n "$EXISTING_PR" ]; then
+            gh pr reopen "$EXISTING_PR" 2>/dev/null || true
+            gh pr edit "$EXISTING_PR" --body "$PR_BODY"
+            echo "✅ Reopened and updated PR #$EXISTING_PR for branch: $BRANCH"
+          else
+            gh pr create \
+              --title "chore: onboard SDLC pipeline (project: ${{ inputs.jira_project_key }})" \
+              --body "$PR_BODY" \
+              --base master \
+              --head "$BRANCH"
+            echo "✅ PR created for branch: $BRANCH"
+          fi
