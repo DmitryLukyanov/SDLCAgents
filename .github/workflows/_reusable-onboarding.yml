@@ -167,7 +167,7 @@ jobs:
           check_file "check-prerequisites.ps1"          .specify/scripts/powershell/check-prerequisites.ps1
           check_file "common.ps1"                       .specify/scripts/powershell/common.ps1
           check_file "spec-template.md"                 .specify/templates/spec-template.md
-          check_file "copilot manifest"                 .specify/integrations/copilot/copilot.manifest.json
+          check_file "copilot manifest"                 .specify/integrations/copilot.manifest.json
 
           echo ""
           echo "── GitHub workflows ──────────────────────────"
