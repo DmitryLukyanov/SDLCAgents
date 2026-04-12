@@ -54,6 +54,11 @@ jobs:
 
       - name: Run spec-kit init
         run: |
+          # Remove existing spec-kit managed dirs so _install_shared_infra always
+          # copies fresh files and records them in speckit.manifest.json.
+          # Without this, on re-runs all files are "skipped" (already exist) and
+          # the manifest is saved as {"files": {}}.
+          rm -rf .specify/scripts .specify/templates
           uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
             specify init --here --ai copilot --script ps --force
           echo "✅ spec-kit initialised"
@@ -110,6 +115,31 @@ jobs:
           # ── .github/prompts (from SDLCAgents — source of truth) ───────
           mkdir -p .github/prompts
           cp -r _sdlc_agents/.github/prompts/. .github/prompts/
+
+          # ── Re-hash manifests after SDLCAgents overrides ──────────────
+          # spec-kit recorded hashes for its generated files; now that we've
+          # overwritten .specify/scripts/, .github/agents/, and
+          # .github/prompts/ with our own files, update both manifests so
+          # hashes match what's on disk — otherwise `specify integration
+          # uninstall` would see mismatches and silently skip those files.
+          python3 - <<'PYEOF'
+          import json, hashlib
+          from pathlib import Path
+
+          for key in ('speckit', 'copilot'):
+              mp = Path('.specify/integrations/' + key + '.manifest.json')
+              if not mp.exists():
+                  continue
+              manifest = json.loads(mp.read_text())
+              files = {}
+              for rel_path in manifest.get('files', {}):
+                  p = Path(rel_path)
+                  if p.exists():
+                      files[rel_path] = hashlib.sha256(p.read_bytes()).hexdigest()
+              manifest['files'] = files
+              mp.write_text(json.dumps(manifest, indent=2) + '\n')
+              print('  updated ' + key + '.manifest.json (' + str(len(files)) + ' files re-hashed)')
+          PYEOF
 
           # ── copilot-instructions.md ───────────────────────────────
           cp _sdlc_reference/.github/copilot-instructions.md .github/copilot-instructions.md
