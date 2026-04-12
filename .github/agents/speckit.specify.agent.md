@@ -70,7 +70,7 @@ Given that feature description, do this:
      - "Create a dashboard for analytics" → "analytics-dashboard"
      - "Fix payment processing timeout bug" → "fix-payment-timeout"
 
-2. **Generate the feature directory and spec file path** by running the script with `--dry-run`, `--short-name`, and `--json`. The `--dry-run` flag calculates naming and paths **without creating directories or files** — the agent creates those itself after filling them with content. In sequential mode, do NOT pass `--number` — the script auto-detects the next available number. In timestamp mode, the script generates a `YYYYMMDD-HHMMSS` prefix automatically:
+2. **Generate the feature directory and spec file path** by running the script with `--dry-run`, `--short-name`, and `--json`. The `--dry-run` flag calculates naming and paths **without creating a branch or modifying the filesystem** — the branch is already created by the pipeline. In sequential mode, do NOT pass `--number` — the script auto-detects the next available number. In timestamp mode, the script generates a `YYYYMMDD-HHMMSS` prefix automatically:
 
    **Branch numbering mode**: Before running the script, check if `.specify/init-options.json` exists and read the `branch_numbering` value.
    - If `"timestamp"`, add `--timestamp` (Bash) or `-Timestamp` (PowerShell) to the script invocation
@@ -82,12 +82,12 @@ Given that feature description, do this:
    - PowerShell (timestamp): `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" -DryRun -Json -Timestamp -ShortName "user-auth" "Add user authentication"`
 
    **IMPORTANT**:
-   - Always include `--dry-run` (Bash) or `-DryRun` (PowerShell) — the agent creates the spec file itself after filling it with content
+   - Always include `--dry-run` (Bash) or `-DryRun` (PowerShell) — the branch already exists; do NOT create a new one
    - Do NOT pass `--number` — the script determines the correct next number automatically
    - Always include the JSON flag (`--json` for Bash, `-Json` for PowerShell) so the output can be parsed reliably
    - You must only ever run this script once per feature
    - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for
-   - The JSON output will contain BRANCH_NAME and SPEC_FILE paths — use SPEC_FILE to know where to write
+   - The JSON output will contain BRANCH_NAME and SPEC_FILE paths — use SPEC_FILE to know where to write, but do NOT switch branches
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
 
 
@@ -244,7 +244,7 @@ Given that feature description, do this:
        ```
    - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
-**NOTE:** The script is run with `--dry-run` — it does NOT modify the filesystem. Use the JSON output to determine paths, then create the spec directory and file yourself with the generated content.
+**NOTE:** The script is run with `--dry-run` — it does NOT create a branch or modify the filesystem. The branch is already created by the SDLC pipeline. Use the JSON output to determine paths, then create the spec directory and file yourself.
 
 ## Quick Guidelines
 

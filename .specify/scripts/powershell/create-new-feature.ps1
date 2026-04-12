@@ -3,6 +3,7 @@
 [CmdletBinding()]
 param(
     [switch]$Json,
+    [switch]$AllowExistingBranch,
     [switch]$DryRun,
     [string]$ShortName,
     [Parameter()]
@@ -20,7 +21,8 @@ if ($Help) {
     Write-Host ""
     Write-Host "Options:"
     Write-Host "  -Json               Output in JSON format"
-    Write-Host "  -DryRun             Compute branch name and paths without creating directories or files"
+    Write-Host "  -DryRun             Compute branch name and paths without creating branches, directories, or files"
+    Write-Host "  -AllowExistingBranch  Switch to branch if it already exists instead of failing"
     Write-Host "  -ShortName <name>   Provide a custom short name (2-4 words) for the branch"
     Write-Host "  -Number N           Specify branch number manually (overrides auto-detection)"
     Write-Host "  -Timestamp          Use timestamp prefix (YYYYMMDD-HHMMSS) instead of sequential numbering"
@@ -289,6 +291,44 @@ $featureDir = Join-Path $specsDir $branchName
 $specFile = Join-Path $featureDir 'spec.md'
 
 if (-not $DryRun) {
+    if ($hasGit) {
+        $branchCreated = $false
+        try {
+            git checkout -q -b $branchName 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $branchCreated = $true
+            }
+        } catch {
+            # Exception during git command
+        }
+
+        if (-not $branchCreated) {
+            # Check if branch already exists
+            $existingBranch = git branch --list $branchName 2>$null
+            if ($existingBranch) {
+                if ($AllowExistingBranch) {
+                    # Switch to the existing branch instead of failing
+                    git checkout -q $branchName 2>$null | Out-Null
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Error "Error: Branch '$branchName' exists but could not be checked out. Resolve any uncommitted changes or conflicts and try again."
+                        exit 1
+                    }
+                } elseif ($Timestamp) {
+                    Write-Error "Error: Branch '$branchName' already exists. Rerun to get a new timestamp or use a different -ShortName."
+                    exit 1
+                } else {
+                    Write-Error "Error: Branch '$branchName' already exists. Please use a different feature name or specify a different number with -Number."
+                    exit 1
+                }
+            } else {
+                Write-Error "Error: Failed to create git branch '$branchName'. Please check your git configuration and try again."
+                exit 1
+            }
+        }
+    } else {
+        Write-Warning "[specify] Warning: Git repository not detected; skipped branch creation for $branchName"
+    }
+
     New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
 
     if (-not (Test-Path -PathType Leaf $specFile)) {
