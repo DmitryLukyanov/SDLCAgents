@@ -4,6 +4,7 @@
 param(
     [switch]$Json,
     [switch]$AllowExistingBranch,
+    [switch]$NoBranch,
     [switch]$DryRun,
     [string]$ShortName,
     [Parameter()]
@@ -23,6 +24,7 @@ if ($Help) {
     Write-Host "  -Json               Output in JSON format"
     Write-Host "  -DryRun             Compute branch name and paths without creating branches, directories, or files"
     Write-Host "  -AllowExistingBranch  Switch to branch if it already exists instead of failing"
+    Write-Host "  -NoBranch           Create feature directory and files without creating or switching git branches"
     Write-Host "  -ShortName <name>   Provide a custom short name (2-4 words) for the branch"
     Write-Host "  -Number N           Specify branch number manually (overrides auto-detection)"
     Write-Host "  -Timestamp          Use timestamp prefix (YYYYMMDD-HHMMSS) instead of sequential numbering"
@@ -291,7 +293,7 @@ $featureDir = Join-Path $specsDir $branchName
 $specFile = Join-Path $featureDir 'spec.md'
 
 if (-not $DryRun) {
-    if ($hasGit) {
+    if (-not $NoBranch -and $hasGit) {
         $branchCreated = $false
         try {
             git checkout -q -b $branchName 2>$null | Out-Null
@@ -325,7 +327,7 @@ if (-not $DryRun) {
                 exit 1
             }
         }
-    } else {
+    } elseif (-not $NoBranch -and -not $hasGit) {
         Write-Warning "[specify] Warning: Git repository not detected; skipped branch creation for $branchName"
     }
 

@@ -70,23 +70,24 @@ Given that feature description, do this:
      - "Create a dashboard for analytics" → "analytics-dashboard"
      - "Fix payment processing timeout bug" → "fix-payment-timeout"
 
-2. **Create the feature branch** by running the script with `--short-name` (and `--json`). In sequential mode, do NOT pass `--number` — the script auto-detects the next available number. In timestamp mode, the script generates a `YYYYMMDD-HHMMSS` prefix automatically:
+2. **Generate the feature directory and spec file path** by running the script with `-NoBranch`, `--short-name`, and `--json`. The `-NoBranch` flag creates the feature directory and spec file without creating or switching git branches — the branch is already provided by the pipeline. In sequential mode, do NOT pass `--number` — the script auto-detects the next available number. In timestamp mode, the script generates a `YYYYMMDD-HHMMSS` prefix automatically:
 
    **Branch numbering mode**: Before running the script, check if `.specify/init-options.json` exists and read the `branch_numbering` value.
    - If `"timestamp"`, add `--timestamp` (Bash) or `-Timestamp` (PowerShell) to the script invocation
    - If `"sequential"` or absent, do not add any extra flag (default behavior)
 
-   - Bash example: `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" --json --short-name "user-auth" "Add user authentication"`
-   - Bash (timestamp): `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" --json --timestamp --short-name "user-auth" "Add user authentication"`
-   - PowerShell example: `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" -Json -ShortName "user-auth" "Add user authentication"`
-   - PowerShell (timestamp): `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" -Json -Timestamp -ShortName "user-auth" "Add user authentication"`
+   - Bash example: `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" --no-branch --json --short-name "user-auth" "Add user authentication"`
+   - Bash (timestamp): `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" --no-branch --json --timestamp --short-name "user-auth" "Add user authentication"`
+   - PowerShell example: `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" -NoBranch -Json -ShortName "user-auth" "Add user authentication"`
+   - PowerShell (timestamp): `.specify/scripts/powershell/create-new-feature.ps1 "$ARGUMENTS" -NoBranch -Json -Timestamp -ShortName "user-auth" "Add user authentication"`
 
    **IMPORTANT**:
+   - Always include `-NoBranch` (Bash: `--no-branch`) — the current branch is already the feature branch; do NOT create a new one
    - Do NOT pass `--number` — the script determines the correct next number automatically
    - Always include the JSON flag (`--json` for Bash, `-Json` for PowerShell) so the output can be parsed reliably
    - You must only ever run this script once per feature
    - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for
-   - The JSON output will contain BRANCH_NAME and SPEC_FILE paths
+   - The JSON output will contain BRANCH_NAME and SPEC_FILE paths — use SPEC_FILE to know where to write
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
 
 3. Load `.specify/templates/spec-template.md` to understand required sections.
