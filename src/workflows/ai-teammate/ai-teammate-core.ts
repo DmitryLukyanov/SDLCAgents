@@ -1,5 +1,5 @@
 /**
- * AI Teammate core: CONFIG_FILE + ENCODED_CONFIG → run pipeline with injected deps.
+ * AI Teammate core: CONFIG_FILE + ENCODED_CONFIG → pipeline metadata for Codex BA phases.
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -7,8 +7,7 @@ import {
   decodeEncodedConfig,
   extractIssueKeyFromEncoded,
 } from '../../lib/encoded-config.js';
-import { runPipeline } from './ai-teammate-pipeline.js';
-import type { AiTeammateDeps, PipelineStep } from './runner-types.js';
+import type { PipelineStep, RunnerContext } from './runner-types.js';
 
 interface AgentJson {
   name?: string;
@@ -21,7 +20,16 @@ interface AgentJson {
   };
 }
 
-export async function runAiTeammateAgent(deps: AiTeammateDeps): Promise<void> {
+export interface LoadedAiTeammatePipeline {
+  issueKey: string;
+  steps: PipelineStep[];
+  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>;
+  configFileAbs: string;
+  runner: string;
+}
+
+/** Load CONFIG_FILE + ENCODED_CONFIG into pipeline metadata (Codex BA prepare/finish). */
+export async function loadAiTeammatePipelineFromEnv(): Promise<LoadedAiTeammatePipeline> {
   const configFile = process.env.CONFIG_FILE?.trim();
   const encoded = process.env.ENCODED_CONFIG?.trim();
   if (!configFile) throw new Error('CONFIG_FILE is required');
@@ -34,7 +42,7 @@ export async function runAiTeammateAgent(deps: AiTeammateDeps): Promise<void> {
   const abs = resolve(process.cwd(), configFile);
   const raw = await readFile(abs, 'utf8');
   const agent = JSON.parse(raw) as AgentJson;
-  const runner = agent.params?.runner?.trim();
+  const runner = agent.params?.runner?.trim() ?? '';
 
   process.env.ISSUE_KEY = issueKey;
   const ts = custom.taken_status?.trim();
@@ -57,23 +65,25 @@ export async function runAiTeammateAgent(deps: AiTeammateDeps): Promise<void> {
         : 1;
   process.env.TICKET_CONTEXT_DEPTH = String(depth);
 
-  console.log(
-    `Agent runner: ${runner ?? '(missing)'} · config: ${configFile} · key: ${issueKey} · ticketContextDepth: ${depth}`,
-  );
-
+  const steps = agent.params?.steps;
   if (runner === 'pipeline') {
-    const steps = agent.params?.steps;
     if (!steps || !Array.isArray(steps) || steps.length === 0) {
       throw new Error(`Pipeline runner requires a non-empty "steps" array in ${configFile}.`);
     }
-    const [owner, repo] = (process.env.GITHUB_REPOSITORY ?? '/').split('/');
-    const ref = process.env.GITHUB_REF_NAME ?? 'main';
-    const encoded = process.env.ENCODED_CONFIG?.trim() ?? '';
-    await runPipeline(issueKey, steps, deps, { owner, repo, ref, encodedConfig: encoded, configFile: abs });
-    return;
   }
 
-  throw new Error(
-    `Unknown params.runner "${runner}" in ${configFile}. Supported: pipeline`,
+  const [owner, repo] = (process.env.GITHUB_REPOSITORY ?? '/').split('/');
+  const ref = process.env.GITHUB_REF_NAME ?? 'main';
+
+  console.log(
+    `Agent runner: ${runner || '(missing)'} · config: ${configFile} · key: ${issueKey} · ticketContextDepth: ${depth}`,
   );
+
+  return {
+    issueKey,
+    steps: (steps ?? []) as PipelineStep[],
+    ctxInit: { owner, repo, ref, encodedConfig: encoded, configFile: abs },
+    configFileAbs: abs,
+    runner,
+  };
 }

@@ -7,7 +7,14 @@
 import type { JiraIssue } from '../../lib/jira/jira-types.js';
 import type { RelatedIssueSummary } from '../../lib/jira/jira-related.js';
 import type { IssueContextPrepOptions } from './spec-kit/pipeline.js';
-import type { BaOutcome, TicketContext } from '../business-analyst/ba-types.js';
+import type { BaOutcome } from '../business-analyst/ba-types.js';
+
+/** Used by `assign_copilot` to set issue body, assignees, and Copilot agent instructions. */
+export interface GithubCopilotIssueUpdate {
+  body: string;
+  assignees: string[];
+  agentInstructions: string;
+}
 
 export interface AiTeammateDeps {
   getIssue: (key: string, fields: string[]) => Promise<JiraIssue>;
@@ -17,23 +24,25 @@ export interface AiTeammateDeps {
   fetchRelatedIssueSummaries: (key: string, depth: number) => Promise<RelatedIssueSummary[]>;
   prepareSpecKitWorkspace: (opts: IssueContextPrepOptions) => Promise<void>;
   createGithubIssue: (owner: string, repo: string, issueKey: string) => Promise<number>;
-  dispatchWorkflow: (args: {
-    owner: string;
-    repo: string;
-    workflow_id: string;
-    ref: string;
-    inputs: Record<string, string>;
-  }) => Promise<void>;
-  analyzeTicket: (ticketCtx: TicketContext, githubToken: string, model?: string) => Promise<BaOutcome>;
-  updateGithubIssue: (owner: string, repo: string, issueNumber: number, payload: {
-    body: string;
-    assignees: string[];
-    agentInstructions: string;
-  }) => Promise<void>;
+  /** Update the GitHub issue body (no Copilot assignment). */
+  updateGithubIssueBody: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;
+  /** Update issue for Copilot Coding Agent (body, assignees, agent instructions). */
+  updateGithubIssue: (
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    payload: GithubCopilotIssueUpdate,
+  ) => Promise<void>;
+  /** Dispatch the developer agent workflow in the consumer repo. */
+  dispatchDeveloperAgent: (
+    owner: string,
+    repo: string,
+    workflowFile: string,
+    ref: string,
+    inputs: { issue_number: string; issue_key: string; step: string },
+  ) => Promise<void>;
   closeGithubIssue: (owner: string, repo: string, issueNumber: number) => Promise<void>;
   addGithubIssueComment: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;
-  githubToken: string;
-  model?: string;
 }
 
 /** Context passed to every step runner — static inputs plus mutable pipeline state. */
@@ -48,7 +57,7 @@ export interface RunnerContext {
   githubIssueNumber?: number;
   /** Written by print_jira_context_to_stdout after spec-kit prep; read by assign_copilot. */
   specKitContextFile?: string;
-  /** Written by run_ba_inline; read by assign_copilot. */
+  /** Set after BA (Codex) analysis; read by `start_developer_agent`. */
   baOutcome?: BaOutcome;
 }
 
@@ -67,7 +76,7 @@ export interface PipelineStep {
   [key: string]: unknown;
 }
 
-/** Config shape for the run_ba_inline step. */
+/** Config for the BA phase (Codex reads this step from the pipeline JSON). */
 export interface BaInlineStep extends PipelineStep {
   runner: 'run_ba_inline';
   /** Skip BA and stop pipeline if Jira ticket already has this label. */

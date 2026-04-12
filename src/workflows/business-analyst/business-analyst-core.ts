@@ -1,5 +1,5 @@
 /**
- * Business Analyst shared helpers used by the inline BA step (run_ba_inline).
+ * Business Analyst shared helpers (ticket text extraction for BA / Codex).
  */
 
 import type { JiraIssueFields } from '../../lib/jira/jira-types.js';

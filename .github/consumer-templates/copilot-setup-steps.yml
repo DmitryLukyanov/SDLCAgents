@@ -1,14 +1,9 @@
-# Copilot Coding Agent environment setup.
-# This workflow configures the environment that Copilot uses when
-# working on issues assigned to it. It runs before Copilot starts coding.
+# Copilot Coding Agent environment setup — runs before Copilot starts on a task.
+# Default branch must contain this file. See:
+# https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
 #
-# Prerequisites committed to the default branch BEFORE Copilot runs:
-#   - .github/agents/speckit.*.agent.md
-#   - .github/prompts/speckit.*.prompt.md
-# Generate once with:
-#   uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 specify init --here
-#
-# See: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
+# Optional (GitHub Copilot / upstream spec-kit only): speckit.*.agent.md and speckit.*.prompt.md.
+# Codex pipelines use .agents/skills/speckit-*/SKILL.md from SDLC onboarding instead.
 name: Copilot Setup Steps
 
 on: workflow_dispatch
@@ -22,26 +17,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Configure git credentials
         run: |
           git config --global url."https://x-access-token:${{ secrets.COPILOT_PAT }}@github.com/".insteadOf "https://github.com/"
-
-      # TODO: FIX gh auth issue
-      # - name: Configure gh CLI credentials
-        # run: |
-          # echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
-          # gh auth status
-        # env:
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            echo "No package-lock.json found — skipping npm ci"
-          fi

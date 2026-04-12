@@ -30,11 +30,7 @@ Copy the following workflow files from `.github/workflows/` into your repo's `.g
 
 ## Step 2 — Copy config files
 
-Copy the config templates into your repo:
-
-```
-consumer-templates/config/  →  config/
-```
+Copy the `config/` directory from the [SDLCAgents](https://github.com/DmitryLukyanov/SDLCAgents) repository root into your repo as `config/` (layout: `config/spec-kit/`, `config/workflows/`).
 
 Then customize:
 
@@ -74,8 +70,10 @@ uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
   specify init --here --ai copilot --script ps --force
 ```
 
-This generates `.specify/`, `.github/agents/speckit.*.agent.md`,
-and `.github/prompts/speckit.*.prompt.md`.
+This generates `.specify/` and, with **`--ai copilot`**, the GitHub Copilot
+`speckit.*.agent.md` / `speckit.*.prompt.md` set. The SDLC **Codex** path uses
+`.agents/skills/speckit-*/SKILL.md` from onboarding instead; those Copilot-only
+files are not required.
 
 Then copy the two custom agents from SDLCAgents into your `.github/agents/`:
 

@@ -8,21 +8,20 @@
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
  *   print_jira_context_to_stdout — logs Jira ticket details + prepares spec-kit workspace
  *   create_github_issue          — creates a GitHub issue placeholder; stores issue number in context
- *   run_ba_inline                — runs BA analysis inline; blocks + closes issue if incomplete
- *   assign_copilot               — fills prompt template with BA results + assigns Copilot to the GitHub issue
+ *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow
  *
- * Adding a new runner:
- *   1. Create src/workflows/ai-teammate/steps/<name>.ts exporting a run<Name>() function
- *   2. Import it here and add a case to the switch below
- *   3. Add the step config type to PipelineStep union (runner-types.ts)
+ * A `run_ba_inline` entry may appear in the pipeline JSON for BA options; BA is executed by Codex
+ * between `create_github_issue` and `start_developer_agent`, not by this switch.
  */
 import { join } from 'node:path';
+import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runPrintJiraContextToStdout } from './steps/print-jira-context-to-stdout.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
-import { runBaInline } from './steps/run-ba-inline.js';
-import { runAssignCopilot } from './steps/assign-copilot.js';
-import type { AiTeammateDeps, BaInlineStep, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
+import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
+import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
+
+const AI_TEAMMATE_JOB_SUMMARY_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'job-summary-pipeline.md');
 
 /** spec-kit config as it appears on a print_jira_context_to_stdout pipeline step. */
 interface SpecKitStepConfig {
@@ -30,14 +29,13 @@ interface SpecKitStepConfig {
   outputDir?: string;
 }
 
-async function executeStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeammateDeps): Promise<StepOutcome> {
+export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeammateDeps): Promise<StepOutcome> {
   switch (step.runner) {
     case 'ensure_jira_fields_expected': {
       return runEnsureJiraFieldsExpected(ctx, step as unknown as Parameters<typeof runEnsureJiraFieldsExpected>[1], deps);
     }
 
     case 'print_jira_context_to_stdout': {
-      // Optional spec-kit workspace prep (CLI manifest or headless markdown) before ticket logging.
       const sk = step.specKit as SpecKitStepConfig | undefined;
       if (sk?.enabled !== false) {
         await deps.prepareSpecKitWorkspace({
@@ -54,30 +52,36 @@ async function executeStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeamm
       return runCreateGithubIssue(ctx, deps);
     }
 
-    case 'run_ba_inline': {
-      return runBaInline(ctx, step as BaInlineStep, deps);
-    }
-
-    case 'assign_copilot': {
-      return runAssignCopilot(ctx, deps);
+    case 'start_developer_agent': {
+      return runStartDeveloperAgent(ctx, step as Parameters<typeof runStartDeveloperAgent>[1], deps);
     }
 
     default:
+      if (step.runner === 'run_ba_inline') {
+        throw new Error(
+          'Pipeline step "run_ba_inline" is configuration only — BA runs via Codex (AI_TEAMMATE_MODE=codex_ba_prepare / codex_ba_finish).',
+        );
+      }
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, run_ba_inline, assign_copilot.`,
+          `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, start_developer_agent.`,
       );
   }
 }
 
-interface StepRecord {
+export interface StepRecord {
   runner: string;
   status: 'continue' | 'stop';
   reason?: string;
   durationMs: number;
 }
 
-async function writeSummary(issueKey: string, repo: string, records: StepRecord[], ctx: RunnerContext): Promise<void> {
+export async function writeAiTeammatePipelineSummary(
+  issueKey: string,
+  repo: string,
+  records: StepRecord[],
+  ctx: RunnerContext,
+): Promise<void> {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (!summaryPath) return;
 
@@ -102,36 +106,91 @@ async function writeSummary(issueKey: string, repo: string, records: StepRecord[
   const finalStep = records.at(-1);
   const pipelineStatus = finalStep?.status === 'stop' ? '🛑 Halted' : '✅ Completed';
 
-  const summary = [
-    `## AI Teammate — ${issueKey}`,
-    '',
-    `**Status:** ${pipelineStatus} &nbsp;|&nbsp; **GitHub Issue:** ${issueLink} &nbsp;|&nbsp; **BA:** ${baStatus}`,
-    '',
-    '| Step | Outcome | Duration |',
-    '|------|---------|----------|',
-    rows,
-  ].join('\n');
+  const summary = fillTemplate(AI_TEAMMATE_JOB_SUMMARY_TEMPLATE, {
+    ISSUE_KEY:        issueKey,
+    PIPELINE_STATUS:  pipelineStatus,
+    ISSUE_LINK:       issueLink,
+    BA_STATUS:        baStatus,
+    STEP_ROWS:        rows,
+  });
 
   await appendFile(summaryPath, summary + '\n');
 }
 
-export async function runPipeline(
+/**
+ * Run pipeline steps from the beginning through `lastInclusiveRunner` (inclusive).
+ */
+export async function runPipelineThroughInclusive(
   issueKey: string,
   steps: PipelineStep[],
   deps: AiTeammateDeps,
   ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>,
-): Promise<void> {
+  lastInclusiveRunner: string,
+): Promise<{ ctx: RunnerContext; records: StepRecord[] }> {
   const ctx: RunnerContext = { issueKey, ...ctxInit };
   const records: StepRecord[] = [];
-
-  console.log(`\nPipeline starting for ${issueKey} (${steps.length} step(s))`);
+  let found = false;
 
   for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} (partial → "${lastInclusiveRunner}") ──`);
+
+    const t0 = Date.now();
+    const outcome = await runPipelineStep(ctx, step, deps);
+    const durationMs = Date.now() - t0;
+
+    records.push({
+      runner: step.runner,
+      status: outcome.status,
+      reason: outcome.status === 'stop' ? outcome.reason : undefined,
+      durationMs,
+    });
+
+    if (outcome.status === 'stop') {
+      console.log(`\n🛑 Partial pipeline halted at ${step.runner}: ${outcome.reason}`);
+      await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+      throw new Error(`Partial pipeline stopped at ${step.runner}: ${outcome.reason}`);
+    }
+
+    if (step.runner === lastInclusiveRunner) {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    throw new Error(
+      `Pipeline step "${lastInclusiveRunner}" not found — cannot prepare Codex BA.`,
+    );
+  }
+
+  return { ctx, records };
+}
+
+/**
+ * Run steps from `startRunner` through the end of the list.
+ */
+export async function runPipelineFromRunner(
+  issueKey: string,
+  steps: PipelineStep[],
+  startRunner: string,
+  deps: AiTeammateDeps,
+  ctx: RunnerContext,
+  priorRecords: StepRecord[],
+): Promise<void> {
+  const startIdx = steps.findIndex(s => s.runner === startRunner);
+  if (startIdx < 0) {
+    throw new Error(`Pipeline step "${startRunner}" not found — cannot resume after Codex BA.`);
+  }
+
+  const records = [...priorRecords];
+
+  for (let i = startIdx; i < steps.length; i++) {
     const step = steps[i];
     console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} ──`);
 
     const t0 = Date.now();
-    const outcome = await executeStep(ctx, step, deps);
+    const outcome = await runPipelineStep(ctx, step, deps);
     const durationMs = Date.now() - t0;
 
     records.push({
@@ -143,11 +202,11 @@ export async function runPipeline(
 
     if (outcome.status === 'stop') {
       console.log(`\n🛑 Pipeline halted at step ${i + 1} (${step.runner}): ${outcome.reason}`);
-      await writeSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+      await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
       return;
     }
   }
 
-  console.log(`\nPipeline finished all ${steps.length} step(s) for ${issueKey}.`);
-  await writeSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+  console.log(`\nPipeline finished tail step(s) for ${issueKey}.`);
+  await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
 }

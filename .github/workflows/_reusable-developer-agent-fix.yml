@@ -1,0 +1,201 @@
+# Reusable Developer Agent — Fix handler.
+#
+# Makes TARGETED edits to existing spec-kit artifacts to address the specific
+# issues reported by the spec gate. Does NOT re-run the full speckit step.
+#
+# Flow:
+#   1. Strip "/fix " prefix from the comment body
+#   2. Checkout the feature branch (full, for writing)
+#   3. Read speckit-state.json → issue key + PR number + branch
+#   4. Checkout SDLCAgents + install deps
+#   5. developer-agent-fix-setup.ts — reads featureDir from state, writes the
+#      Codex fix prompt to .sdlc-agents/codex-fix-prompt.md
+#   6. openai/codex-action@v1 — Codex reads the artifacts in featureDir,
+#      makes only the required changes, writes files directly to disk
+#   7. developer-agent-fix-teardown.ts — stages changes, commits, touches
+#      speckit-state.json (lastFixedAt) to trigger spec gate re-validation,
+#      pushes, posts PR comment
+#
+# Triggered by: developer-agent-fix.yml (consumer) on /fix PR comments
+name: "[Reusable] Developer Agent — Fix"
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "PR number where /fix was commented"
+        required: true
+        type: number
+      fix_comment_body:
+        description: "Full comment body starting with /fix — prefix is stripped here"
+        required: true
+        type: string
+      sdlc_agents_ref:
+        description: "SDLCAgents branch/tag/SHA to use"
+        required: false
+        type: string
+        default: 'master'
+    secrets:
+      COPILOT_PAT:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Fix teardown PR comments use GITHUB_TOKEN; fix-setup overrides with PAT on its step.
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      # ── 0. Extract fix instructions (strip "/fix" prefix) ───────────────────
+      - name: Extract fix instructions
+        id: fix
+        env:
+          COMMENT_BODY: ${{ inputs.fix_comment_body }}
+        run: |
+          INSTRUCTIONS=$(printf '%s' "$COMMENT_BODY" | sed 's|^/fix[[:space:]]*||')
+          echo "fix_instructions<<EOF_FIX" >> "$GITHUB_OUTPUT"
+          printf '%s' "$INSTRUCTIONS" >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "EOF_FIX" >> "$GITHUB_OUTPUT"
+          echo "Extracted fix instructions (${#INSTRUCTIONS} chars)"
+
+      # ── 1. Get PR branch ─────────────────────────────────────────────────────
+      - name: Get PR branch
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.COPILOT_PAT }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              pull_number: ${{ inputs.pr_number }},
+            });
+            core.setOutput('branch', pr.head.ref);
+            console.log(`PR #${{ inputs.pr_number }} branch: ${pr.head.ref}`);
+
+      # ── 2. Checkout feature branch (full — fix agent writes files) ───────────
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          token: ${{ secrets.COPILOT_PAT }}
+          fetch-depth: 0
+
+      # ── 3. Read speckit-state.json → issue key + PR number ──────────────────
+      - name: Read speckit state
+        id: state
+        run: |
+          STATE_FILE=$(find . -name 'speckit-state.json' \
+            -not -path './.git/*' \
+            | head -1)
+
+          if [ -z "$STATE_FILE" ]; then
+            echo "::error::No speckit-state.json found on branch ${{ steps.pr.outputs.branch }}"
+            exit 1
+          fi
+
+          python3 - "$STATE_FILE" << 'PYEOF'
+          import json, sys, os
+          s = json.load(open(sys.argv[1]))
+          out = os.environ['GITHUB_OUTPUT']
+          with open(out, 'a') as f:
+              f.write(f"issue_key={s.get('issueKey', '')}\n")
+              f.write(f"pr_number={s.get('prNumber', '')}\n")
+              f.write(f"branch_name={s.get('branchName', '')}\n")
+          print(f"issue={s.get('issueKey')} pr=#{s.get('prNumber')} branch={s.get('branchName')}")
+          PYEOF
+
+      # ── 4. Checkout SDLCAgents for TypeScript runner ────────────────────────
+      - name: Checkout SDLCAgents
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      # ── 5. Node setup + install ─────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      # ── 6. Configure git identity ────────────────────────────────────────────
+      - name: Configure git
+        run: |
+          git config user.email "developer-agent@sdlc-agents.bot"
+          git config user.name "SDLC Developer Agent"
+
+      # ── 7. Run fix agent — setup ─────────────────────────────────────────────
+      # Reads featureDir from speckit-state.json and writes the Codex fix prompt.
+      # Outputs: feature_dir, codex_model
+      - name: Run fix agent — setup
+        id: fix_setup
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-fix-setup.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_KEY: ${{ steps.state.outputs.issue_key }}
+          FIX_INSTRUCTIONS: ${{ steps.fix.outputs.fix_instructions }}
+          DEVELOPER_AGENT_MODEL: ${{ vars.DEVELOPER_AGENT_MODEL }}
+
+      # ── 8. Print Codex fix prompt to job summary ─────────────────────────────
+      - name: Print Codex fix prompt
+        run: |
+          cat .sdlc-agents/.github/content/job-summary-codex-fix-header.md >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat .sdlc-agents/codex-fix-prompt.md >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 9. Apply fix via openai/codex-action@v1 ──────────────────────────────
+      # Codex reads the artifacts in featureDir (from the prompt), makes only
+      # the required changes, and writes the corrected files directly to disk.
+      - name: Apply fix via Codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .sdlc-agents/codex-fix-prompt.md
+          sandbox: workspace-write
+          model: ${{ steps.fix_setup.outputs.codex_model }}
+          output-file: .sdlc-agents/codex-fix-output.txt
+          allow-bots: true
+
+      # ── 10. Upload Codex fix output as artifact ──────────────────────────────
+      - name: Upload Codex fix output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-fix-output-${{ steps.state.outputs.issue_key }}-${{ github.run_id }}
+          path: .sdlc-agents/codex-fix-output.txt
+          if-no-files-found: ignore
+
+      # ── 11. Run fix agent — teardown ─────────────────────────────────────────
+      # Stages Codex-written files, commits artifact changes, touches
+      # speckit-state.json (lastFixedAt) to trigger spec gate re-validation,
+      # pushes, and posts the fix-applied PR comment.
+      - name: Run fix agent — teardown
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-fix-teardown.ts
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_KEY: ${{ steps.state.outputs.issue_key }}
+          PR_NUMBER: ${{ steps.state.outputs.pr_number }}
+          BRANCH_NAME: ${{ steps.state.outputs.branch_name }}
+          FIX_INSTRUCTIONS: ${{ steps.fix.outputs.fix_instructions }}
+          CODEX_OUTPUT_FILE: .sdlc-agents/codex-fix-output.txt

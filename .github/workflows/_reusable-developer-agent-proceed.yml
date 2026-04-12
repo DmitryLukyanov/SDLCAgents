@@ -1,0 +1,136 @@
+# Reusable Developer Agent — Proceed handler.
+#
+# Triggered when "/proceed" is commented on a PR. Reads speckit-state.json
+# from the PR's feature branch to determine the next step, then dispatches
+# the developer agent for that step.
+#
+# Used for BOTH auto-proceed (spec gate posts /proceed after clean artifacts)
+# AND manual proceed (human posts /proceed after resolving HIL issues).
+#
+# After `implement`, the spec gate may auto-dispatch this workflow again for
+# `code_review`. The final `code_review` gate requires human merge (no further step).
+#
+# Consumer usage: see .github/consumer-templates/pr-comment-handler.yml
+name: "[Reusable] Developer Agent — Proceed"
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "PR number where /proceed was commented"
+        required: true
+        type: number
+      sdlc_agents_ref:
+        description: "SDLCAgents branch/tag/SHA to use"
+        required: false
+        type: string
+        default: 'master'
+    secrets:
+      COPILOT_PAT:
+        required: true
+
+jobs:
+  proceed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+
+    steps:
+      # ── 1. Read PR details + feature branch ─────────────────────────────────
+      - name: Get PR branch and state
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.COPILOT_PAT }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ inputs.pr_number }},
+            });
+
+            core.setOutput('branch', pr.head.ref);
+            core.setOutput('sha', pr.head.sha);
+            console.log(`PR #${{ inputs.pr_number }} branch: ${pr.head.ref}`);
+
+      # ── 2. Checkout feature branch to read speckit-state.json ────────────────
+      # Full checkout: speckit-state.json may live under specs/ (stock spec-kit)
+      # or .specify/features/<issue>/ (SDLC fallback). A .specify-only sparse
+      # checkout misses specs/ and makes find(1) fail even when the file exists
+      # on the PR branch.
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          token: ${{ secrets.COPILOT_PAT }}
+
+      # ── 3. Read speckit-state.json → next step + issue number ────────────────
+      - name: Read speckit state
+        id: state
+        run: |
+          STATE_FILE=$(find . -name 'speckit-state.json' \
+            -not -path './.git/*' \
+            | head -1)
+
+          if [ -z "$STATE_FILE" ]; then
+            echo "::error::No speckit-state.json found on branch ${{ steps.pr.outputs.branch }}"
+            exit 1
+          fi
+
+          python3 - "$STATE_FILE" << 'PYEOF'
+          import json, sys, os
+          s = json.load(open(sys.argv[1]))
+          next_step = s.get('nextStep') or ''
+          out = os.environ['GITHUB_OUTPUT']
+          with open(out, 'a') as f:
+              f.write(f"next_step={next_step}\n")
+              f.write(f"issue_number={s.get('issueNumber', '')}\n")
+              f.write(f"issue_key={s.get('issueKey', '')}\n")
+              f.write(f"branch_name={s.get('branchName', '')}\n")
+          if next_step:
+              print(f"Next step: {next_step} (issue #{s.get('issueNumber')} key={s.get('issueKey')})")
+          else:
+              print("nextStep is null — pipeline finished (including code_review), nothing to dispatch")
+          PYEOF
+
+          echo "state_file=$STATE_FILE" >> "$GITHUB_OUTPUT"
+
+      # ── 4. Dispatch developer agent for next step ────────────────────────────
+      - name: Dispatch developer agent
+        if: steps.state.outputs.next_step != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.COPILOT_PAT }}
+          script: |
+            const nextStep    = '${{ steps.state.outputs.next_step }}';
+            const issueNumber = '${{ steps.state.outputs.issue_number }}';
+            const issueKey    = '${{ steps.state.outputs.issue_key }}';
+            const branchName  = '${{ steps.state.outputs.branch_name }}';
+
+            if (!nextStep || !issueNumber || !issueKey || !branchName) {
+              core.setFailed('Missing state values: nextStep, issueNumber, issueKey, or branchName');
+              return;
+            }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'developer-agent.yml',
+              ref: context.ref || 'master',
+              inputs: {
+                issue_number: issueNumber,
+                issue_key:    issueKey,
+                step:         nextStep,
+                branch_name:  branchName,
+              },
+            });
+
+            console.log(`Dispatched developer-agent.yml: step=${nextStep} issue=#${issueNumber}`);
+
+      # ── 5. No-op when all steps done ─────────────────────────────────────────
+      - name: All steps complete
+        if: steps.state.outputs.next_step == ''
+        run: echo "All spec-kit steps are complete. No further dispatch needed."

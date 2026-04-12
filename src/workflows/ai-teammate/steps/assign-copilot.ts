@@ -6,20 +6,14 @@
  * and assigns the Copilot coding agent.
  */
 import { readFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { resolve } from 'node:path';
 import type { AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types.js';
+import { fillTemplate, loadTemplate } from '../../../lib/template-utils.js';
 
 const TEMPLATE_PATH = '.sdlc-agents/src/workflows/ai-teammate/templates/github-issue-with-copilot.md';
+const AGENT_INSTRUCTIONS_TEMPLATE = loadTemplate(import.meta.url, '..', 'templates', 'copilot-agent-instructions.md');
 const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
 const TBD = '{TBD}';
-
-function fillTemplate(template: string, vars: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, value);
-  }
-  return result;
-}
 
 export async function runAssignCopilot(
   ctx: RunnerContext,
@@ -31,7 +25,7 @@ export async function runAssignCopilot(
     throw new Error('assign_copilot: no GitHub issue number in context — create_github_issue must run first');
   }
   if (!ctx.baOutcome || ctx.baOutcome.status !== 'complete') {
-    throw new Error('assign_copilot: no complete BA outcome in context — run_ba_inline must run first');
+    throw new Error('assign_copilot: no complete BA outcome in context — BA must complete first');
   }
 
   const result = ctx.baOutcome.result;
@@ -79,7 +73,7 @@ export async function runAssignCopilot(
   await deps.updateGithubIssue(owner, repo, ctx.githubIssueNumber, {
     body: prompt,
     assignees: ['copilot-swe-agent[bot]'],
-    agentInstructions: `When opening the PR, add the label 'jira:${issueKey}' to it. Include '${issueKey}' in the PR title prefix (e.g., '${issueKey}: <description>').`,
+    agentInstructions: fillTemplate(AGENT_INSTRUCTIONS_TEMPLATE, { ISSUE_KEY: issueKey }),
   });
 
   console.log(`   ✅ Issue updated and assigned to Copilot Coding Agent`);

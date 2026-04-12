@@ -1,9 +1,11 @@
 # Reusable AI Teammate workflow.
 # Checks out the calling (consumer) repo for config, SDLCAgents for Node scripts.
 #
-# Runs the AI Teammate pipeline: prepares spec-kit workspace, creates a GitHub
-# issue, runs inline BA analysis (GPT-4o), and assigns Copilot to the issue.
-# All pipeline logic lives in TypeScript (ai-teammate-agent.ts).
+# Three jobs (Codex BA — avoids GitHub Models rate limits on BA):
+#   1. prepare — Jira + spec-kit prep + GitHub placeholder; writes `spec-output/<KEY>/ba-codex-*`
+#   2. ba_codex — `./_reusable-codex-run.yml` writes `ba-codex-output.txt` (skipped when BA not needed)
+#   3. finish — parses Codex JSON, posts Jira / GitHub outcome, dispatches Developer Agent
+#
 #
 # Usage in consumer repo:
 #   jobs:
@@ -20,7 +22,7 @@ on:
   workflow_call:
     inputs:
       concurrency_key:
-        description: "Jira issue key (used for concurrency grouping)"
+        description: "Jira issue key — must match the key inside encoded_config (artifact paths are spec-output/<this value>/)."
         required: true
         type: string
       config_file:
@@ -45,21 +47,25 @@ on:
         required: true
       COPILOT_PAT:
         required: true
+      OPENAI_API_KEY:
+        required: true
 
 jobs:
-  run:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
+    outputs:
+      run_codex: ${{ steps.ba_flags.outputs.run_codex }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: write
       pull-requests: write
       issues: write
     steps:
-      # ── Step 1: Checkout calling (consumer) repo at workspace root ──────
       - name: Checkout consumer repo
         uses: actions/checkout@v4
 
-      # ── Step 2: Checkout SDLCAgents for Node scripts ────────────────────
       - name: Checkout SDLCAgents (scripts)
         uses: actions/checkout@v4
         with:
@@ -68,16 +74,22 @@ jobs:
           path: .sdlc-agents
           token: ${{ secrets.COPILOT_PAT }}
 
-      # ── Step 3: Check spec-kit prerequisites ────────────────────────────
       - name: Check spec-kit prerequisites
         id: speckit_check
         run: |
           MISSING=0
+          if [ ! -f ".specify/init-options.json" ]; then
+            echo "❌ Missing: .specify/init-options.json"
+            MISSING=1
+          fi
           for f in \
-            .github/agents/speckit.specify.agent.md \
-            .github/agents/speckit.implement.agent.md \
-            .github/prompts/speckit.specify.prompt.md \
-            .github/prompts/speckit.implement.prompt.md; do
+            .github/agents/sdlc.pipeline.agent.md \
+            .github/agents/code.review.agent.md \
+            .agents/skills/speckit-specify/SKILL.md \
+            .agents/skills/speckit-clarify/SKILL.md \
+            .agents/skills/speckit-plan/SKILL.md \
+            .agents/skills/speckit-tasks/SKILL.md \
+            .agents/skills/speckit-implement/SKILL.md; do
             if [ ! -f "$f" ]; then
               echo "❌ Missing: $f"
               MISSING=1
@@ -86,15 +98,13 @@ jobs:
           if [ "$MISSING" -eq 1 ]; then
             echo "speckit_ready=false" >> "$GITHUB_OUTPUT"
             echo ""
-            echo "⚠️ Spec-kit agent/prompt files are missing from this repo."
-            echo "   Run once and commit to the default branch:"
-            echo "   uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 specify init --here"
+            echo "⚠️ Spec-kit / Codex prerequisites are missing in this repo."
+            echo "   Run SDLC onboarding (or specify init + copy .agents/skills and .github/agents from SDLCAgents)."
           else
             echo "speckit_ready=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Spec-kit agent and prompt files found."
+            echo "✅ Spec-kit init, Codex skills, and SDLC agent files found."
           fi
 
-      # ── Step 4: Node setup + install ────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -105,21 +115,121 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
-      # ── Step 5: Run agent (CWD = consumer workspace root) ───────────────
-      # All logic (spec-kit, issue creation, BA analysis, Copilot assignment) runs in TypeScript.
-      # config/spec-kit/defaults.json, config/workflows/ai-teammate/*.json resolve to consumer files.
-      - name: Run agent (Spec Kit context + configured runner)
+      - name: Codex BA — prepare (Jira + issue + BA prompt)
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
         env:
+          AI_TEAMMATE_MODE: codex_ba_prepare
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
-          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
           ENCODED_CONFIG: ${{ inputs.encoded_config }}
 
-      # ── Step 6: Upload Spec Kit artifacts ───────────────────────────────
+      - name: Decide if Codex BA job should run
+        id: ba_flags
+        run: |
+          KEY="${{ inputs.concurrency_key }}"
+          if [ -f "spec-output/$KEY/ba-codex-skip.json" ]; then
+            echo "run_codex=false" >> "$GITHUB_OUTPUT"
+            echo "BA skip file present — ba_codex job will be skipped."
+          else
+            echo "run_codex=true" >> "$GITHUB_OUTPUT"
+            echo "BA prompt/state present — ba_codex job will run."
+          fi
+
+      - name: Upload BA workspace (for Codex + finish)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+          path: spec-output/${{ inputs.concurrency_key }}/
+          if-no-files-found: error
+
+      - name: Upload Spec Kit artifacts (partial)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-kit-partial-${{ inputs.concurrency_key }}
+          path: spec-output/
+          if-no-files-found: ignore
+
+  ba_codex:
+    needs: prepare
+    if: needs.prepare.outputs.run_codex == 'true'
+    uses: ./.github/workflows/_reusable-codex-run.yml
+    secrets: inherit
+    with:
+      download_artifact_name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+      download_path: spec-output/${{ inputs.concurrency_key }}
+      prompt_file: spec-output/${{ inputs.concurrency_key }}/ba-codex-prompt.md
+      output_file: spec-output/${{ inputs.concurrency_key }}/ba-codex-output.txt
+      upload_artifact_name: ai-teammate-ba-${{ inputs.concurrency_key }}-post-codex
+      upload_path: spec-output/${{ inputs.concurrency_key }}/
+      upload_if_no_files_found: error
+      codex_model: ${{ vars.BA_CODEX_MODEL }}
+      codex_step_name: Run Codex - Business Analyst
+      timeout_minutes: 30
+
+  finish:
+    needs: [prepare, ba_codex]
+    # Run after Codex success, when Codex was skipped (BA not needed), or when Codex failed (finish posts incomplete BA from missing/invalid output).
+    if: always() && needs.prepare.result == 'success' && (needs.ba_codex.result == 'success' || needs.ba_codex.result == 'skipped' || needs.ba_codex.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      - name: Checkout SDLCAgents (scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Download BA workspace (prepare)
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+          path: spec-output/${{ inputs.concurrency_key }}
+
+      - name: Download BA workspace (Codex output overlay)
+        if: needs.ba_codex.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-teammate-ba-${{ inputs.concurrency_key }}-post-codex
+          path: spec-output/${{ inputs.concurrency_key }}
+
+      - name: Codex BA — finish (parse + dispatch)
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
+        env:
+          AI_TEAMMATE_MODE: codex_ba_finish
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+
       - name: Upload Spec Kit artifacts
         if: always()
         uses: actions/upload-artifact@v4

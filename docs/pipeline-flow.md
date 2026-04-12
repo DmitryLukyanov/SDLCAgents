@@ -103,10 +103,9 @@
 │  │  Step: print_jira_context_to_stdout                                               │  │
 │  │  src/workflows/ai-teammate/steps/print-jira-context-to-stdout.ts                  │  │
 │  │                                                                                   │  │
-│  │  prepareSpecKitWorkspace() → spec-output/{key}/                                   │  │
-│  │    cliEnabled=true  → manifest.json + context.md + constitution.md                │  │
-│  │    cliEnabled=false → constitution.md + spec.md + plan.md + tasks.md              │  │
-│  │  ctx.specKitContextFile ← spec-output/{key}/context.md                            │  │
+│  │  prepareSpecKitWorkspace() → prepareIssueContext() → spec-output/{key}/            │  │
+│  │    issueContext.md (Jira + directives) + constitution.md (from config/spec-kit)    │  │
+│  │  ctx.specKitContextFile ← spec-output/{key}/issueContext.md                       │  │
 │  │  runPrintJiraContextToStdout() — logs Jira fields + related tickets to stdout     │  │
 │  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
 │                               │                                                          │
@@ -142,7 +141,7 @@
 │  │  src/workflows/ai-teammate/steps/assign-copilot.ts                                │  │
 │  │                                                                                   │  │
 │  │  read config/spec-kit/defaults.json → global directive                            │  │
-│  │  read ctx.specKitContextFile (context.md) → {{JIRA_CONTEXT}}                     │  │
+│  │  read ctx.specKitContextFile (issueContext.md) → {{JIRA_CONTEXT}}                │  │
 │  │  fill src/workflows/ai-teammate/templates/github-issue-with-copilot.md            │  │
 │  │  updateGithubIssue(issueNumber, {                                                 │  │
 │  │    body: filledTemplate,                                                          │  │
@@ -230,7 +229,7 @@
 │  - (No description → transition to "In Review" + comment → stop)                     │
 │                                                                                       │
 │  Step: print_jira_context_to_stdout                                                   │
-│  - Ran spec-kit CLI → spec-output/{KEY}/context.md + manifest.json                   │
+│  - prepareIssueContext → spec-output/{KEY}/issueContext.md + constitution.md         │
 │  - Logged Jira ticket fields and related tickets to stdout                            │
 │                                                                                       │
 │  Step: create_github_issue                                                            │
@@ -259,4 +258,73 @@
 │  - Wrote code and tests                                                               │
 │  - Opened PR with label "jira:{KEY}"                                                  │
 └───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## End-to-end sequence (Mermaid)
+
+The diagram below matches the **current** automation in this repository: `scrum-master` dispatches the workflow named in `scrum-master.config` (often `ai-teammate.yml` in consumer repos), the pipeline runs the steps in `config/workflows/ai-teammate/ai-teammate.config`, BA runs **inline** (`run_ba_inline` → GitHub Models), Copilot is assigned on the GitHub issue (`custom_agent: sdlc.pipeline` in `ai-teammate-agent.ts`), and `_reusable-pr-merged.yml` finishes Jira when the PR merges.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SM as Scrum Master<br/>(GitHub Actions)
+    participant J as Jira
+    participant AT as AI Teammate<br/>(ai-teammate-agent.ts)
+    participant GH as GitHub Issue
+    participant LLM as AI model<br/>(GitHub Models, GPT-4o)
+    participant COP as Copilot coding agent<br/>(sdlc.pipeline.agent.md)
+    participant PR as GitHub PR
+    participant PM as PR merged workflow<br/>(_reusable-pr-merged.yml)
+
+    rect rgb(240, 248, 255)
+        Note over SM,J: Scrum master (scrum-master-core): JQL + status filter; skip tickets with skipIfLabel
+        SM->>J: Search issues
+        SM->>SM: dispatchWorkflow (per rule: workflow_id + encoded_config)
+        SM->>J: transitionIssueToPostRead (POST_READ_STATUS env, default In Progress)
+        SM->>J: addIssueLabel (addLabel from rule, e.g. sm_triggered)
+    end
+
+    SM->>AT: workflow_dispatch with encoded_config (issue key)
+
+    rect rgb(255, 250, 240)
+        Note over AT,J: ensure_jira_fields_expected
+        AT->>J: getIssue(summary, description)
+        alt description empty
+            AT->>J: transition to onEmpty.status + comment<br/>(default In Review in repo config)
+            AT--xAT: stop pipeline
+        else description present
+            Note over AT,GH: print_jira_context_to_stdout → spec-output/{KEY}/…
+            AT->>AT: prepareSpecKitWorkspace + log context
+            AT->>GH: create_github_issue (placeholder: BA in progress…)
+            rect rgb(220, 255, 220)
+                Note over AT,LLM: run_ba_inline (skipIfLabel ba_analyzed → stop if already labeled)
+                AT->>J: getIssue + related issues
+                AT->>GH: optional comment: BA analysis started
+                AT->>LLM: analyzeTicket → structured BA result
+                alt BA complete (all required fields)
+                    LLM-->>AT: complete outcome
+                    AT->>J: add label ba_analyzed (from config)
+                    AT->>GH: optional comment: BA complete
+                    Note over AT,GH: assign_copilot — github-issue-with-copilot.md + assign copilot-swe-agent[bot]
+                    AT->>GH: Update issue body + assignee → Copilot session starts
+                    COP->>GH: Read issue, spec-kit / implement
+                    COP->>PR: Open PR (e.g. label jira:KEY)
+                    Note over PR: PR ready → human review / approve / merge
+                else BA incomplete
+                    LLM-->>AT: questions / partial result
+                    AT->>J: addIssueComment(questions)
+                    AT->>GH: comment + close placeholder issue
+                    AT--xAT: stop pipeline
+                end
+            end
+        end
+    end
+
+    rect rgb(245, 245, 255)
+        Note over PM,J: After merge (consumer wires PR closed → reusable workflow)
+        PM->>GH: Close linked issue if still open
+        PM->>J: Transition to Done + Jira comment
+    end
 ```

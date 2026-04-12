@@ -1,8 +1,8 @@
 /**
- * Business Analyst — ticket analysis via GitHub Models API.
+ * Business Analyst — prompt building and Codex output parsing.
  *
- * Reads all Jira ticket content and classifies it into 5 spec-kit-aligned fields
- * using a structured JSON response from the LLM.
+ * CI runs analysis via `openai/codex-action@v1`; this module supplies the BA
+ * system prompt, ticket payload text, and JSON interpretation of model output.
  */
 
 import { readFileSync } from 'node:fs';
@@ -13,6 +13,7 @@ import type {
   BaOutcome,
   TicketContext,
 } from './ba-types.js';
+import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 
 /* ------------------------------------------------------------------ */
 /*  System prompt                                                      */
@@ -23,66 +24,14 @@ const ANALYSIS_SYSTEM_PROMPT = readFileSync(
   'utf8',
 ).trim();
 
-/* ------------------------------------------------------------------ */
-/*  GitHub Models API call                                             */
-/* ------------------------------------------------------------------ */
-
-const GITHUB_MODELS_URL = 'https://models.github.ai/inference/chat/completions';
-const DEFAULT_MODEL = 'openai/gpt-4o';
-const TIMEOUT_MS = 120_000;
-
-interface ChatCompletionResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
-}
-
-async function callGitHubModels(
-  prompt: string,
-  token: string,
-  model: string = DEFAULT_MODEL,
-): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  try {
-    const response = await fetch(GITHUB_MODELS_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
-          { role: 'user', content: prompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.1, // low temperature for consistent extraction
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '(no body)');
-      throw new Error(`GitHub Models API returned ${response.status}: ${body}`);
-    }
-
-    const data = (await response.json()) as ChatCompletionResponse;
-    return data.choices?.[0]?.message?.content ?? '';
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+const BA_MISSING_INFO_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'ba-missing-information.md');
 
 /* ------------------------------------------------------------------ */
 /*  Prompt builder                                                     */
 /* ------------------------------------------------------------------ */
 
-function buildPrompt(ctx: TicketContext): string {
+/** Plain-text ticket payload for the BA model (Codex). */
+export function buildBaTicketPrompt(ctx: TicketContext): string {
   const parts: string[] = [];
 
   parts.push(`# Jira Ticket: ${ctx.issueKey}`);
@@ -152,6 +101,11 @@ function buildPrompt(ctx: TicketContext): string {
   return prompt;
 }
 
+/** System instructions loaded from `prompts/analysis-system-prompt.md`. */
+export function getBaAnalysisSystemPrompt(): string {
+  return ANALYSIS_SYSTEM_PROMPT;
+}
+
 /* ------------------------------------------------------------------ */
 /*  JSON parsing & validation                                          */
 /* ------------------------------------------------------------------ */
@@ -199,7 +153,7 @@ function parseAnalysisResponse(raw: string): BaAnalysisResult | null {
   }
 }
 
-function isComplete(result: BaAnalysisResult): boolean {
+export function isBaAnalysisComplete(result: BaAnalysisResult): boolean {
   // ALL five fields must be populated for the ticket to proceed
   return (
     result.specifyInput !== null &&
@@ -208,6 +162,33 @@ function isComplete(result: BaAnalysisResult): boolean {
     result.tasksInput !== null &&
     result.implementInput !== null
   );
+}
+
+function outcomeFromParsedResult(result: BaAnalysisResult, ctx: TicketContext): BaOutcome {
+  if (isBaAnalysisComplete(result)) {
+    console.log('[BA] Analysis complete — all required fields populated');
+    return { status: 'complete', result };
+  }
+  console.log('[BA] Analysis incomplete — one or more fields missing');
+  return {
+    status: 'incomplete',
+    questions: generateQuestions(result, ctx),
+    partialResult: result,
+  };
+}
+
+/** Turn raw model output (JSON) into a structured BA outcome (Codex BA finish). */
+export function interpretBaModelOutput(raw: string, ctx: TicketContext): BaOutcome {
+  console.log(`[BA] LLM raw response (first 500 chars): ${raw.slice(0, 500)}`);
+  const result = parseAnalysisResponse(raw);
+  if (!result) {
+    console.error('[BA] Could not parse model response as JSON');
+    return {
+      status: 'incomplete',
+      questions: generateQuestions(null, ctx),
+    };
+  }
+  return outcomeFromParsedResult(result, ctx);
 }
 
 const FIELD_LABELS: Array<{ key: keyof BaAnalysisResult; label: string; question: string }> = [
@@ -239,95 +220,28 @@ const FIELD_LABELS: Array<{ key: keyof BaAnalysisResult; label: string; question
 ];
 
 function generateQuestions(result: BaAnalysisResult | null, _ctx: TicketContext): string {
-  const lines: string[] = [
-    `## 🤖 Business Analyst — Missing Information`,
-    '',
-    `The automated Business Analyst could not extract all required information from this ticket.`,
-    '',
-  ];
-
-  // Show what was found vs what is missing
-  lines.push('### Extraction Summary');
-  lines.push('');
-  for (const f of FIELD_LABELS) {
+  const extractionSummary = FIELD_LABELS.map((f) => {
     const value = result?.[f.key];
-    lines.push(`- ${value ? '✅' : '❌'} **${f.label}**: ${value ? 'found' : 'NOT FOUND'}`);
-  }
-  lines.push('');
+    return `- ${value ? '✅' : '❌'} **${f.label}**: ${value ? 'found' : 'NOT FOUND'}`;
+  }).join('\n');
 
-  // Ask specific questions for missing fields
   const missing = FIELD_LABELS.filter((f) => !result?.[f.key]);
+  let questionsSection = '';
   if (missing.length > 0) {
-    lines.push('### ❓ Please provide the following information');
-    lines.push('');
+    const qLines: string[] = [
+      '### ❓ Please provide the following information',
+      '',
+    ];
     for (const f of missing) {
-      lines.push(`**${f.label}:** ${f.question}`);
-      lines.push('');
+      qLines.push(`**${f.label}:** ${f.question}`);
+      qLines.push('');
     }
-    lines.push('Once updated, move the ticket back to **To Do** for re-processing.');
+    qLines.push('Once updated, move the ticket back to **To Do** for re-processing.');
+    questionsSection = qLines.join('\n');
   }
 
-  return lines.join('\n');
-}
-
-/* ------------------------------------------------------------------ */
-/*  Public API                                                         */
-/* ------------------------------------------------------------------ */
-
-export async function analyzeTicket(
-  ctx: TicketContext,
-  githubToken: string,
-  model?: string,
-): Promise<BaOutcome> {
-  const prompt = buildPrompt(ctx);
-
-  console.log(`[BA] Analyzing ${ctx.issueKey} — ${ctx.comments.length} comment(s), ${ctx.relatedIssues.length} related issue(s)`);
-
-  // First attempt
-  let rawResponse: string;
-  try {
-    rawResponse = await callGitHubModels(prompt, githubToken, model);
-  } catch (err) {
-    console.error(`[BA] GitHub Models API call failed:`, err);
-    return {
-      status: 'incomplete',
-      questions: generateQuestions(null, ctx) +
-        '\n\n> *Note: The automated analysis also encountered a technical error. A team member may need to review this ticket manually.*',
-    };
-  }
-
-  console.log(`[BA] LLM raw response (first 500 chars): ${rawResponse.slice(0, 500)}`);
-
-  let result = parseAnalysisResponse(rawResponse);
-
-  // Retry once if parsing failed
-  if (!result) {
-    console.warn('[BA] First parse failed, retrying...');
-    try {
-      rawResponse = await callGitHubModels(prompt, githubToken, model);
-      result = parseAnalysisResponse(rawResponse);
-    } catch {
-      // Ignore retry failure
-    }
-  }
-
-  if (!result) {
-    console.error('[BA] Could not parse LLM response after 2 attempts');
-    return {
-      status: 'incomplete',
-      questions: generateQuestions(null, ctx),
-    };
-  }
-
-  if (isComplete(result)) {
-    console.log('[BA] Analysis complete — all required fields populated');
-    return { status: 'complete', result };
-  }
-
-  console.log('[BA] Analysis incomplete — specifyInput is missing');
-  return {
-    status: 'incomplete',
-    questions: generateQuestions(result, ctx),
-    partialResult: result,
-  };
+  return fillTemplate(BA_MISSING_INFO_TEMPLATE, {
+    EXTRACTION_SUMMARY: extractionSummary,
+    QUESTIONS_SECTION:  questionsSection,
+  });
 }

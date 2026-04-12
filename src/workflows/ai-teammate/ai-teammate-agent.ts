@@ -1,16 +1,33 @@
 /**
  * AI Teammate entry point: wires real deps and runs the agent.
+ *
+ * Environment (from _reusable-ai-teammate.yml):
+ *   COPILOT_PAT   — PAT for GitHub REST except issue comments (create issue, dispatch, …)
+ *   GITHUB_TOKEN  — ${{ github.token }} at job level (github-actions[bot]) for createComment only
+ *
+ * Modes (`AI_TEAMMATE_MODE`, required):
+ *   codex_ba_prepare — Jira + issue prep + write `spec-output/<KEY>/ba-codex-*.md` (CI prepare job)
+ *   codex_ba_finish    — read Codex output + finish pipeline (CI finish job)
  */
 import { Octokit } from '@octokit/rest';
+import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { getIssue, addIssueComment, addIssueLabel, transitionIssueToStatusName } from '../../lib/jira/jira-client.js';
 import { fetchRelatedIssueSummaries } from '../../lib/jira/jira-related.js';
 import { prepareIssueContextWithLogging } from './spec-kit/pipeline.js';
-import { analyzeTicket } from '../business-analyst/analyze-ticket.js';
-import { runAiTeammateAgent } from './ai-teammate-core.js';
+import { runCodexBaPrepare, runCodexBaFinish } from './ai-teammate-codex-ba.js';
 import type { AiTeammateDeps } from './runner-types.js';
 
-const githubToken = process.env.COPILOT_PAT ?? process.env.GITHUB_TOKEN ?? '';
-const octokit = new Octokit({ auth: githubToken });
+const PLACEHOLDER_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'github-issue-placeholder.md');
+const ISSUE_TITLE_TEMPLATE  = loadTemplate(import.meta.url, 'templates', 'github-issue-title.md');
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+}
+
+const octokitRest = new Octokit({ auth: requireEnv('COPILOT_PAT') });
+const octokitComment = new Octokit({ auth: requireEnv('GITHUB_TOKEN') });
 
 const deps: AiTeammateDeps = {
   getIssue,
@@ -20,42 +37,51 @@ const deps: AiTeammateDeps = {
   fetchRelatedIssueSummaries,
   prepareSpecKitWorkspace: prepareIssueContextWithLogging,
   createGithubIssue: async (owner, repo, issueKey) => {
-    await octokit.rest.issues.createLabel({
+    await octokitRest.rest.issues.createLabel({
       owner, repo,
       name: `jira:${issueKey}`,
       color: '1d76db',
       description: `Jira ticket ${issueKey}`,
     }).catch(() => { /* label may already exist */ });
 
-    const response = await octokit.rest.issues.create({
+    const response = await octokitRest.rest.issues.create({
       owner,
       repo,
-      title: `${issueKey}: Copilot Coding Agent Task`,
-      body: `⏳ **BA analysis in progress** for \`${issueKey}\`. This issue will be updated with the full specification and assigned to Copilot once analysis completes.`,
+      title: fillTemplate(ISSUE_TITLE_TEMPLATE, { ISSUE_KEY: issueKey }),
+      body: fillTemplate(PLACEHOLDER_TEMPLATE, { ISSUE_KEY: issueKey }),
       labels: [`jira:${issueKey}`],
     });
     return response.data.number;
   },
-  dispatchWorkflow: async (args) => {
-    await octokit.rest.actions.createWorkflowDispatch(args);
+  updateGithubIssueBody: async (owner, repo, issueNumber, body) => {
+    await octokitRest.rest.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      body,
+    });
   },
-  analyzeTicket,
   updateGithubIssue: async (owner, repo, issueNumber, payload) => {
-    await octokit.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
+    await octokitRest.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
       owner,
       repo,
       issue_number: issueNumber,
       body: payload.body,
       assignees: payload.assignees,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      agent_assignment: {
-        custom_agent: 'sdlc.pipeline',
-        custom_instructions: payload.agentInstructions,
-      },
+      agent_instructions: payload.agentInstructions,
+    });
+  },
+  dispatchDeveloperAgent: async (owner, repo, workflowFile, ref, inputs) => {
+    await octokitRest.rest.actions.createWorkflowDispatch({
+      owner,
+      repo,
+      workflow_id: workflowFile,
+      ref,
+      inputs,
     });
   },
   closeGithubIssue: async (owner, repo, issueNumber) => {
-    await octokit.rest.issues.update({
+    await octokitRest.rest.issues.update({
       owner,
       repo,
       issue_number: issueNumber,
@@ -64,18 +90,31 @@ const deps: AiTeammateDeps = {
     });
   },
   addGithubIssueComment: async (owner, repo, issueNumber, body) => {
-    await octokit.rest.issues.createComment({
+    await octokitComment.rest.issues.createComment({
       owner,
       repo,
       issue_number: issueNumber,
       body,
     });
   },
-  githubToken,
-  model: process.env.BA_MODEL?.trim() || undefined,
 };
 
-runAiTeammateAgent(deps).catch((err: unknown) => {
+async function main(): Promise<void> {
+  const mode = process.env.AI_TEAMMATE_MODE?.trim() ?? '';
+  if (mode === 'codex_ba_prepare') {
+    await runCodexBaPrepare(deps);
+    return;
+  }
+  if (mode === 'codex_ba_finish') {
+    await runCodexBaFinish(deps);
+    return;
+  }
+  throw new Error(
+    `AI_TEAMMATE_MODE must be "codex_ba_prepare" or "codex_ba_finish" (got "${mode || '(empty)'}").`,
+  );
+}
+
+main().catch((err: unknown) => {
   console.error(err);
   process.exit(1);
 });

@@ -1,0 +1,44 @@
+# Developer Agent — runs spec-kit pipeline steps via Codex CLI (default).
+# Triggered by AI Teammate (step=specify), the proceed workflow, or the fix handler.
+# Delegates all logic to the shared SDLCAgents reusable workflow.
+name: Developer Agent
+run-name: "${{ inputs.issue_key }} · Developer Agent (${{ inputs.step }})"
+
+concurrency:
+  group: developer-agent-${{ inputs.issue_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "GitHub issue number"
+        required: true
+        type: string
+      issue_key:
+        description: "Jira issue key (e.g. PROJ-1)"
+        required: true
+        type: string
+      step:
+        description: "Spec-kit step to run (specify | clarify | plan | tasks | implement | code_review)"
+        required: true
+        type: string
+      branch_name:
+        description: "Feature branch name — passed by the proceed workflow for non-specify steps"
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  call:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-developer-agent.yml@master
+    with:
+      issue_number: ${{ inputs.issue_number }}
+      issue_key: ${{ inputs.issue_key }}
+      step: ${{ inputs.step }}
+      branch_name: ${{ inputs.branch_name }}
+    secrets: inherit

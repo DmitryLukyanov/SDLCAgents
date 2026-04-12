@@ -1,8 +1,19 @@
 # Reusable onboarding workflow.
 #
-# Sources:
-#   - Workflow files       → SDLCAgents .github/consumer-templates/
-#   - Agents, prompts, configs → reference consumer repo (SDLCClient)
+# File sources:
+#   spec-kit (via `specify init --ai codex`):
+#     - .specify/scripts/, .specify/templates/, .specify/integrations/
+#     - .agents/skills/speckit-{step}/SKILL.md  (native Codex skills, 9 total)
+#
+#   SDLCAgents (single source of truth, overrides spec-kit defaults):
+#     - .github/workflows/    ← consumer-templates/
+#     - .github/agents/       ← .github/agents/
+#     - .github/prompts/      ← .github/prompts/
+#     - .github/copilot-instructions.md
+#     - .specify/scripts/     ← .specify/scripts/
+#     - .agents/skills/       ← .agents/skills/   (overrides spec-kit generated skills)
+#     - config/spec-kit/      ← config/spec-kit/
+#     - config/workflows/     ← config/workflows/
 #
 # Called by the consumer's onboarding.yml — do NOT modify this file in
 # the consumer repo; update it here in SDLCAgents instead.
@@ -16,18 +27,8 @@ on:
         required: false
         default: "SDLCSPAC"
         type: string
-      reference_repo:
-        description: "Reference consumer repo to copy agents, prompts and configs from"
-        required: false
-        default: "DmitryLukyanov/SDLCClient"
-        type: string
-      reference_ref:
-        description: "Branch or tag of the reference repo"
-        required: false
-        default: "master"
-        type: string
       agents_repo:
-        description: "SDLCAgents repo to copy workflow templates from"
+        description: "SDLCAgents repo (source of truth for all onboarding files)"
         required: false
         default: "DmitryLukyanov/SDLCAgents"
         type: string
@@ -50,7 +51,9 @@ jobs:
           token: ${{ secrets.COPILOT_PAT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false   # uv is used only as a one-shot uvx runner; no uv.lock exists
 
       - name: Run spec-kit init
         run: |
@@ -60,8 +63,10 @@ jobs:
           # the manifest is saved as {"files": {}}.
           rm -rf .specify/scripts .specify/templates
           uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
-            specify init --here --ai copilot --script ps --force
+            specify init --here --ai codex --script sh --force --ignore-agent-tools
           echo "✅ spec-kit initialised"
+          echo "   Codex skills generated:"
+          find .agents/skills -name 'SKILL.md' 2>/dev/null | sort | sed 's/^/    /' || true
 
       - name: Sparse-checkout SDLCAgents (workflow templates, agents, prompts, scripts)
         uses: actions/checkout@v4
@@ -72,19 +77,12 @@ jobs:
           path: _sdlc_agents
           sparse-checkout: |
             .github/consumer-templates
+            .github/content
             .github/agents
             .github/prompts
-            .specify/scripts
-
-      - name: Sparse-checkout reference consumer repo (configs)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.reference_repo }}
-          ref: ${{ inputs.reference_ref }}
-          token: ${{ secrets.COPILOT_PAT }}
-          path: _sdlc_reference
-          sparse-checkout: |
             .github/copilot-instructions.md
+            .specify/scripts
+            .agents/skills
             config/spec-kit
             config/workflows
 
@@ -108,6 +106,16 @@ jobs:
           cp -r _sdlc_agents/.specify/scripts/. .specify/scripts/
           echo "  copied .specify/scripts/"
 
+          # ── .agents/skills (from SDLCAgents — overrides spec-kit generated skills) ──
+          mkdir -p .agents/skills
+          cp -r _sdlc_agents/.agents/skills/. .agents/skills/
+          echo "  copied .agents/skills/"
+
+          # ── .github/content (PR bodies, job-summary snippets) ───────
+          mkdir -p .github/content
+          cp _sdlc_agents/.github/content/*.md .github/content/
+          echo "  copied .github/content/*.md"
+
           # ── .github/agents (from SDLCAgents — source of truth) ───────
           mkdir -p .github/agents
           cp -r _sdlc_agents/.github/agents/. .github/agents/
@@ -126,7 +134,7 @@ jobs:
           import json, hashlib
           from pathlib import Path
 
-          for key in ('speckit', 'copilot'):
+          for key in ('speckit', 'codex'):
               mp = Path('.specify/integrations/' + key + '.manifest.json')
               if not mp.exists():
                   continue
@@ -142,31 +150,25 @@ jobs:
           PYEOF
 
           # ── copilot-instructions.md ───────────────────────────────
-          cp _sdlc_reference/.github/copilot-instructions.md .github/copilot-instructions.md
-
-          # .specify is handled by spec-kit init above — skip reference copy
+          cp _sdlc_agents/.github/copilot-instructions.md .github/copilot-instructions.md
+          echo "  copied copilot-instructions.md"
 
           # ── config/spec-kit ───────────────────────────────────────
           mkdir -p config/spec-kit
-          cp _sdlc_reference/config/spec-kit/defaults.json config/spec-kit/defaults.json
-          cp _sdlc_reference/config/spec-kit/constitution.md config/spec-kit/constitution.md
+          cp -r _sdlc_agents/config/spec-kit/. config/spec-kit/
+          echo "  copied config/spec-kit/"
 
           # ── config/workflows ──────────────────────────────────────
-          for dir in ai-teammate business-analyst scrum-master; do
-            mkdir -p "config/workflows/$dir"
-            src="_sdlc_reference/config/workflows/$dir"
-            if [ -d "$src" ]; then
-              cp -r "$src/." "config/workflows/$dir/"
-              echo "  copied config/workflows/$dir/"
-            fi
-          done
+          mkdir -p config/workflows
+          cp -r _sdlc_agents/config/workflows/. config/workflows/
+          echo "  copied config/workflows/"
 
           # ── Replace Jira project key in all configs ────────────────
           echo "  replacing SDLCSPAC → $PROJ in configs..."
           find config/workflows -name "*.config" -exec sed -i "s/SDLCSPAC/$PROJ/g" {} \;
 
           # ── Cleanup checkouts ──────────────────────────────────────
-          rm -rf _sdlc_agents _sdlc_reference
+          rm -rf _sdlc_agents
 
           echo ""
           echo "✅ Onboarding complete for project: $PROJ"
@@ -199,11 +201,11 @@ jobs:
           echo ""
           echo "── spec-kit init ─────────────────────────────"
           check_file "init-options.json"                .specify/init-options.json
-          check_file "create-new-feature.ps1 (SDLCAgents)" .specify/scripts/powershell/create-new-feature.ps1
-          check_file "check-prerequisites.ps1"           .specify/scripts/powershell/check-prerequisites.ps1
-          check_file "common.ps1"                        .specify/scripts/powershell/common.ps1
-          check_file "spec-template.md"                 .specify/templates/spec-template.md
-          check_file "copilot manifest"                 .specify/integrations/copilot.manifest.json
+          check_file "create-new-feature.sh (bash)"    .specify/scripts/bash/create-new-feature.sh
+          check_file "check-prerequisites.sh"          .specify/scripts/bash/check-prerequisites.sh
+          check_file "common.sh"                       .specify/scripts/bash/common.sh
+          check_file "spec-template.md"                .specify/templates/spec-template.md
+          check_file "codex manifest"                  .specify/integrations/codex.manifest.json
 
           echo ""
           echo "── GitHub workflows ──────────────────────────"
@@ -211,13 +213,30 @@ jobs:
           check_file "scrum-master.yml"                 .github/workflows/scrum-master.yml
           check_file "copilot-setup-steps.yml"          .github/workflows/copilot-setup-steps.yml
           check_file "pr-merged.yml"                    .github/workflows/pr-merged.yml
+          check_file "spec-gate.yml"                    .github/workflows/spec-gate.yml
+
+          echo ""
+          echo "── GitHub content (markdown) ─────────────────"
+          check_file "onboarding-pr-body.md"            .github/content/onboarding-pr-body.md
 
           echo ""
           echo "── Agents ────────────────────────────────────"
           check_dir  ".github/agents/"                  .github/agents
-          check_file "speckit.specify.agent.md"         .github/agents/speckit.specify.agent.md
-          check_file "speckit.plan.agent.md"            .github/agents/speckit.plan.agent.md
-          check_file "speckit.implement.agent.md"       .github/agents/speckit.implement.agent.md
+          check_file "sdlc.pipeline.agent.md"           .github/agents/sdlc.pipeline.agent.md
+          check_file "code.review.agent.md"             .github/agents/code.review.agent.md
+
+          echo ""
+          echo "── Codex skills (native pipeline execution) ──"
+          check_dir  ".agents/skills/"                        .agents/skills
+          check_file "speckit-specify       SKILL.md"         .agents/skills/speckit-specify/SKILL.md
+          check_file "speckit-clarify       SKILL.md"         .agents/skills/speckit-clarify/SKILL.md
+          check_file "speckit-plan          SKILL.md"         .agents/skills/speckit-plan/SKILL.md
+          check_file "speckit-tasks         SKILL.md"         .agents/skills/speckit-tasks/SKILL.md
+          check_file "speckit-implement     SKILL.md"         .agents/skills/speckit-implement/SKILL.md
+          check_file "speckit-analyze       SKILL.md"         .agents/skills/speckit-analyze/SKILL.md
+          check_file "speckit-checklist     SKILL.md"         .agents/skills/speckit-checklist/SKILL.md
+          check_file "speckit-constitution  SKILL.md"         .agents/skills/speckit-constitution/SKILL.md
+          check_file "speckit-taskstoissues SKILL.md"         .agents/skills/speckit-taskstoissues/SKILL.md
 
           echo ""
           echo "── Config ────────────────────────────────────"
@@ -258,27 +277,13 @@ jobs:
           else
             gh pr create \
               --title "chore: onboard SDLC pipeline (project: ${{ inputs.jira_project_key }})" \
-              --body "$(cat <<'EOF'
-          ## SDLC Pipeline Onboarding
-
-          This PR was created automatically by the onboarding workflow.
-
-          ### What's included
-          - .specify/ - spec-kit scripts, templates, and integrations
-          - .github/workflows/ - ai-teammate, scrum-master, copilot-setup-steps, pr-merged
-          - .github/agents/ - spec-kit and pipeline agent files
-          - .github/prompts/ - spec-kit prompt files
-          - .github/copilot-instructions.md
-          - config/spec-kit/ - defaults and constitution
-          - config/workflows/ - ai-teammate and scrum-master configs
-
-          ### Next steps
-          1. Review the config files under config/workflows/ for your project settings
-          2. Ensure the COPILOT_PAT secret is set in this repo
-          3. Merge this PR to activate the pipeline
-          EOF
-          )" \
+              --body-file .github/content/onboarding-pr-body.md \
               --base master \
               --head "$BRANCH"
             echo "PR created for branch: $BRANCH"
           fi
+
+      - name: Run spec-kit check
+        run: |
+          uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
+            specify check

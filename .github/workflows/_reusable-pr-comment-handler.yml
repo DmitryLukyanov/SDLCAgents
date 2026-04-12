@@ -1,0 +1,75 @@
+# Reusable PR Comment Handler.
+#
+# Checks out SDLCAgents and runs the TypeScript router which dispatches
+# the appropriate consumer workflow based on the slash command in the comment:
+#
+#   /proceed   → developer-agent-proceed.yml
+#   /fix <…>   → developer-agent-fix.yml
+#
+# Triggered by: pr-comment-handler.yml (consumer) on PR issue_comment events
+name: "[Reusable] PR Comment Handler"
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "PR number where the comment was posted"
+        required: true
+        type: number
+      comment_body:
+        description: "Full comment body"
+        required: true
+        type: string
+      default_branch:
+        description: "Repo default branch — used as ref for workflow dispatch"
+        required: false
+        type: string
+        default: 'master'
+      sdlc_agents_ref:
+        description: "SDLCAgents branch/tag/SHA to use"
+        required: false
+        type: string
+        default: 'master'
+    secrets:
+      COPILOT_PAT:
+        required: true
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+
+    steps:
+      # ── 1. Checkout SDLCAgents for TypeScript runner ────────────────────────
+      - name: Checkout SDLCAgents
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      # ── 2. Node setup ────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      # ── 3. Run router ────────────────────────────────────────────────────────
+      - name: Route PR comment
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/pr-comment-handler/pr-comment-handler.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          COMMENT_BODY: ${{ inputs.comment_body }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}

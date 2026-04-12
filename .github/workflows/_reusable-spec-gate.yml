@@ -1,0 +1,222 @@
+# Reusable Spec Gate workflow.
+#
+# Three jobs:
+#   1. prepare — resolve PR / feature dir / step, write `spec-gate-codex-artifacts/*`, upload small artifact
+#   2. codex — `./_reusable-codex-run.yml` (openai/codex-action) writes `spec-gate-codex-output.txt`
+#   3. finish — parse Codex JSON, workflow_dispatch proceed or HIL PR comment
+#
+# Consumer usage: see .github/consumer-templates/spec-gate.yml
+name: "[Reusable] Spec Gate"
+
+on:
+  workflow_call:
+    inputs:
+      sdlc_agents_ref:
+        description: "SDLCAgents branch/tag/SHA to use"
+        required: false
+        type: string
+        default: 'master'
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+      COPILOT_PAT:
+        required: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      feature_dir: ${{ steps.paths.outputs.feature_dir }}
+      gate_step: ${{ steps.step.outputs.step }}
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      - name: Find PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          PR_NUM=$(gh pr list \
+            --head "${{ github.ref_name }}" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -z "$PR_NUM" ]; then
+            echo "::warning::No open PR found for branch ${{ github.ref_name }} — skipping gate"
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_number=$PR_NUM" >> "$GITHUB_OUTPUT"
+            echo "Found PR #$PR_NUM"
+          fi
+
+      - name: Resolve feature directory
+        id: paths
+        if: steps.pr.outputs.pr_number != ''
+        run: |
+          STATE_FILE=$(git diff HEAD~1 HEAD --name-only 2>/dev/null \
+            | grep 'speckit-state.json' | head -1)
+
+          if [ -z "$STATE_FILE" ]; then
+            STATE_FILE=$(find . -name 'speckit-state.json' \
+              -not -path './.git/*' \
+              -not -path './.sdlc-agents/*' \
+              | head -1 | sed 's|^\./||')
+          fi
+
+          if [ -z "$STATE_FILE" ]; then
+            echo "::error::Could not find speckit-state.json in the repository"
+            exit 1
+          fi
+
+          FEATURE_DIR=$(dirname "$STATE_FILE")
+          echo "feature_dir=$FEATURE_DIR" >> "$GITHUB_OUTPUT"
+          echo "state_file=$STATE_FILE" >> "$GITHUB_OUTPUT"
+          echo "Resolved FEATURE_DIR=$FEATURE_DIR (from $STATE_FILE)"
+
+      - name: Read speckit step from state file
+        id: step
+        if: steps.pr.outputs.pr_number != ''
+        run: |
+          STATE_FILE="${{ steps.paths.outputs.state_file }}"
+          if [ ! -f "$STATE_FILE" ]; then
+            echo "::error::State file not found: $STATE_FILE"
+            exit 1
+          fi
+          STEP=$(cat "$STATE_FILE" | python3 -c "
+          import json, sys
+          s = json.load(sys.stdin)
+          steps = s.get('completedSteps', [])
+          print(steps[-1] if steps else '')
+          ")
+          if [ -z "$STEP" ]; then
+            echo "::error::Could not read completedSteps from $STATE_FILE"
+            exit 1
+          fi
+          echo "step=$STEP" >> "$GITHUB_OUTPUT"
+          echo "Completed step: $STEP"
+
+      - name: Checkout SDLCAgents
+        if: steps.pr.outputs.pr_number != ''
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Setup Node.js
+        if: steps.pr.outputs.pr_number != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install dependencies
+        if: steps.pr.outputs.pr_number != ''
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Spec gate — prepare Codex prompt
+        if: steps.pr.outputs.pr_number != ''
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/spec-gate/spec-gate-agent.ts
+        env:
+          SPEC_GATE_MODE: codex_prepare
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          SPECKIT_STEP: ${{ steps.step.outputs.step }}
+          FEATURE_DIR: ${{ steps.paths.outputs.feature_dir }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+
+      - name: Upload Codex prompt for analysis job
+        if: steps.pr.outputs.pr_number != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-gate-codex-input-${{ github.run_id }}
+          path: spec-gate-codex-artifacts/
+          if-no-files-found: error
+
+  codex:
+    needs: prepare
+    if: needs.prepare.outputs.pr_number != ''
+    uses: ./.github/workflows/_reusable-codex-run.yml
+    secrets: inherit
+    with:
+      download_artifact_name: spec-gate-codex-input-${{ github.run_id }}
+      download_path: spec-gate-codex-artifacts
+      prompt_file: spec-gate-codex-artifacts/spec-gate-codex-prompt.md
+      output_file: spec-gate-codex-artifacts/spec-gate-codex-output.txt
+      upload_artifact_name: spec-gate-codex-output-${{ github.run_id }}
+      upload_path: spec-gate-codex-artifacts/
+      upload_if_no_files_found: ignore
+      codex_model: ${{ vars.GATE_CODEX_MODEL }}
+      codex_step_name: Spec gate - Codex analysis
+      timeout_minutes: 20
+
+  finish:
+    needs: [prepare, codex]
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.pr_number != '' && (needs.codex.result == 'success' || needs.codex.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      - name: Checkout SDLCAgents
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Download Codex workspace from analysis job
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: spec-gate-codex-output-${{ github.run_id }}
+          path: spec-gate-codex-artifacts
+
+      - name: Spec gate — finish (dispatch + PR comment)
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/spec-gate/spec-gate-agent.ts
+        env:
+          SPEC_GATE_MODE: codex_finish
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          SPECKIT_STEP: ${{ needs.prepare.outputs.gate_step }}
+          FEATURE_DIR: ${{ needs.prepare.outputs.feature_dir }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}

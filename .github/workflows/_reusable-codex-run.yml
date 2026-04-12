@@ -1,0 +1,167 @@
+# Reusable job workflow: checkout consumer repo, optional artifact download,
+# optional inline prompt materialization, `openai/codex-action@v1`, then upload workspace artifact.
+#
+# Prompt (exactly one — XOR):
+#   • prompt_file — non-empty path to an existing file after checkout/download (passed to codex-action).
+#   • prompt_content — non-empty inline text; written to `.sdlc-agents/codex-prompt-from-workflow-input.md`
+#     before Codex (prompt_file must be empty). Do not set both.
+#
+# Used by other SDLCAgents reusable workflows (same repo) via:
+#   uses: ./.github/workflows/_reusable-codex-run.yml
+#
+# Paths are relative to the consumer repository root (the checked-out workspace).
+name: "[Reusable] Codex run"
+
+on:
+  workflow_call:
+    inputs:
+      download_artifact_name:
+        description: "Artifact name to download before Codex (empty = skip download)"
+        required: false
+        type: string
+        default: ''
+      download_path:
+        description: "Directory path for download-artifact (ignored when download is skipped)"
+        required: false
+        type: string
+        default: '.'
+      prompt_file:
+        description: "Use existing prompt at this path (relative to workspace). Leave empty when using prompt_content instead. Do not set both prompt_file and prompt_content."
+        required: false
+        type: string
+        default: ''
+      prompt_content:
+        description: "Inline prompt text; written to a fixed path before Codex. Leave empty when using prompt_file instead. Do not set both."
+        required: false
+        type: string
+        default: ''
+      output_file:
+        description: "Codex output file path relative to workspace root"
+        required: true
+        type: string
+      upload_artifact_name:
+        description: "Artifact name for post-Codex upload"
+        required: true
+        type: string
+      upload_path:
+        description: "Path or glob passed to upload-artifact (usually a directory ending with /)"
+        required: true
+        type: string
+      upload_if_no_files_found:
+        description: "error | ignore — passed to actions/upload-artifact"
+        required: false
+        type: string
+        default: ignore
+      codex_model:
+        description: "OpenAI model id (empty defaults to o4-mini in the pick step)"
+        required: false
+        type: string
+        default: ''
+      codex_step_name:
+        description: "Display name for the Codex step in the Actions UI"
+        required: false
+        type: string
+        default: Run Codex
+      timeout_minutes:
+        description: "Job timeout in minutes"
+        required: false
+        type: number
+        default: 20
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+
+jobs:
+  codex:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      - name: Download workspace for Codex
+        if: ${{ inputs.download_artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.download_artifact_name }}
+          path: ${{ inputs.download_path }}
+
+      - name: Resolve prompt path (exactly one of prompt_file or prompt_content)
+        id: resolve_prompt
+        env:
+          IN_FILE: ${{ inputs.prompt_file }}
+        run: |
+          set -euo pipefail
+          # Booleans expanded by Actions (true/false) — avoid env coercion quirks.
+          HAS_FILE=${{ inputs.prompt_file != '' }}
+          HAS_CONTENT=${{ inputs.prompt_content != '' }}
+          DEFAULT='.sdlc-agents/codex-prompt-from-workflow-input.md'
+          if [ "$HAS_FILE" = "true" ] && [ "$HAS_CONTENT" = "true" ]; then
+            echo '::error::Set only one of prompt_file (existing path) or prompt_content (inline text), not both.'
+            exit 1
+          fi
+          if [ "$HAS_FILE" != "true" ] && [ "$HAS_CONTENT" != "true" ]; then
+            echo '::error::Provide exactly one of: prompt_file (non-empty path) or prompt_content (non-empty text).'
+            exit 1
+          fi
+          if [ "$HAS_CONTENT" = "true" ]; then
+            echo 'prompt_path<<__PROMPT_PATH_EOF__' >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$DEFAULT" >> "$GITHUB_OUTPUT"
+            echo __PROMPT_PATH_EOF__ >> "$GITHUB_OUTPUT"
+            echo 'mode=content' >> "$GITHUB_OUTPUT"
+          else
+            echo 'prompt_path<<__PROMPT_PATH_EOF__' >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$IN_FILE" >> "$GITHUB_OUTPUT"
+            echo __PROMPT_PATH_EOF__ >> "$GITHUB_OUTPUT"
+            echo 'mode=file' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write prompt from prompt_content
+        if: steps.resolve_prompt.outputs.mode == 'content'
+        env:
+          PROMPT_PATH: ${{ steps.resolve_prompt.outputs.prompt_path }}
+          PROMPT_CONTENT: ${{ inputs.prompt_content }}
+        run: |
+          set -euo pipefail
+          python3 -c "import os, pathlib; p=pathlib.Path(os.environ['PROMPT_PATH']); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(os.environ['PROMPT_CONTENT'], encoding='utf-8')"
+          echo "Wrote inline prompt to $PROMPT_PATH ($(wc -c < "$PROMPT_PATH" | tr -d ' ') bytes)"
+
+      - name: Ensure prompt file exists
+        env:
+          PROMPT_PATH: ${{ steps.resolve_prompt.outputs.prompt_path }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$PROMPT_PATH" ]; then
+            echo "::error::Prompt file missing: $PROMPT_PATH"
+            exit 1
+          fi
+
+      - name: Pick Codex model
+        id: pick_model
+        run: |
+          M="${{ inputs.codex_model }}"
+          if [ -z "$M" ]; then M="o4-mini"; fi
+          echo "codex_model=$M" >> "$GITHUB_OUTPUT"
+
+      - name: ${{ inputs.codex_step_name }}
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ steps.resolve_prompt.outputs.prompt_path }}
+          sandbox: workspace-write
+          model: ${{ steps.pick_model.outputs.codex_model }}
+          output-file: ${{ inputs.output_file }}
+          allow-bots: true
+
+      - name: Upload Codex workspace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.upload_artifact_name }}
+          path: ${{ inputs.upload_path }}
+          if-no-files-found: ${{ inputs.upload_if_no_files_found }}

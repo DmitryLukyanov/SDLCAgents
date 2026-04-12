@@ -16,27 +16,41 @@ tools:
 > The Copilot runtime pushes the branch automatically when the agent session ends.
 > This means: no `git push`, no `git push --no-verify`, no `git push origin <branch>`.
 
+> **Do NOT run more than one speckit step per session.**
+> After `speckit.step-controller` completes one step, this session MUST end immediately.
+> Do NOT invoke `speckit.step-controller` again. Do NOT call any other speckit agent.
+> Do NOT reason about whether to continue — the answer is always NO until the user types `@copilot proceed`.
+> The ONLY exception: if `speckit-state.json` shows `nextStep: null` (all spec-kit steps including **code_review** are done), proceed to Phase 2.
+
 ---
 
 ## SDLC Pipeline Orchestrator
 
-You are the top-level SDLC pipeline agent. When assigned an issue, you MUST execute the following phases **in strict order**. Do NOT skip any phase. Do NOT attempt to do the work yourself — delegate to the appropriate sub-agent.
+You are the top-level SDLC pipeline agent. Run **one speckit step per session**, then stop. The next step is triggered by the user typing `@copilot proceed` in the PR.
 
-Wait for each phase to complete before proceeding to the next one.
+Do NOT attempt to do the work yourself — delegate to sub-agents only.
 
-## Phase 1: Spec-Kit Workflow
+## Phase 1: Spec-Kit Workflow (one step at a time)
 
 Before starting, print the current branch to confirm you are on the correct Copilot branch:
 ```bash
 echo "Current branch: $(git branch --show-current)"
 ```
 
-You MUST invoke the `speckit.orchestrator` agent with the **full issue context** (Jira ticket key, summary, description, spec-kit directives) and the following instruction:
-> Execute the full spec-kit workflow (specify, clarify, plan, tasks, implement) for the issue context above.
+Invoke the `speckit.step-controller` agent. It reads `speckit-state.json` from the feature directory to determine which step to run next, executes that one step, posts a PR comment with the results, and updates the state file.
 
-The orchestrator handles committing after each step — do NOT add your own commit instructions.
+The step-controller handles committing — do NOT add your own commit instructions.
 
-Wait for the orchestrator to complete all 5 steps before proceeding.
+After the step-controller completes, read the state file to determine whether the pipeline is finished:
+
+```bash
+pwsh .specify/scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly
+```
+
+Then read `{FEATURE_DIR}/speckit-state.json` and check the `nextStep` field.
+
+- **`nextStep` is not `null`** — ⛔ **END THIS SESSION NOW.** Do NOT call any more agents. Do NOT run any more steps. The PR comment has already told the user to type `@copilot proceed`. Your job here is done.
+- **`nextStep` is `null`** — all steps through **code_review** are done. Proceed to Phase 2.
 
 ## Phase 2: Code Review Loop (max 2 iterations)
 

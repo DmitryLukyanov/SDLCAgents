@@ -1,0 +1,1 @@
+Review the implementation on this branch against tasks.md and spec.md. Write code-review-summary.md and .code-review-verdict (APPROVED or CHANGES_NEEDED) at the repo root; fix clear issues in code when safe.

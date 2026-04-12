@@ -62,6 +62,8 @@ on:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: read
       actions: write
@@ -97,7 +99,7 @@ jobs:
         run: |
           if [ ! -f ".specify/init-options.json" ]; then
             echo "::error::Spec-Kit is not initialized in this repo."
-            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai codex --script sh --force"
             exit 1
           fi
 
@@ -105,7 +107,7 @@ jobs:
           AGENTS_VERSION=$(jq -r '.speckit_version // "0.0.0"' .sdlc-agents/.specify/init-options.json 2>/dev/null || echo "0.0.0")
           if [ "$CURRENT" != "$AGENTS_VERSION" ]; then
             echo "::error::Spec-Kit version mismatch: consumer has v${CURRENT}, SDLCAgents requires v${AGENTS_VERSION}."
-            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${AGENTS_VERSION} specify init --here --ai copilot --script ps --force"
+            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${AGENTS_VERSION} specify init --here --ai codex --script sh --force"
             exit 1
           fi
 
@@ -113,42 +115,21 @@ jobs:
 
           MISSING=0
           for f in \
-            .github/agents/speckit.specify.agent.md \
-            .github/agents/speckit.clarify.agent.md \
-            .github/agents/speckit.plan.agent.md \
-            .github/agents/speckit.tasks.agent.md \
-            .github/agents/speckit.implement.agent.md \
-            .github/agents/speckit.analyze.agent.md \
-            .github/agents/speckit.constitution.agent.md \
-            .github/agents/speckit.checklist.agent.md \
-            .github/agents/speckit.taskstoissues.agent.md \
-            .github/agents/speckit.orchestrator.agent.md \
             .github/agents/sdlc.pipeline.agent.md \
-            .github/agents/code.review.agent.md; do
+            .github/agents/code.review.agent.md \
+            .agents/skills/speckit-specify/SKILL.md \
+            .agents/skills/speckit-clarify/SKILL.md \
+            .agents/skills/speckit-plan/SKILL.md \
+            .agents/skills/speckit-tasks/SKILL.md \
+            .agents/skills/speckit-implement/SKILL.md; do
             if [ ! -f "$f" ]; then
-              echo "::error::Missing agent file: $f"
-              MISSING=1
-            fi
-          done
-
-          for f in \
-            .github/prompts/speckit.specify.prompt.md \
-            .github/prompts/speckit.clarify.prompt.md \
-            .github/prompts/speckit.plan.prompt.md \
-            .github/prompts/speckit.tasks.prompt.md \
-            .github/prompts/speckit.implement.prompt.md \
-            .github/prompts/speckit.analyze.prompt.md \
-            .github/prompts/speckit.constitution.prompt.md \
-            .github/prompts/speckit.checklist.prompt.md \
-            .github/prompts/speckit.taskstoissues.prompt.md; do
-            if [ ! -f "$f" ]; then
-              echo "::error::Missing prompt file: $f"
+              echo "::error::Missing file: $f"
               MISSING=1
             fi
           done
 
           if [ "$MISSING" -eq 1 ]; then
-            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai copilot --script ps --force"
+            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai codex --script sh --force"
             exit 1
           fi
 
@@ -171,7 +152,6 @@ jobs:
           POST_READ_STATUS: ${{ inputs.status_to_move_to }}
           JIRA_PROJECT: ${{ inputs.jira_project }}
           TICKET_CONTEXT_DEPTH: ${{ inputs.ticket_context_depth }}
-          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           SM_SUMMARY_FILE: ${{ runner.temp }}/sm-summary.md
 
