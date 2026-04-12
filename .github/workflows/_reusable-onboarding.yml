@@ -58,7 +58,7 @@ jobs:
             specify init --here --ai copilot --script ps --force
           echo "✅ spec-kit initialised"
 
-      - name: Sparse-checkout SDLCAgents (workflow templates, agents, prompts)
+      - name: Sparse-checkout SDLCAgents (workflow templates, agents, prompts, scripts)
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.agents_repo }}
@@ -69,6 +69,7 @@ jobs:
             .github/consumer-templates
             .github/agents
             .github/prompts
+            .specify/scripts
 
       - name: Sparse-checkout reference consumer repo (configs)
         uses: actions/checkout@v4
@@ -96,6 +97,11 @@ jobs:
             cp "$f" ".github/workflows/$fname"
             echo "  copied workflow: $fname"
           done
+
+          # ── .specify/scripts (from SDLCAgents — overrides spec-kit defaults) ──
+          mkdir -p .specify/scripts
+          cp -r _sdlc_agents/.specify/scripts/. .specify/scripts/
+          echo "  copied .specify/scripts/"
 
           # ── .github/agents (from SDLCAgents — source of truth) ───────
           mkdir -p .github/agents
@@ -163,9 +169,9 @@ jobs:
           echo ""
           echo "── spec-kit init ─────────────────────────────"
           check_file "init-options.json"                .specify/init-options.json
-          check_file "create-new-feature.ps1"           .specify/scripts/powershell/create-new-feature.ps1
-          check_file "check-prerequisites.ps1"          .specify/scripts/powershell/check-prerequisites.ps1
-          check_file "common.ps1"                       .specify/scripts/powershell/common.ps1
+          check_file "create-new-feature.ps1 (SDLCAgents)" .specify/scripts/powershell/create-new-feature.ps1
+          check_file "check-prerequisites.ps1"           .specify/scripts/powershell/check-prerequisites.ps1
+          check_file "common.ps1"                        .specify/scripts/powershell/common.ps1
           check_file "spec-template.md"                 .specify/templates/spec-template.md
           check_file "copilot manifest"                 .specify/integrations/copilot.manifest.json
 
