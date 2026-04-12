@@ -230,6 +230,16 @@ function Get-BranchName {
 if ($ShortName) {
     # Use provided short name, just clean it up
     $branchSuffix = ConvertTo-CleanBranchName -Name $ShortName
+} elseif ($NoBranch -and $hasGit) {
+    # When -NoBranch is set the branch already exists — derive suffix from it
+    $currentBranch = git branch --show-current 2>$null
+    if ($currentBranch) {
+        # Strip vendor prefixes like copilot/, feature/, users/foo/, etc.
+        $stripped = $currentBranch -replace '^[^/]+/', ''
+        $branchSuffix = ConvertTo-CleanBranchName -Name $stripped
+    } else {
+        $branchSuffix = Get-BranchName -Description $featureDesc
+    }
 } else {
     # Generate from description with smart filtering
     $branchSuffix = Get-BranchName -Description $featureDesc
