@@ -135,7 +135,7 @@ async function main(): Promise<void> {
   const step = requireEnv('SPECKIT_STEP') as SpeckitStep;
   const featureDir = requireEnv('FEATURE_DIR');
   const prNumber = parseInt(requireEnv('PR_NUMBER'), 10);
-  const model = process.env['GATE_MODEL'];
+  const model = process.env['GATE_MODEL'] || undefined;
 
   if (!STEP_ORDER.includes(step)) {
     console.error(`[gate] Unknown step: "${step}". Valid steps: ${STEP_ORDER.join(', ')}`);
