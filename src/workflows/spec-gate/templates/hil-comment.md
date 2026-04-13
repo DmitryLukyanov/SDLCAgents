@@ -1,0 +1,8 @@
+<!-- {{HIL_MARKER}} -->
+## {{HIL_HEADING}}
+
+{{HIL_INTRO}}
+
+{{SUMMARY}}
+{{ISSUES_SECTION}}
+{{HIL_FOOTER}}

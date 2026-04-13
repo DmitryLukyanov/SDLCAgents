@@ -8,6 +8,7 @@
  *   Incomplete → posts questions to Jira, closes GitHub issue, transitions to Blocked → stops pipeline
  */
 import { adfToPlain } from '../../../lib/adf-to-plain.js';
+import { loadTemplate, fillTemplate } from '../../../lib/template-utils.js';
 import {
   extractComments,
   mapRelated,
@@ -15,6 +16,10 @@ import {
 import type { RelatedIssueSummary } from '../../../lib/jira/jira-related.js';
 import type { TicketContext } from '../../business-analyst/ba-types.js';
 import type { AiTeammateDeps, BaInlineStep, RunnerContext, StepOutcome } from '../runner-types.js';
+
+const BA_STARTED    = loadTemplate(import.meta.url, '..', 'templates', 'ba-started.md');
+const BA_COMPLETE   = loadTemplate(import.meta.url, '..', 'templates', 'ba-complete.md');
+const BA_INCOMPLETE = loadTemplate(import.meta.url, '..', 'templates', 'ba-incomplete.md');
 
 export async function runBaInline(
   ctx: RunnerContext,
@@ -64,7 +69,7 @@ export async function runBaInline(
 
   if (ctx.githubIssueNumber) {
     await deps.addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber,
-      `🔍 **BA analysis started** for \`${issueKey}\`\n\nAnalyzing ticket with LLM — this may take a moment.`
+      fillTemplate(BA_STARTED, { ISSUE_KEY: issueKey })
     ).catch(() => { /* non-fatal */ });
   }
 
@@ -82,7 +87,7 @@ export async function runBaInline(
 
     if (ctx.githubIssueNumber) {
       await deps.addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber,
-        `✅ **BA analysis complete** for \`${issueKey}\`\n\nAll 5 spec-kit fields extracted. Assigning Copilot agent now.`
+        fillTemplate(BA_COMPLETE, { ISSUE_KEY: issueKey })
       ).catch(() => { /* non-fatal */ });
     }
 
@@ -102,7 +107,7 @@ export async function runBaInline(
   if (ctx.githubIssueNumber) {
     try {
       await deps.addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber,
-        `⚠️ **BA analysis incomplete** for \`${issueKey}\`\n\nClarification questions have been posted to Jira. Ticket moved to Blocked. This issue will be closed.`
+        fillTemplate(BA_INCOMPLETE, { ISSUE_KEY: issueKey })
       ).catch(() => { /* non-fatal */ });
       await deps.closeGithubIssue(ctx.owner, ctx.repo, ctx.githubIssueNumber);
       console.log(`   ✅ Closed placeholder GitHub issue #${ctx.githubIssueNumber}`);

@@ -2,12 +2,15 @@
  * AI Teammate entry point: wires real deps and runs the agent.
  */
 import { Octokit } from '@octokit/rest';
+import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { getIssue, addIssueComment, addIssueLabel, transitionIssueToStatusName } from '../../lib/jira/jira-client.js';
 import { fetchRelatedIssueSummaries } from '../../lib/jira/jira-related.js';
 import { prepareIssueContextWithLogging } from './spec-kit/pipeline.js';
 import { analyzeTicket } from '../business-analyst/analyze-ticket.js';
 import { runAiTeammateAgent } from './ai-teammate-core.js';
 import type { AiTeammateDeps } from './runner-types.js';
+
+const PLACEHOLDER_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'github-issue-placeholder.md');
 
 const githubToken = process.env.COPILOT_PAT ?? process.env.GITHUB_TOKEN ?? '';
 const octokit = new Octokit({ auth: githubToken });
@@ -31,7 +34,7 @@ const deps: AiTeammateDeps = {
       owner,
       repo,
       title: `${issueKey}: Copilot Coding Agent Task`,
-      body: `⏳ **BA analysis in progress** for \`${issueKey}\`. This issue will be updated with the full specification and assigned to Copilot once analysis completes.`,
+      body: fillTemplate(PLACEHOLDER_TEMPLATE, { ISSUE_KEY: issueKey }),
       labels: [`jira:${issueKey}`],
     });
     return response.data.number;

@@ -6,20 +6,13 @@
  * and assigns the Copilot coding agent.
  */
 import { readFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { resolve } from 'node:path';
 import type { AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types.js';
+import { fillTemplate } from '../../../lib/template-utils.js';
 
 const TEMPLATE_PATH = '.sdlc-agents/src/workflows/ai-teammate/templates/github-issue-with-copilot.md';
 const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
 const TBD = '{TBD}';
-
-function fillTemplate(template: string, vars: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, value);
-  }
-  return result;
-}
 
 export async function runAssignCopilot(
   ctx: RunnerContext,

@@ -19,6 +19,14 @@ import { join } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { analyzeSpec } from './analyze-spec.js';
 import { STEP_FILES, STEP_ORDER, type SpeckitStep } from './spec-gate-types.js';
+import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
+
+/* ------------------------------------------------------------------ */
+/*  Templates                                                          */
+/* ------------------------------------------------------------------ */
+
+const PROCEED_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'proceed-comment.md');
+const HIL_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'hil-comment.md');
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -62,17 +70,10 @@ function stepLabel(step: SpeckitStep): string {
 }
 
 function buildProceedComment(step: SpeckitStep, summary: string): string {
-  return [
-    `<!-- speckit-gate: proceed -->`,
-    `@copilot proceed`,
-    ``,
-    `---`,
-    `_Spec gate passed ✅ — no open issues detected in the \`${stepLabel(step)}\` artifacts._`,
-    summary ? `\n_${summary}_` : '',
-  ]
-    .filter((l) => l !== undefined)
-    .join('\n')
-    .trim();
+  return fillTemplate(PROCEED_TEMPLATE, {
+    STEP_LABEL: stepLabel(step),
+    SUMMARY_LINE: summary ? `\n_${summary}_` : '',
+  }).trim();
 }
 
 function buildHilComment(
@@ -81,48 +82,44 @@ function buildHilComment(
   issues: Array<{ file: string; line: number; text: string }>,
 ): string {
   const isImplement = step === 'implement';
-  const marker = isImplement ? 'speckit-gate: hil-implement' : 'speckit-gate: hil';
 
-  const lines: string[] = [
-    `<!-- ${marker} -->`,
-  ];
+  const hilMarker = isImplement ? 'speckit-gate: hil-implement' : 'speckit-gate: hil';
+  const hilHeading = isImplement
+    ? 'Spec Gate: Implementation Complete — Human Review Required ✅'
+    : 'Spec Gate: Human Review Required ⚠️';
+  const hilIntro = isImplement
+    ? 'The `implement` step has completed. This step always requires human review before merging.'
+    : `The automated spec gate found **${issues.length} issue(s)** in the \`${stepLabel(step)}\` artifacts that need resolution before proceeding.`;
 
-  if (isImplement) {
-    lines.push(`## Spec Gate: Implementation Complete — Human Review Required ✅`);
-    lines.push(``);
-    lines.push(`The \`implement\` step has completed. This step always requires human review before merging.`);
-  } else {
-    lines.push(`## Spec Gate: Human Review Required ⚠️`);
-    lines.push(``);
-    lines.push(
-      `The automated spec gate found **${issues.length} issue(s)** in the \`${stepLabel(step)}\` artifacts that need resolution before proceeding.`,
-    );
-  }
-
-  lines.push(``);
-  lines.push(summary);
-
+  let issuesSection = '';
   if (issues.length > 0) {
-    lines.push(``);
-    lines.push(`### Issues Found`);
-    lines.push(``);
-    lines.push(`| File | Line | Issue |`);
-    lines.push(`|------|------|-------|`);
-    for (const issue of issues) {
+    const tableRows = issues.map((issue) => {
       const lineRef = issue.line > 0 ? String(issue.line) : '—';
-      // Escape pipe characters in text to avoid breaking the table
       const safeText = issue.text.replace(/\|/g, '\\|');
-      lines.push(`| \`${issue.file}\` | ${lineRef} | ${safeText} |`);
-    }
+      return `| \`${issue.file}\` | ${lineRef} | ${safeText} |`;
+    });
+    issuesSection = [
+      '',
+      '### Issues Found',
+      '',
+      '| File | Line | Issue |',
+      '|------|------|-------|',
+      ...tableRows,
+    ].join('\n');
   }
 
-  if (!isImplement) {
-    lines.push(``);
-    lines.push(`---`);
-    lines.push(`_Fix the issues above, then reply \`@copilot proceed\` to continue._`);
-  }
+  const hilFooter = isImplement
+    ? ''
+    : '\n---\n_Fix the issues above, then reply `@copilot proceed` to continue._';
 
-  return lines.join('\n');
+  return fillTemplate(HIL_TEMPLATE, {
+    HIL_MARKER: hilMarker,
+    HIL_HEADING: hilHeading,
+    HIL_INTRO: hilIntro,
+    SUMMARY: summary,
+    ISSUES_SECTION: issuesSection,
+    HIL_FOOTER: hilFooter,
+  }).trim();
 }
 
 /* ------------------------------------------------------------------ */
