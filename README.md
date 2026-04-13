@@ -4,7 +4,7 @@
 
 | Priority | # | Topic | Description |
 |----------|---|-------|-------------|
-| 🔴 Critical | 1 | **Human-in-the-loop option** | Answer questions from the model if any, and add an optional approval gate before implementation starts — post a summary comment on the PR/issue and wait for explicit approval before the Copilot agent proceeds |
+| ✅ Done | 1 | **Human-in-the-loop option** | Each speckit step now runs independently. After every step the agent posts a PR comment with a summary; the user types `@copilot proceed` to advance to the next step. State is tracked in `speckit-state.json` in the feature directory. |
 | 🔴 Critical | 2 | **More complex prompts** | Invest in richer, more detailed prompts for each agent step — better context injection, chain-of-thought guidance, domain-specific instructions, and example-driven few-shot patterns to improve output quality |
 | 🔴 Critical | 3 | **Lock on GitHub flow** | Currently locked into the GitHub issue → PR → agent pattern. Explore running Codex or Claude binaries directly without requiring the GitHub issue/PR lifecycle |
 | 🟠 High | 4 | **Lightweight pipeline (no spec-kit)** | For simpler tickets that don't need the full specify→clarify→plan→tasks→implement ceremony, support a lightweight mode that goes straight to implementation |
@@ -88,7 +88,9 @@ sequenceDiagram
         AT->>J: optional ba_analyzed label
         AT->>GH: assign_copilot — body + copilot-swe-agent[bot]
         GH-->>COP: agent session starts
-        COP->>COP: spec-kit → implement → PR
+        COP->>COP: step-controller → specify → PR comment
+        Note over COP: user replies @copilot proceed
+        COP->>COP: step-controller → clarify / plan / tasks / implement → PR comment (repeat)
     else BA incomplete
         LLM-->>AT: questions / partial
         AT->>J: comment + transition Blocked
@@ -157,7 +159,7 @@ flowchart TD
     A4 -->|incomplete| X2[Close GitHub issue not_planned]
     X1 --> END_BAD([End])
 
-    A5 --> COP[Copilot — sdlc.pipeline.agent.md\n→ PR with jira:KEY]
+    A5 --> COP[Copilot — speckit.step-controller\none step at a time, PR comment after each\nuser types @copilot proceed to advance]
 
     subgraph PM [PR merged — pr-merged.yml]
         P1[GitHub issue cleanup]

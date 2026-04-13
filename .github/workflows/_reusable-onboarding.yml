@@ -216,8 +216,11 @@ jobs:
           echo "── Agents ────────────────────────────────────"
           check_dir  ".github/agents/"                  .github/agents
           check_file "speckit.specify.agent.md"         .github/agents/speckit.specify.agent.md
+          check_file "speckit.clarify.agent.md"         .github/agents/speckit.clarify.agent.md
           check_file "speckit.plan.agent.md"            .github/agents/speckit.plan.agent.md
+          check_file "speckit.tasks.agent.md"           .github/agents/speckit.tasks.agent.md
           check_file "speckit.implement.agent.md"       .github/agents/speckit.implement.agent.md
+          check_file "speckit.step-controller.agent.md" .github/agents/speckit.step-controller.agent.md
 
           echo ""
           echo "── Config ────────────────────────────────────"
