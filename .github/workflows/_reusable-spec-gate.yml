@@ -181,7 +181,7 @@ jobs:
       # ── 8. Run spec gate analysis and post PR comment ────────────────────────────
       - name: Run spec gate
         if: steps.pr.outputs.pr_number != ''
-        run: node --import .sdlc-agents/node_modules/tsx/dist/esm/index.cjs .sdlc-agents/src/workflows/spec-gate/spec-gate-agent.ts
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/spec-gate/spec-gate-agent.ts
         env:
           GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
