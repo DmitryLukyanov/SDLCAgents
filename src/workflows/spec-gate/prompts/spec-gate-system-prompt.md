@@ -18,7 +18,7 @@ Scan every file for the following markers and patterns. Report each occurrence a
 - `Open Question` or `Open Questions` — section heading or inline phrase
 - `TBD` — in a requirement, data field, contract, or decision (not in a code comment)
 - `TODO` — in spec, plan, or task files (not in code files)
-- `[ ]` unchecked checkbox — in a quality checklist (lines containing `- [ ]` in `checklists/` files)
+- `[ ]` unchecked checkbox — ONLY in quality checklist files (i.e. files inside a `checklists/` directory). Do NOT flag unchecked `- [ ]` items in `tasks.md` — those are tasks waiting to be implemented and are expected to be unchecked at this stage.
 - `Unknown` or `unknown` — used to describe a data field type, a dependency, or a constraint
 
 ### Soft blockers (report if the line reads like a requirement or decision)
@@ -34,7 +34,8 @@ Scan every file for the following markers and patterns. Report each occurrence a
 ### Implement step
 For the implement step, ALWAYS set `proceed` to `false` regardless of what you find.
 The summary must state: "Implementation complete — human review required before merging."
-You may still report issues if any unchecked tasks (`- [ ]`) remain in tasks.md.
+You MAY report issues if any unchecked tasks (`- [ ]`) remain in tasks.md — for this step only,
+unchecked tasks are a real problem because implementation should have completed them all.
 
 ## Output format
 
