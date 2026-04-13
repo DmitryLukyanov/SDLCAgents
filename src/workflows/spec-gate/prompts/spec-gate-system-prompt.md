@@ -23,9 +23,11 @@ Scan every file for the following markers and patterns. Report each occurrence a
 
 ### Soft blockers (report if the line reads like a requirement or decision)
 - A line ending with `?` that appears to be a requirement or acceptance criterion bullet
-- `assumption` — used without an explicit statement of what is assumed
-- Empty section body under a required heading (heading with no content below it)
+- `assumption` — used without an explicit statement of what is assumed. Do NOT flag this if there is a dedicated `## Assumptions` or `### Assumptions` section with at least one bullet point below it.
+- Empty section body — ONLY flag a section as empty if there is literally no text between the heading and the next heading of the same or higher level. If you can see any bullet points, sentences, or sub-headings below it, the section is NOT empty.
 - `N/A` or `n/a` — in a field that is marked required by the template
+
+Before reporting any issue, verify it actually exists in the text. Do not infer or assume — only report what you can directly quote or point to.
 
 ### Tasks step only
 - Any task line that contains vague language: "decide later", "figure out", "TBD", "to be determined", "check with team"
