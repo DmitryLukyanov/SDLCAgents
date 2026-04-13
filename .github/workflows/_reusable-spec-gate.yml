@@ -54,7 +54,42 @@ jobs:
             echo "Found PR #$PR_NUM"
           fi
 
-      # ── 3. Wait for Copilot session to finish ────────────────────────────────────
+      # ── 3. Resolve FEATURE_DIR from the pushed speckit-state.json path ─────────────
+      #    The push event tells us exactly where speckit-state.json landed — no
+      #    branch-name parsing needed. This works regardless of branch naming mode
+      #    (sequential, timestamp, or copilot/* style).
+      - name: Resolve feature directory
+        id: paths
+        if: steps.pr.outputs.pr_number != ''
+        run: |
+          STATE_FILE=$(echo '${{ toJson(github.event.head_commit.modified) }}' | python3 -c "
+          import json, sys
+          files = json.load(sys.stdin)
+          match = next((f for f in files if f.endswith('speckit-state.json')), None)
+          print(match or '')
+          ")
+
+          # Also check added files (first-time state file creation)
+          if [ -z "$STATE_FILE" ]; then
+            STATE_FILE=$(echo '${{ toJson(github.event.head_commit.added) }}' | python3 -c "
+          import json, sys
+          files = json.load(sys.stdin)
+          match = next((f for f in files if f.endswith('speckit-state.json')), None)
+          print(match or '')
+            ")
+          fi
+
+          if [ -z "$STATE_FILE" ]; then
+            echo "::error::Could not find speckit-state.json in pushed files"
+            exit 1
+          fi
+
+          FEATURE_DIR=$(dirname "$STATE_FILE")
+          echo "feature_dir=$FEATURE_DIR" >> "$GITHUB_OUTPUT"
+          echo "state_file=$STATE_FILE" >> "$GITHUB_OUTPUT"
+          echo "Resolved FEATURE_DIR=$FEATURE_DIR (from $STATE_FILE)"
+
+      # ── 4. Wait for Copilot session to finish ────────────────────────────────────
       - name: Wait for Copilot session to finish
         if: steps.pr.outputs.pr_number != ''
         uses: actions/github-script@v7
@@ -100,26 +135,12 @@ jobs:
               await new Promise(r => setTimeout(r, 10_000));
             }
 
-      # ── 4. Resolve FEATURE_DIR from branch name ──────────────────────────────────
-      - name: Resolve feature directory
-        id: paths
-        if: steps.pr.outputs.pr_number != ''
-        run: |
-          BRANCH="${{ github.ref_name }}"
-          # Strip branch-type prefix: feature/, spec/, copilot/
-          SHORT="${BRANCH#*/}"
-          # Strip sequential number prefix (e.g. "001-") or timestamp prefix (e.g. "20260319-143022-")
-          SHORT=$(echo "$SHORT" | sed 's/^[0-9]\{3\}-//' | sed 's/^[0-9]\{8\}-[0-9]\{6\}-//')
-          FEATURE_DIR=".specify/features/$SHORT"
-          echo "feature_dir=$FEATURE_DIR" >> "$GITHUB_OUTPUT"
-          echo "Resolved FEATURE_DIR=$FEATURE_DIR"
-
       # ── 5. Read completed step from speckit-state.json ───────────────────────────
       - name: Read speckit step from state file
         id: step
         if: steps.pr.outputs.pr_number != ''
         run: |
-          STATE_FILE="${{ steps.paths.outputs.feature_dir }}/speckit-state.json"
+          STATE_FILE="${{ steps.paths.outputs.state_file }}"
           if [ ! -f "$STATE_FILE" ]; then
             echo "::error::State file not found: $STATE_FILE"
             exit 1
