@@ -11,6 +11,7 @@ import { runAiTeammateAgent } from './ai-teammate-core.js';
 import type { AiTeammateDeps } from './runner-types.js';
 
 const PLACEHOLDER_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'github-issue-placeholder.md');
+const ISSUE_TITLE_TEMPLATE  = loadTemplate(import.meta.url, 'templates', 'github-issue-title.md');
 
 const githubToken = process.env.COPILOT_PAT ?? process.env.GITHUB_TOKEN ?? '';
 const octokit = new Octokit({ auth: githubToken });
@@ -33,7 +34,7 @@ const deps: AiTeammateDeps = {
     const response = await octokit.rest.issues.create({
       owner,
       repo,
-      title: `${issueKey}: Copilot Coding Agent Task`,
+      title: fillTemplate(ISSUE_TITLE_TEMPLATE, { ISSUE_KEY: issueKey }),
       body: fillTemplate(PLACEHOLDER_TEMPLATE, { ISSUE_KEY: issueKey }),
       labels: [`jira:${issueKey}`],
     });

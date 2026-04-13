@@ -8,9 +8,10 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types.js';
-import { fillTemplate } from '../../../lib/template-utils.js';
+import { fillTemplate, loadTemplate } from '../../../lib/template-utils.js';
 
 const TEMPLATE_PATH = '.sdlc-agents/src/workflows/ai-teammate/templates/github-issue-with-copilot.md';
+const AGENT_INSTRUCTIONS_TEMPLATE = loadTemplate(import.meta.url, '..', 'templates', 'copilot-agent-instructions.md');
 const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
 const TBD = '{TBD}';
 
@@ -72,7 +73,7 @@ export async function runAssignCopilot(
   await deps.updateGithubIssue(owner, repo, ctx.githubIssueNumber, {
     body: prompt,
     assignees: ['copilot-swe-agent[bot]'],
-    agentInstructions: `When opening the PR, add the label 'jira:${issueKey}' to it. Include '${issueKey}' in the PR title prefix (e.g., '${issueKey}: <description>').`,
+    agentInstructions: fillTemplate(AGENT_INSTRUCTIONS_TEMPLATE, { ISSUE_KEY: issueKey }),
   });
 
   console.log(`   ✅ Issue updated and assigned to Copilot Coding Agent`);
