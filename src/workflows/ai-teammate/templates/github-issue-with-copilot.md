@@ -4,17 +4,36 @@
 
 {{JIRA_CONTEXT}}
 
+### Pipeline Configuration
+
+Step inputs for the controller — do not modify this block.
+
+```json
+{
+  "specifyInput": "{{DIRECTIVE_PART}}{{SPECIFY_INPUT}}",
+  "clarifyInput": "{{DIRECTIVE_PART}}{{CLARIFY_INPUT}}",
+  "planInput": "{{DIRECTIVE_PART}}{{PLAN_INPUT}}",
+  "tasksInput": "{{DIRECTIVE_PART}}{{TASKS_INPUT}}",
+  "implementInput": "{{DIRECTIVE_PART}}{{IMPLEMENT_INPUT}}"
+}
+```
+
 ### Instructions
 
-Run the spec-kit steps below **in order**. Execute each `@speckit.*` command before moving to the next; do not skip phases or replace this flow with ad-hoc exploration alone.
+Run the spec-kit pipeline **one step at a time** using the step controller.
 
-Each line is `@speckit.*` followed by one quoted argument: when a global directive is configured it appears first, then an em dash, then the step text (suitable to pass as a single argument after the agent name).
+**On initial assignment** — start the pipeline:
 
-1. `@speckit.specify` "{{DIRECTIVE_PART}}{{SPECIFY_INPUT}}"
-2. `@speckit.clarify` "{{DIRECTIVE_PART}}{{CLARIFY_INPUT}}"
-3. `@speckit.plan` "{{DIRECTIVE_PART}}{{PLAN_INPUT}}"
-4. `@speckit.tasks` "{{DIRECTIVE_PART}}{{TASKS_INPUT}}"
-5. `@speckit.implement` "{{DIRECTIVE_PART}}{{IMPLEMENT_INPUT}}"
+```
+@speckit.step-controller
+```
 
-The feature spec has been seeded in the `specs/` directory.
-Commit all generated artifacts and open a PR when done.
+**When `@copilot proceed` is typed in the PR** — continue to the next step:
+
+```
+@speckit.step-controller
+```
+
+The step controller reads `speckit-state.json` from the feature directory to determine which step to run next. After each step it posts a summary comment to the PR with instructions for continuing.
+
+Commit all generated artifacts. Do not open a PR manually — the Copilot runtime handles this.
