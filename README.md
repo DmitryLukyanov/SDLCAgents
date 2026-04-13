@@ -48,6 +48,36 @@ If you prefer to copy files manually, ensure all of the following are in place:
 
 ---
 
+## Spec Gate — Automatic LLM Review
+
+After each speckit step, the **Spec Gate** workflow (`spec-gate.yml`) automatically reviews the produced artifacts using an LLM and either advances the pipeline or flags it for human attention.
+
+### How it works
+
+1. Triggered when `speckit-state.json` is pushed to a `feature/**`, `spec/**`, or `copilot/**` branch
+2. Waits for the Copilot session to finish (polls the `copilot` check run)
+3. Reads the step's artifacts (e.g. `spec.md`, `plan.md`, `tasks.md`)
+4. Calls the LLM to detect open issues: `NEEDS CLARIFICATION`, `Open Questions`, `TBD`, unchecked checklist items, etc.
+5. Posts one of:
+   - **`@copilot proceed`** — no issues found, pipeline advances automatically
+   - **HIL required ⚠️** — issues table posted, human must resolve then reply `@copilot proceed`
+
+> **The `implement` step always produces HIL required** — human review is mandatory before merging, regardless of what the LLM finds.
+
+### Optional configuration
+
+| Repo variable | Default | Description |
+|---------------|---------|-------------|
+| `GATE_MODEL` | `openai/gpt-4o` | Override the LLM model used for analysis (GitHub Models) |
+
+### Responding to HIL
+
+1. Read the issues table in the PR comment
+2. Fix the flagged items in the spec artifacts (edit the files directly or reply to Copilot)
+3. Reply `@copilot proceed` to re-trigger the next step
+
+---
+
 ## GitHub Secrets — Required PAT
 
 The workflows require a **GitHub Classic PAT** stored as the `COPILOT_PAT` repository secret.

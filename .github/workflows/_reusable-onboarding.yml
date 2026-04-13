@@ -211,6 +211,7 @@ jobs:
           check_file "scrum-master.yml"                 .github/workflows/scrum-master.yml
           check_file "copilot-setup-steps.yml"          .github/workflows/copilot-setup-steps.yml
           check_file "pr-merged.yml"                    .github/workflows/pr-merged.yml
+          check_file "spec-gate.yml"                    .github/workflows/spec-gate.yml
 
           echo ""
           echo "── Agents ────────────────────────────────────"

@@ -1,0 +1,33 @@
+# Spec Gate — automatic LLM review after each speckit step.
+#
+# HOW IT WORKS:
+#   1. Triggers when speckit-state.json is pushed to a feature/spec/copilot branch.
+#   2. Waits for the Copilot session to finish (polls the "copilot" check run).
+#   3. Runs an LLM analysis on the spec artifacts for the completed step.
+#   4. Posts "@copilot proceed" if no open issues found.
+#      Posts "HIL required" with an issue table if blockers are detected.
+#
+# NOTE: The "implement" step always results in "HIL required" — human review
+#       is always required before merging an implementation.
+#
+# OPTIONAL: Set a repo/org variable GATE_MODEL to override the LLM model.
+#           Default is openai/gpt-4o via GitHub Models.
+name: Spec Gate
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'spec/**'
+      - 'copilot/**'
+    paths:
+      - '**/speckit-state.json'
+
+jobs:
+  call:
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-spec-gate.yml@master
+    secrets: inherit
