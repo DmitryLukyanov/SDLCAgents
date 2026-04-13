@@ -24,19 +24,27 @@ You are the top-level SDLC pipeline agent. When assigned an issue, you MUST exec
 
 Wait for each phase to complete before proceeding to the next one.
 
-## Phase 1: Spec-Kit Workflow
+## Phase 1: Spec-Kit Workflow (one step at a time)
 
 Before starting, print the current branch to confirm you are on the correct Copilot branch:
 ```bash
 echo "Current branch: $(git branch --show-current)"
 ```
 
-You MUST invoke the `speckit.orchestrator` agent with the **full issue context** (Jira ticket key, summary, description, spec-kit directives) and the following instruction:
-> Execute the full spec-kit workflow (specify, clarify, plan, tasks, implement) for the issue context above.
+Invoke the `speckit.step-controller` agent. It reads `speckit-state.json` from the feature directory to determine which step to run next, executes that one step, posts a PR comment with the results, and updates the state file.
 
-The orchestrator handles committing after each step — do NOT add your own commit instructions.
+The step-controller handles committing — do NOT add your own commit instructions.
 
-Wait for the orchestrator to complete all 5 steps before proceeding.
+After the step-controller completes, read the state file to determine whether the pipeline is finished:
+
+```bash
+pwsh .specify/scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly
+```
+
+Then read `{FEATURE_DIR}/speckit-state.json` and check the `nextStep` field.
+
+- **`nextStep` is not `null`** — more steps remain. **STOP here.** Do not proceed to Phase 2. The PR comment already instructs the user to type `@copilot proceed` for the next step.
+- **`nextStep` is `null`** — all 5 steps are done. Proceed to Phase 2.
 
 ## Phase 2: Code Review Loop (max 2 iterations)
 
