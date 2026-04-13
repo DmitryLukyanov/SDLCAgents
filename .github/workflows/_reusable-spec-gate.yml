@@ -62,25 +62,20 @@ jobs:
         id: paths
         if: steps.pr.outputs.pr_number != ''
         run: |
-          STATE_FILE=$(echo '${{ toJson(github.event.head_commit.modified) }}' | python3 -c "
-          import json, sys
-          files = json.load(sys.stdin) or []
-          match = next((f for f in files if f.endswith('speckit-state.json')), None)
-          print(match or '')
-          ")
+          # Try git diff first (most precise — only the file changed in this commit)
+          STATE_FILE=$(git diff HEAD~1 HEAD --name-only 2>/dev/null \
+            | grep 'speckit-state.json' | head -1)
 
-          # Also check added files (first-time state file creation)
+          # Fallback: find on disk (head_commit file lists are unreliable for large commits)
           if [ -z "$STATE_FILE" ]; then
-            STATE_FILE=$(echo '${{ toJson(github.event.head_commit.added) }}' | python3 -c "
-          import json, sys
-          files = json.load(sys.stdin) or []
-          match = next((f for f in files if f.endswith('speckit-state.json')), None)
-          print(match or '')
-            ")
+            STATE_FILE=$(find . -name 'speckit-state.json' \
+              -not -path './.git/*' \
+              -not -path './.sdlc-agents/*' \
+              | head -1 | sed 's|^\./||')
           fi
 
           if [ -z "$STATE_FILE" ]; then
-            echo "::error::Could not find speckit-state.json in pushed files"
+            echo "::error::Could not find speckit-state.json in the repository"
             exit 1
           fi
 
