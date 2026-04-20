@@ -10,11 +10,12 @@
 | 🟠 High | 4 | **Lightweight pipeline (no spec-kit)** | For simpler tickets that don't need the full specify→clarify→plan→tasks→implement ceremony, support a lightweight mode that goes straight to implementation (and still runs gate/validation) |
 | 🟠 High | 5 | **Solve merge conflicts** | Make conflict handling reliable: detect conflicts early, auto-rebase branches, (optionally) apply safe resolution heuristics, then re-run validation before marking the PR ready |
 | 🟡 Medium | 6 | **More complex routing** | Smarter Scrum Master (Jira) routing: route by ticket type, priority, team, component, or estimated complexity rather than simple label-based rules |
-| 🟡 Medium | 7 | **Use different agents** | Support pluggable implementer agents (e.g. OpenAI Codex, Claude Code, GitHub Copilot) via config — keep a stable “prompt + sandbox + outputs” contract across runners |
+| 🟡 Medium | 7 | **Use different agents** | Configure agents via config (e.g. OpenAI Codex, Claude Code, GitHub Copilot) — keep a stable “prompt + sandbox + outputs” contract across runners |
 | 🟡 Medium | 8 | **Choose different AI models** | Allow per-step or per-workflow model selection (some workflow-level knobs already exist via repo variables); define a consistent override mechanism across workflows |
 | 🟢 Low | 9 | **More agents** | Expand the agent roster: security reviewer, performance profiler, documentation generator, test coverage enforcer, dependency auditor |
 | 🟢 Low | 10 | **More sources than just Jira** | Support additional ticket sources: GitHub Issues native, Azure DevOps, Linear, Shortcut — with a pluggable source adapter interface |
-| 🟡 Medium | 11 | **AI skills and MCP servers** | Equip agents with reusable skills (e.g. run tests, query docs, search codebase) and expose pipeline capabilities as MCP servers so any MCP-compatible client can trigger or extend the SDLC workflow |
+| 🟡 Medium | 11 | **AI skills and MCP servers** | Better integration with existing tools and skills (tests, linters, docs search, codebase search, etc.) and expose pipeline capabilities as MCP servers so any MCP-compatible client can trigger or extend the SDLC workflow |
+| 🟡 Medium | 12 | **Ticket/PR context & memory** | Provide ticket + PR context/history (comments, prior step summaries, spec gate findings, prior fixes) to prompt handlers / agent runners, or persist as structured “LLM memory” for more consistent PR processing |
 
 ---
 
