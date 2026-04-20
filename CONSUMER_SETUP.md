@@ -112,12 +112,12 @@ git push
 ## Step 6 — Test the pipeline
 
 1. Create a Jira ticket in your project with status **To Do**
-2. Go to **Actions → Scrum Master → Run workflow**
+2. Go to **Actions → Scrum Master (Jira) → Run workflow**
 3. Leave all inputs as defaults and click **Run workflow**
 
 Expected flow:
 ```
-Scrum Master
+Scrum Master (Jira)
   └─► AI Teammate (per ticket)
         └─► Copilot Coding Agent (creates branch + PR)
                     └─► PR Merged (closes issue + Jira → Done)

@@ -8,7 +8,7 @@
 #       with:
 #         jira_project: MY-PROJECT
 #       secrets: inherit
-name: "[Reusable] Scrum Master"
+name: "[Reusable] Scrum Master (Jira)"
 
 on:
   workflow_call:

@@ -2,7 +2,7 @@
 # Triggered by Scrum Master via workflow_dispatch.
 # Delegates all logic to the shared SDLCAgents reusable workflow.
 name: AI Teammate
-run-name: "${{ inputs.concurrency_key }} · 3/4 AI Teammate"
+run-name: "${{ inputs.concurrency_key }} · AI Teammate"
 
 concurrency:
   group: ai-teammate-${{ inputs.concurrency_key }}
