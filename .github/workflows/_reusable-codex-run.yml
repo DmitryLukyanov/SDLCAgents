@@ -29,7 +29,7 @@ on:
         type: string
         default: ''
       download_path:
-        description: "Directory path for download-artifact (ignored when download is skipped)"
+        description: "Directory for download-artifact extract (ignored when download is skipped). For single-file artifacts, basename lands here — use the same directory as in prompt_file (e.g. .sdlc-agents)."
         required: false
         type: string
         default: '.'

@@ -148,7 +148,8 @@ jobs:
     with:
       checkout_ref: ${{ needs.prepare.outputs.branch_name }}
       download_artifact_name: developer-agent-codex-input-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
-      download_path: .
+      # Single-file artifacts flatten to basename on download; extract into .sdlc-agents so paths match prompt_file.
+      download_path: .sdlc-agents
       prompt_file: .sdlc-agents/codex-prompt.md
       output_file: .sdlc-agents/codex-output.txt
       upload_artifact_name: developer-agent-codex-output-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
