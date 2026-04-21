@@ -1,20 +1,12 @@
 # Reusable Developer Agent — Fix handler.
 #
+# Three jobs:
+#   1. prepare — PR branch, state, fix-setup.ts → `.sdlc-agents/codex-fix-prompt.md`, upload prompt artifact
+#   2. codex — `./_reusable-codex-run.yml` (feature-branch checkout + Codex + workspace tarball)
+#   3. teardown — expand tarball, developer-agent-fix-teardown.ts — commit/push, PR comment
+#
 # Makes TARGETED edits to existing spec-kit artifacts to address the specific
 # issues reported by the spec gate. Does NOT re-run the full speckit step.
-#
-# Flow:
-#   1. Strip "/fix " prefix from the comment body
-#   2. Checkout the feature branch (full, for writing)
-#   3. Read speckit-state.json → issue key + PR number + branch
-#   4. Checkout SDLCAgents + install deps
-#   5. developer-agent-fix-setup.ts — reads featureDir from state, writes the
-#      Codex fix prompt to .sdlc-agents/codex-fix-prompt.md
-#   6. openai/codex-action@v1 — Codex reads the artifacts in featureDir,
-#      makes only the required changes, writes files directly to disk
-#   7. developer-agent-fix-teardown.ts — stages changes, commits, touches
-#      speckit-state.json (lastFixedAt) to trigger spec gate re-validation,
-#      pushes, posts PR comment
 #
 # Triggered by: developer-agent-fix.yml (consumer) on /fix PR comments
 name: "[Reusable] Developer Agent — Fix"
@@ -42,19 +34,22 @@ on:
         required: true
 
 jobs:
-  fix:
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Fix teardown PR comments use GITHUB_TOKEN; fix-setup overrides with PAT on its step.
     env:
       GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: write
       pull-requests: write
       issues: write
-
+    outputs:
+      branch_name: ${{ steps.state.outputs.branch_name }}
+      issue_key: ${{ steps.state.outputs.issue_key }}
+      pr_number: ${{ steps.state.outputs.pr_number }}
+      codex_model: ${{ steps.fix_setup.outputs.codex_model }}
+      fix_instructions: ${{ steps.fix.outputs.fix_instructions }}
     steps:
-      # ── 0. Extract fix instructions (strip "/fix" prefix) ───────────────────
       - name: Extract fix instructions
         id: fix
         env:
@@ -67,7 +62,6 @@ jobs:
           echo "EOF_FIX" >> "$GITHUB_OUTPUT"
           echo "Extracted fix instructions (${#INSTRUCTIONS} chars)"
 
-      # ── 1. Get PR branch ─────────────────────────────────────────────────────
       - name: Get PR branch
         id: pr
         uses: actions/github-script@v7
@@ -82,7 +76,6 @@ jobs:
             core.setOutput('branch', pr.head.ref);
             console.log(`PR #${{ inputs.pr_number }} branch: ${pr.head.ref}`);
 
-      # ── 2. Checkout feature branch (full — fix agent writes files) ───────────
       - name: Checkout feature branch
         uses: actions/checkout@v4
         with:
@@ -90,7 +83,6 @@ jobs:
           token: ${{ secrets.COPILOT_PAT }}
           fetch-depth: 0
 
-      # ── 3. Read speckit-state.json → issue key + PR number ──────────────────
       - name: Read speckit state
         id: state
         run: |
@@ -114,7 +106,6 @@ jobs:
           print(f"issue={s.get('issueKey')} pr=#{s.get('prNumber')} branch={s.get('branchName')}")
           PYEOF
 
-      # ── 4. Checkout SDLCAgents for TypeScript runner ────────────────────────
       - name: Checkout SDLCAgents
         uses: actions/checkout@v4
         with:
@@ -123,7 +114,6 @@ jobs:
           path: .sdlc-agents
           token: ${{ secrets.COPILOT_PAT }}
 
-      # ── 5. Node setup + install ─────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -135,15 +125,11 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
-      # ── 6. Configure git identity ────────────────────────────────────────────
       - name: Configure git
         run: |
           git config user.email "developer-agent@sdlc-agents.bot"
           git config user.name "SDLC Developer Agent"
 
-      # ── 7. Run fix agent — setup ─────────────────────────────────────────────
-      # Reads featureDir from speckit-state.json and writes the Codex fix prompt.
-      # Outputs: feature_dir, codex_model
       - name: Run fix agent — setup
         id: fix_setup
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-fix-setup.ts
@@ -155,7 +141,6 @@ jobs:
           FIX_INSTRUCTIONS: ${{ steps.fix.outputs.fix_instructions }}
           DEVELOPER_AGENT_MODEL: ${{ vars.DEVELOPER_AGENT_MODEL }}
 
-      # ── 8. Print Codex fix prompt to job summary ─────────────────────────────
       - name: Print Codex fix prompt
         run: |
           cat .sdlc-agents/.github/content/job-summary-codex-fix-header.md >> "$GITHUB_STEP_SUMMARY"
@@ -164,38 +149,91 @@ jobs:
           printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 9. Apply fix via openai/codex-action@v1 ──────────────────────────────
-      # Codex reads the artifacts in featureDir (from the prompt), makes only
-      # the required changes, and writes the corrected files directly to disk.
-      - name: Apply fix via Codex
-        uses: openai/codex-action@v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: .sdlc-agents/codex-fix-prompt.md
-          sandbox: workspace-write
-          model: ${{ steps.fix_setup.outputs.codex_model }}
-          output-file: .sdlc-agents/codex-fix-output.txt
-          allow-bots: true
-
-      # ── 10. Upload Codex fix output as artifact ──────────────────────────────
-      - name: Upload Codex fix output
-        if: always()
+      - name: Upload Codex fix prompt for Codex job
         uses: actions/upload-artifact@v4
         with:
-          name: codex-fix-output-${{ steps.state.outputs.issue_key }}-${{ github.run_id }}
-          path: .sdlc-agents/codex-fix-output.txt
-          if-no-files-found: ignore
+          name: developer-agent-fix-codex-input-${{ steps.state.outputs.issue_key }}-${{ github.run_id }}
+          path: .sdlc-agents/codex-fix-prompt.md
+          if-no-files-found: error
 
-      # ── 11. Run fix agent — teardown ─────────────────────────────────────────
-      # Stages Codex-written files, commits artifact changes, touches
-      # speckit-state.json (lastFixedAt) to trigger spec gate re-validation,
-      # pushes, and posts the fix-applied PR comment.
+  codex:
+    needs: prepare
+    uses: ./.github/workflows/_reusable-codex-run.yml
+    secrets: inherit
+    with:
+      checkout_ref: ${{ needs.prepare.outputs.branch_name }}
+      download_artifact_name: developer-agent-fix-codex-input-${{ needs.prepare.outputs.issue_key }}-${{ github.run_id }}
+      download_path: .
+      prompt_file: .sdlc-agents/codex-fix-prompt.md
+      output_file: .sdlc-agents/codex-fix-output.txt
+      upload_artifact_name: developer-agent-fix-codex-output-${{ needs.prepare.outputs.issue_key }}-${{ github.run_id }}
+      upload_path: .
+      upload_if_no_files_found: ignore
+      codex_model: ${{ needs.prepare.outputs.codex_model }}
+      codex_step_name: Apply fix via Codex
+      timeout_minutes: 15
+      pack_workspace_tarball: true
+
+  teardown:
+    needs: [prepare, codex]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.branch_name }}
+          token: ${{ secrets.COPILOT_PAT }}
+          fetch-depth: 0
+
+      - name: Download Codex workspace tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: developer-agent-fix-codex-output-${{ needs.prepare.outputs.issue_key }}-${{ github.run_id }}
+          path: .
+
+      - name: Expand Codex workspace overlay
+        run: |
+          set -euo pipefail
+          tar -xzf codex-followup-workspace.tgz
+          rm -f codex-followup-workspace.tgz
+
+      - name: Checkout SDLCAgents
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Configure git
+        run: |
+          git config user.email "developer-agent@sdlc-agents.bot"
+          git config user.name "SDLC Developer Agent"
+
       - name: Run fix agent — teardown
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-fix-teardown.ts
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          ISSUE_KEY: ${{ steps.state.outputs.issue_key }}
-          PR_NUMBER: ${{ steps.state.outputs.pr_number }}
-          BRANCH_NAME: ${{ steps.state.outputs.branch_name }}
-          FIX_INSTRUCTIONS: ${{ steps.fix.outputs.fix_instructions }}
+          ISSUE_KEY: ${{ needs.prepare.outputs.issue_key }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          FIX_INSTRUCTIONS: ${{ needs.prepare.outputs.fix_instructions }}
           CODEX_OUTPUT_FILE: .sdlc-agents/codex-fix-output.txt

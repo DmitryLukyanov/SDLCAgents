@@ -2,9 +2,9 @@
  * Developer Agent — legacy monolithic entry point (SUPERSEDED).
  *
  * ⚠️  This file is no longer called by _reusable-developer-agent.yml.
- *     The workflow now uses the setup/teardown split with openai/codex-action@v1:
+ *     The workflow uses prepare / dedicated Codex job / teardown:
  *       developer-agent-setup.ts    → creates branch/PR, writes prompt file
- *       openai/codex-action@v1      → runs Codex skill
+ *       _reusable-codex-run.yml     → runs Codex skill
  *       developer-agent-teardown.ts → stages files, commits, pushes, comments
  *     Kept for reference only.
  *

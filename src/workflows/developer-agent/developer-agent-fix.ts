@@ -2,9 +2,9 @@
  * Developer Agent — Fix entry point (legacy, SUPERSEDED).
  *
  * ⚠️  This file is no longer called by _reusable-developer-agent-fix.yml.
- *     The workflow now uses the setup/teardown split with openai/codex-action@v1:
+ *     The workflow uses prepare / dedicated Codex job / teardown:
  *       developer-agent-fix-setup.ts    → writes fix prompt file
- *       openai/codex-action@v1          → Codex reads artifacts, applies fixes
+ *       _reusable-codex-run.yml         → Codex reads artifacts, applies fixes
  *       developer-agent-fix-teardown.ts → stages, commits, pushes, comments
  *     Kept for reference only.
  *

@@ -1,7 +1,7 @@
 /**
  * Developer Agent — Fix Teardown phase.
  *
- * Runs AFTER openai/codex-action@v1 in the fix workflow.
+ * Runs AFTER the dedicated Codex job (workspace tarball applied) in the fix workflow.
  *
  * Responsibilities:
  *  1. Stage all Codex-written files (git add -A, excluding .sdlc-agents)

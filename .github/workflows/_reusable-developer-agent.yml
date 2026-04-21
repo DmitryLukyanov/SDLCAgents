@@ -1,13 +1,15 @@
 # Reusable Developer Agent workflow.
 #
-# Executes a single spec-kit step using openai/codex-action@v1.
+# Three jobs:
+#   1. prepare — checkout branch, SDLCAgents, developer-agent-setup.ts → `.sdlc-agents/codex-prompt.md`, upload prompt artifact
+#   2. codex — `./_reusable-codex-run.yml` (feature-branch checkout + Codex + workspace tarball)
+#   3. teardown — expand tarball, developer-agent-teardown.ts — commit/push, PR comment
 #
 # Flow per invocation:
 #   1. Checkout consumer repo on the feature branch
 #   2. [specify only] Create branch + draft PR via developer-agent-setup.ts
 #   3. Write "$speckit-{step} {input}" prompt to .sdlc-agents/codex-prompt.md
-#   4. openai/codex-action@v1 — installs Codex CLI, runs codex exec with the
-#      prompt file, writes artifacts directly to the workspace
+#   4. Reusable Codex job runs the skill; artifacts land in the workspace tarball
 #   5. developer-agent-teardown.ts — stage/commit/push, mark PR ready (implement/code_review),
 #      job summary, PR comment (GITHUB_TOKEN GraphQL mark-ready + comments; PAT fallback + git via checkout)
 #
@@ -15,7 +17,7 @@
 #
 # Required secrets:
 #   COPILOT_PAT     — PAT for checkout, setup (GITHUB_TOKEN is overridden with PAT on the setup step only), and git push identity in the runner.
-#   OPENAI_API_KEY  — OpenAI key (passed to openai/codex-action@v1)
+#   OPENAI_API_KEY  — OpenAI key (passed through to `_reusable-codex-run.yml`)
 #
 # Teardown uses GITHUB_TOKEN for GraphQL markPullRequestReadyForReview + issues.createComment.
 # If the PR stays draft (token limits), teardown retries with COPILOT_PAT when present.
@@ -58,29 +60,27 @@ on:
         required: true
 
 jobs:
-  run:
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Teardown uses GITHUB_TOKEN for PR comments and draft: false; setup/checkout use COPILOT_PAT.
     env:
       GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: write
       pull-requests: write
       issues: write
-
+    outputs:
+      branch_name: ${{ steps.agent_setup.outputs.branch_name }}
+      pr_number: ${{ steps.agent_setup.outputs.pr_number }}
+      feature_dir: ${{ steps.agent_setup.outputs.feature_dir }}
+      codex_model: ${{ steps.agent_setup.outputs.codex_model }}
     steps:
-      # ── 1. Checkout consumer repo ────────────────────────────────────────────
       - name: Checkout consumer repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.COPILOT_PAT }}
 
-      # ── 2. Switch to feature branch ──────────────────────────────────────────
-      # branch_name is provided for all steps after specify, AND for /fix re-runs
-      # on the specify step (where the branch already exists). When branch_name is
-      # empty we are on a fresh specify run — setup.ts will create the branch.
       - name: Switch to feature branch
         if: inputs.branch_name != ''
         env:
@@ -89,7 +89,6 @@ jobs:
           git fetch origin "$BRANCH"
           git checkout "$BRANCH"
 
-      # ── 3. Checkout SDLCAgents for TypeScript runner ────────────────────────
       - name: Checkout SDLCAgents
         uses: actions/checkout@v4
         with:
@@ -98,7 +97,6 @@ jobs:
           path: .sdlc-agents
           token: ${{ secrets.COPILOT_PAT }}
 
-      # ── 4. Node setup + install ─────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -110,16 +108,11 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
-      # ── 5. Configure git identity ────────────────────────────────────────────
       - name: Configure git
         run: |
           git config user.email "developer-agent@sdlc-agents.bot"
           git config user.name "SDLC Developer Agent"
 
-      # ── 6. Run developer agent — setup ──────────────────────────────────────
-      # Reads the issue body, creates the branch + draft PR (specify only),
-      # validates the spec-kit skill file exists, and writes the Codex prompt.
-      # Outputs: branch_name, pr_number, feature_dir, codex_model
       - name: Run developer agent — setup
         id: agent_setup
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-setup.ts
@@ -133,7 +126,6 @@ jobs:
           BRANCH_NAME: ${{ inputs.branch_name }}
           DEVELOPER_AGENT_MODEL: ${{ vars.DEVELOPER_AGENT_MODEL }}
 
-      # ── 7. Print Codex prompt to job summary ────────────────────────────────
       - name: Print Codex prompt
         run: |
           cat .sdlc-agents/.github/content/job-summary-codex-prompt-header.md >> "$GITHUB_STEP_SUMMARY"
@@ -142,37 +134,85 @@ jobs:
           printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 8. Run Codex skill via openai/codex-action@v1 ───────────────────────
-      # openai/codex-action installs the Codex CLI, authenticates it with the
-      # provided API key, and runs `codex exec` with sandbox: workspace-write.
-      # The prompt file contains "$speckit-{step} {input}" which triggers the
-      # spec-kit skill installed at .agents/skills/speckit-{step}/SKILL.md by
-      # the onboarding workflow. Codex writes artifacts directly to the workspace.
-      - name: Run Codex skill — ${{ inputs.step }}
-        uses: openai/codex-action@v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: .sdlc-agents/codex-prompt.md
-          sandbox: workspace-write
-          model: ${{ steps.agent_setup.outputs.codex_model }}
-          output-file: .sdlc-agents/codex-output.txt
-          allow-bots: true
-
-      # ── 9. Upload Codex output as artifact ──────────────────────────────────
-      - name: Upload Codex output
-        if: always()
+      - name: Upload Codex prompt for Codex job
         uses: actions/upload-artifact@v4
         with:
-          name: codex-output-${{ inputs.issue_key }}-${{ inputs.step }}
-          path: |
-            .sdlc-agents/codex-output.txt
-            .sdlc-agents/codex-prompt.md
-          if-no-files-found: ignore
+          name: developer-agent-codex-input-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
+          path: .sdlc-agents/codex-prompt.md
+          if-no-files-found: error
 
-      # ── 10. Run developer agent — teardown ──────────────────────────────────
-      # Stages everything Codex wrote, commits artifacts, writes and commits
-      # speckit-state.json (triggers spec gate), pushes, marks the PR ready for review
-      # (non-draft) after implement and code_review — then job summary + PR comment.
+  codex:
+    needs: prepare
+    uses: ./.github/workflows/_reusable-codex-run.yml
+    secrets: inherit
+    with:
+      checkout_ref: ${{ needs.prepare.outputs.branch_name }}
+      download_artifact_name: developer-agent-codex-input-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
+      download_path: .
+      prompt_file: .sdlc-agents/codex-prompt.md
+      output_file: .sdlc-agents/codex-output.txt
+      upload_artifact_name: developer-agent-codex-output-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
+      upload_path: .
+      upload_if_no_files_found: ignore
+      codex_model: ${{ needs.prepare.outputs.codex_model }}
+      codex_step_name: Run Codex skill — ${{ inputs.step }}
+      timeout_minutes: 30
+      pack_workspace_tarball: true
+
+  teardown:
+    needs: [prepare, codex]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.branch_name }}
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Download Codex workspace tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: developer-agent-codex-output-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
+          path: .
+
+      - name: Expand Codex workspace overlay
+        run: |
+          set -euo pipefail
+          tar -xzf codex-followup-workspace.tgz
+          rm -f codex-followup-workspace.tgz
+
+      - name: Checkout SDLCAgents
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Configure git
+        run: |
+          git config user.email "developer-agent@sdlc-agents.bot"
+          git config user.name "SDLC Developer Agent"
+
       - name: Run developer agent — teardown
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-teardown.ts
         env:
@@ -182,7 +222,7 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           ISSUE_KEY: ${{ inputs.issue_key }}
           STEP: ${{ inputs.step }}
-          BRANCH_NAME: ${{ steps.agent_setup.outputs.branch_name }}
-          PR_NUMBER: ${{ steps.agent_setup.outputs.pr_number }}
-          FEATURE_DIR: ${{ steps.agent_setup.outputs.feature_dir }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          FEATURE_DIR: ${{ needs.prepare.outputs.feature_dir }}
           CODEX_OUTPUT_FILE: .sdlc-agents/codex-output.txt

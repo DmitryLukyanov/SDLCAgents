@@ -1,6 +1,12 @@
 # Reusable job workflow: checkout consumer repo, optional artifact download,
 # optional inline prompt materialization, `openai/codex-action@v1`, then upload workspace artifact.
 #
+# Optional `checkout_ref` + secret `COPILOT_PAT`: checkout a feature branch (e.g. workflow_dispatch
+# where GITHUB_REF is not the branch Codex should run on).
+#
+# Optional `pack_workspace_tarball`: after Codex, gzip the workspace (excluding `.git`, `.sdlc-agents`,
+# and the tarball) so a follow-up job can `tar -xzf` then check out SDLCAgents into `.sdlc-agents` — used by Developer Agent.
+#
 # Prompt (exactly one — XOR):
 #   • prompt_file — non-empty path to an existing file after checkout/download (passed to codex-action).
 #   • prompt_content — non-empty inline text; written to `.sdlc-agents/codex-prompt-from-workflow-input.md`
@@ -67,9 +73,22 @@ on:
         required: false
         type: number
         default: 20
+      checkout_ref:
+        description: "When non-empty, checkout this ref with COPILOT_PAT (omit for default GITHUB_REF checkout)"
+        required: false
+        type: string
+        default: ''
+      pack_workspace_tarball:
+        description: "When true, upload codex-followup-workspace.tgz (tree minus .git and .sdlc-agents) instead of upload_path"
+        required: false
+        type: boolean
+        default: false
     secrets:
       OPENAI_API_KEY:
         required: true
+      COPILOT_PAT:
+        description: "Required when checkout_ref is set (private repo / non-default ref)"
+        required: false
 
 jobs:
   codex:
@@ -81,7 +100,18 @@ jobs:
       contents: write
     steps:
       - name: Checkout consumer repo
+        if: ${{ inputs.checkout_ref == '' }}
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout consumer repo (explicit ref)
+        if: ${{ inputs.checkout_ref != '' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.checkout_ref }}
+          token: ${{ secrets.COPILOT_PAT }}
 
       - name: Download workspace for Codex
         if: ${{ inputs.download_artifact_name != '' }}
@@ -158,10 +188,21 @@ jobs:
           output-file: ${{ inputs.output_file }}
           allow-bots: true
 
+      - name: Pack workspace tarball for follow-up job
+        if: always() && inputs.pack_workspace_tarball == true
+        run: |
+          set -euo pipefail
+          tar -czf codex-followup-workspace.tgz \
+            --exclude=./.git \
+            --exclude=./.sdlc-agents \
+            --exclude=./codex-followup-workspace.tgz \
+            .
+          ls -la codex-followup-workspace.tgz
+
       - name: Upload Codex workspace
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.upload_artifact_name }}
-          path: ${{ inputs.upload_path }}
-          if-no-files-found: ${{ inputs.upload_if_no_files_found }}
+          path: ${{ inputs.pack_workspace_tarball == true && 'codex-followup-workspace.tgz' || inputs.upload_path }}
+          if-no-files-found: ${{ inputs.pack_workspace_tarball == true && 'error' || inputs.upload_if_no_files_found }}

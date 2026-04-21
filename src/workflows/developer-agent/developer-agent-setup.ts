@@ -1,7 +1,7 @@
 /**
  * Developer Agent — Setup phase.
  *
- * Runs BEFORE openai/codex-action@v1 in the workflow.
+ * Runs BEFORE the dedicated Codex job (`_reusable-codex-run.yml`) in the workflow.
  *
  * Responsibilities:
  *  1. On "specify": create feature branch + open draft PR

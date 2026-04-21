@@ -1,7 +1,7 @@
 /**
  * Developer Agent — Fix Setup phase.
  *
- * Runs BEFORE openai/codex-action@v1 in the fix workflow.
+ * Runs BEFORE the dedicated Codex job (`_reusable-codex-run.yml`) in the fix workflow.
  *
  * Responsibilities:
  *  1. Read featureDir + issueNumber from speckit-state.json
