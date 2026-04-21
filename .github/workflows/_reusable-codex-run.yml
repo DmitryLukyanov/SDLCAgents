@@ -1,11 +1,13 @@
 # Reusable job workflow: checkout consumer repo, optional artifact download,
-# optional inline prompt materialization, `openai/codex-action@v1`, then upload workspace artifact.
+# optional inline prompt materialization, `openai/codex-action@v1`, optional
+# commit+push of workspace changes, then upload artifact(s).
 #
 # Optional `checkout_ref` + secret `COPILOT_PAT`: checkout a feature branch (e.g. workflow_dispatch
 # where GITHUB_REF is not the branch Codex should run on).
 #
-# Optional `pack_workspace_tarball`: after Codex, gzip the workspace (excluding `.git`, `.sdlc-agents`,
-# and the tarball) so a follow-up job can `tar -xzf` then check out SDLCAgents into `.sdlc-agents` — used by Developer Agent.
+# Optional `commit_workspace_after_codex`: after a successful Codex run, `git add` (excluding
+# `.sdlc-agents` except paths listed in `extra_git_add_paths`), commit with `workspace_commit_message`,
+# and push to `checkout_ref`. Used by Developer Agent so teardown only updates state / PR metadata.
 #
 # Prompt (exactly one — XOR):
 #   • prompt_file — non-empty path to an existing file after checkout/download (passed to codex-action).
@@ -74,20 +76,40 @@ on:
         type: number
         default: 20
       checkout_ref:
-        description: "When non-empty, checkout this ref with COPILOT_PAT (omit for default GITHUB_REF checkout)"
+        description: "When non-empty, checkout this ref with COPILOT_PAT (omit for default GITHUB_REF checkout). Required when commit_workspace_after_codex is true."
         required: false
         type: string
         default: ''
-      pack_workspace_tarball:
-        description: "When true, upload codex-followup-workspace.tgz (tree minus .git and .sdlc-agents) instead of upload_path"
+      commit_workspace_after_codex:
+        description: "When true, commit and push consumer changes after Codex (requires checkout_ref + workspace_commit_message)"
         required: false
         type: boolean
         default: false
+      workspace_commit_message:
+        description: "Commit message when commit_workspace_after_codex is true"
+        required: false
+        type: string
+        default: ''
+      git_commit_user_email:
+        description: "Author email for workspace_commit step"
+        required: false
+        type: string
+        default: 'developer-agent@sdlc-agents.bot'
+      git_commit_user_name:
+        description: "Author name for workspace_commit step"
+        required: false
+        type: string
+        default: 'SDLC Developer Agent'
+      extra_git_add_paths:
+        description: "Optional newline-separated paths to `git add -f` after the main add (e.g. Codex log under .sdlc-agents)"
+        required: false
+        type: string
+        default: ''
     secrets:
       OPENAI_API_KEY:
         required: true
       COPILOT_PAT:
-        description: "Required when checkout_ref is set (private repo / non-default ref)"
+        description: "Required when checkout_ref is set (private repo / non-default ref); used to push after workspace commit"
         required: false
 
 jobs:
@@ -188,21 +210,80 @@ jobs:
           output-file: ${{ inputs.output_file }}
           allow-bots: true
 
-      - name: Pack workspace tarball for follow-up job
-        if: always() && inputs.pack_workspace_tarball == true
+      - name: Commit and push workspace changes after Codex
+        if: success() && inputs.commit_workspace_after_codex == true
+        env:
+          COMMIT_MSG: ${{ inputs.workspace_commit_message }}
+          GIT_USER_EMAIL: ${{ inputs.git_commit_user_email }}
+          GIT_USER_NAME: ${{ inputs.git_commit_user_name }}
+          BRANCH: ${{ inputs.checkout_ref }}
+          EXTRA_PATHS: ${{ inputs.extra_git_add_paths }}
+          CODEX_OUTPUT_FILE: ${{ inputs.output_file }}
         run: |
           set -euo pipefail
-          tar -czf codex-followup-workspace.tgz \
-            --exclude=./.git \
-            --exclude=./.sdlc-agents \
-            --exclude=./codex-followup-workspace.tgz \
-            .
-          ls -la codex-followup-workspace.tgz
+          if [ -z "${COMMIT_MSG// }" ]; then
+            echo '::error::workspace_commit_message is required when commit_workspace_after_codex is true'
+            exit 1
+          fi
+          if [ -z "${BRANCH// }" ]; then
+            echo '::error::checkout_ref must be set when commit_workspace_after_codex is true'
+            exit 1
+          fi
+          git config user.email "$GIT_USER_EMAIL"
+          git config user.name "$GIT_USER_NAME"
+          git add -A -- ":!.sdlc-agents" ":!node_modules"
+          if [ -n "${EXTRA_PATHS:-}" ]; then
+            printf '%s\n' "$EXTRA_PATHS" | while IFS= read -r line || [ -n "$line" ]; do
+              [ -z "${line// }" ] && continue
+              if [ -f "$line" ]; then git add -f "$line"; fi
+            done
+          fi
+          if git diff --cached --quiet; then
+            echo "No Codex workspace changes to commit"
+            exit 0
+          fi
+          git commit -m "$COMMIT_MSG"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          SHA="$(git rev-parse HEAD)"
+
+          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          {
+            echo "## Workspace commit (Codex)"
+            echo ""
+            echo "Created commit [\`${SHA:0:7}\`](${REPO_URL}/commit/${SHA}) on \`${BRANCH}\`."
+            echo ""
+            echo "### Files in this commit"
+            echo ""
+            echo "| File | Size |"
+            echo "|------|------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            if [ -f "$p" ]; then
+              sz=$(wc -c < "$p" | tr -d ' ')
+              echo "| \`$p\` | ${sz} B |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| \`$p\` | — |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done < <(git show --pretty="" --name-only HEAD)
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "${CODEX_OUTPUT_FILE:-}" ] && [ -f "$CODEX_OUTPUT_FILE" ]; then
+            {
+              echo "<details><summary>Codex CLI output</summary>"
+              echo ""
+              echo '```'
+              cat "$CODEX_OUTPUT_FILE"
+              echo '```'
+              echo ""
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload Codex workspace
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.upload_artifact_name }}
-          path: ${{ inputs.pack_workspace_tarball == true && 'codex-followup-workspace.tgz' || inputs.upload_path }}
-          if-no-files-found: ${{ inputs.pack_workspace_tarball == true && 'error' || inputs.upload_if_no_files_found }}
+          path: ${{ inputs.upload_path }}
+          if-no-files-found: ${{ inputs.upload_if_no_files_found }}

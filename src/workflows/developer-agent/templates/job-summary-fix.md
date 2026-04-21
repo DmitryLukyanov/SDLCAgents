@@ -4,11 +4,11 @@
 
 {{FIX_INSTRUCTIONS}}
 
-## Files Changed
+## Codex workspace
 
-{{FILES_TABLE}}
+_File list and Codex CLI output are appended to the **Codex** job summary when a workspace commit is created._
 
-## Commits
+## Commits (this job)
 
 {{COMMITS_MD}}
 

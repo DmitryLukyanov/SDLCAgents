@@ -7,11 +7,11 @@
 | Mode | **openai/codex-action@v1** (`$speckit-{{STEP}}`) |
 | Feature dir | `{{FEATURE_DIR}}` |
 
-## Files Written
+## Files written (Codex workspace)
 
-{{FILES_TABLE}}
+_File list is appended to the **Codex** job summary when a workspace commit is created._
 
-## Commits
+## Commits (this job)
 
 {{COMMITS_MD}}
 

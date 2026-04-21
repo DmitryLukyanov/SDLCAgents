@@ -1,17 +1,15 @@
 /**
  * Developer Agent — Teardown phase.
  *
- * Runs AFTER the dedicated Codex job (workspace tarball applied) in the workflow.
+ * Runs AFTER the dedicated Codex job (workspace commit + push) in the workflow.
  *
  * Responsibilities:
- *  1. Stage all Codex-written files (git add -A, excluding .sdlc-agents)
- *  2. Discover featureDir from staged paths (specify step) or use FEATURE_DIR env
- *  3. Commit artifacts
- *  4. Write/update speckit-state.json
- *  5. Commit speckit-state.json + push
- *  6. On "implement" and "code_review": mark PR ready for review (draft: false), right after push
- *  7. Write GitHub Actions job summary
- *  8. Post PR comment
+ *  1. Resolve featureDir from FEATURE_DIR env (prepare job output; canonical feature root for speckit-state.json)
+ *  2. Write/update speckit-state.json
+ *  3. Commit speckit-state.json + push
+ *  4. On "implement" and "code_review": mark PR ready for review (draft: false), right after push
+ *  5. Write GitHub Actions job summary (workspace file list lives on the Codex job when a commit was made)
+ *  6. Post PR comment
  *
  * Environment variables (set by _reusable-developer-agent.yml):
  *   GITHUB_TOKEN                 — ${{ github.token }} for PR comments and mark-ready-for-review (GraphQL)
@@ -22,12 +20,11 @@
  *   STEP                         — spec-kit step that just ran
  *   BRANCH_NAME                  — feature branch name (from setup outputs)
  *   PR_NUMBER                    — PR number (from setup outputs)
- *   FEATURE_DIR                  — artifacts dir (from setup outputs; empty for specify)
- *   CODEX_OUTPUT_FILE            — path to the Codex output file (from codex-action output-file)
+ *   FEATURE_DIR                  — feature dir from prepare (fallback in TS if unset)
  */
 
 import { execSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
@@ -241,50 +238,19 @@ async function main(): Promise<void> {
   if (!Number.isFinite(prNumber) || prNumber < 1) {
     throw new Error(`Invalid PR_NUMBER: ${JSON.stringify(prNumberRaw)}`);
   }
-  let featureDir       = process.env['FEATURE_DIR']?.trim() || '';
-  const codexOutputFile = process.env['CODEX_OUTPUT_FILE']?.trim() || '';
+  let featureDir = process.env['FEATURE_DIR']?.trim() || '';
 
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) throw new Error(`Invalid GITHUB_REPOSITORY: "${repository}"`);
 
   const octokitComment = new Octokit({ auth: requireEnv('GITHUB_TOKEN') });
 
-  // ── 1. Stage everything Codex may have written ───────────────────
-  // Use git add -A (excluding the SDLCAgents checkout and node_modules)
-  // so we capture any path Codex chose to write to.
-  const gitStatus = git('status --short');
-  console.log(`[dev-agent-teardown] git status after Codex:\n${gitStatus || '(clean)'}`);
-
-  try {
-    git('add -A -- ":!.sdlc-agents" ":!node_modules"');
-  } catch { /* non-fatal */ }
-
-  const stagedFiles = git('diff --cached --name-only');
-  console.log(`[dev-agent-teardown] Staged files:\n${stagedFiles || '(none)'}`);
-
-  // ── 2. Discover featureDir (specify step only) ───────────────────
+  // ── 1. Resolve featureDir ─────────────────────────────────────────
   if (!featureDir) {
-    for (const f of stagedFiles.split('\n').filter(Boolean)) {
-      const m = f.match(/^(specs\/[^/]+\/|\.specify\/features\/[^/]+\/)/);
-      if (m) { featureDir = m[1].replace(/\/$/, ''); break; }
-    }
-    featureDir ||= `.specify/features/${issueKey}`;
+    featureDir = `.specify/features/${issueKey}`;
   }
 
-  // Codex output is uploaded as a separate artifact — no need to embed it
-  // in the job summary (doing so caused the </details> closing tag to appear
-  // as a visible heading when the output contained markdown / code fences).
-
-  // ── 3. Commit artifacts ──────────────────────────────────────────
-  let artifactCommitSha = '';
-  if (stagedFiles) {
-    git(`commit -m "speckit(${step}): add ${step} artifacts for ${issueKey}"`);
-    artifactCommitSha = git('rev-parse HEAD');
-  } else {
-    console.warn('[dev-agent-teardown] No artifact changes after skill execution');
-  }
-
-  // ── 4. Write + commit speckit-state.json ─────────────────────────
+  // ── 2. Write + commit speckit-state.json ─────────────────────────
   const statePath = join(featureDir, 'speckit-state.json');
   const completedSteps: SpeckitStep[] = existsSync(statePath)
     ? (JSON.parse(readFileSync(statePath, 'utf8')) as SpeckitState).completedSteps
@@ -310,31 +276,17 @@ async function main(): Promise<void> {
   git(`push origin ${branchName}`);
   console.log(`[dev-agent-teardown] Pushed. nextStep=${state.nextStep ?? 'null (all done)'}`);
 
-  // ── 5. Mark PR ready (non-draft) after implement / code_review — immediately after
+  // ── 3. Mark PR ready (non-draft) after implement / code_review — immediately after
   // push so PR comment or summary failures cannot skip this step.
   if (step === 'implement' || step === 'code_review') {
     await markPullNonDraft(owner, repo, prNumber);
   }
 
-  // ── 6. Write GitHub Actions job summary ─────────────────────────
+  // ── 4. Write GitHub Actions job summary ─────────────────────────
   const serverUrl = process.env['GITHUB_SERVER_URL'] || 'https://github.com';
   const repoUrl   = `${serverUrl}/${owner}/${repo}`;
 
-  const changedPaths = stagedFiles ? stagedFiles.split('\n').filter(Boolean) : [];
-  const filesTable = changedPaths.length > 0
-    ? [
-        '| File | Size |',
-        '|------|------|',
-        ...changedPaths.map(p => {
-          const size = existsSync(p) ? `${statSync(p).size} B` : '—';
-          return `| \`${p}\` | ${size} |`;
-        }),
-      ].join('\n')
-    : '_No artifact changes detected_';
-
-  const commits: string[] = [];
-  if (artifactCommitSha) commits.push(commitLink(artifactCommitSha, repoUrl, `speckit(${step}): add ${step} artifacts for ${issueKey}`));
-  commits.push(commitLink(stateCommitSha, repoUrl, `speckit(${step}): update speckit-state.json`));
+  const commitsMd = `- ${commitLink(stateCommitSha, repoUrl, `speckit(${step}): update speckit-state.json`)}`;
 
   appendSummary(fillTemplate(JOB_SUMMARY_STEP_TEMPLATE, {
     STEP:         step,
@@ -342,13 +294,12 @@ async function main(): Promise<void> {
     STEP_TOTAL:   String(STEP_ORDER.length),
     ISSUE_KEY:    issueKey,
     FEATURE_DIR:  featureDir,
-    FILES_TABLE:  filesTable,
-    COMMITS_MD:   commits.map(c => `- ${c}`).join('\n'),
+    COMMITS_MD:   commitsMd,
     PR_NUMBER:    String(prNumber),
     PR_URL:       `${repoUrl}/pull/${prNumber}`,
   }));
 
-  // ── 7. Post PR comment ──────────────────────────────────────────
+  // ── 5. Post PR comment ──────────────────────────────────────────
   const next    = state.nextStep;
   const runUrl  = process.env['GITHUB_RUN_ID']
     ? `${serverUrl}/${owner}/${repo}/actions/runs/${process.env['GITHUB_RUN_ID']}`

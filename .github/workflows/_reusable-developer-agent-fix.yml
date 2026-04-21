@@ -2,8 +2,8 @@
 #
 # Three jobs:
 #   1. prepare — PR branch, state, fix-setup.ts → `.sdlc-agents/codex-fix-prompt.md`, upload prompt artifact
-#   2. codex — `./_reusable-codex-run.yml` (feature-branch checkout + Codex + workspace tarball)
-#   3. teardown — expand tarball, developer-agent-fix-teardown.ts — commit/push, PR comment
+#   2. codex — `./_reusable-codex-run.yml` (feature-branch checkout + Codex + commit/push fix changes)
+#   3. teardown — developer-agent-fix-teardown.ts — speckit-state touch, push, PR comment
 #
 # Makes TARGETED edits to existing spec-kit artifacts to address the specific
 # issues reported by the spec gate. Does NOT re-run the full speckit step.
@@ -167,12 +167,16 @@ jobs:
       prompt_file: .sdlc-agents/codex-fix-prompt.md
       output_file: .sdlc-agents/codex-fix-output.txt
       upload_artifact_name: developer-agent-fix-codex-output-${{ needs.prepare.outputs.issue_key }}-${{ github.run_id }}
-      upload_path: .
+      upload_path: |
+        .sdlc-agents/codex-fix-output.txt
+        .sdlc-agents/codex-fix-prompt.md
       upload_if_no_files_found: ignore
       codex_model: ${{ needs.prepare.outputs.codex_model }}
       codex_step_name: Apply fix via Codex
       timeout_minutes: 15
-      pack_workspace_tarball: true
+      commit_workspace_after_codex: true
+      workspace_commit_message: "${{ format('speckit(fix): apply targeted fixes for {0}', needs.prepare.outputs.issue_key) }}"
+      extra_git_add_paths: .sdlc-agents/codex-fix-output.txt
 
   teardown:
     needs: [prepare, codex]
@@ -192,24 +196,14 @@ jobs:
           token: ${{ secrets.COPILOT_PAT }}
           fetch-depth: 0
 
-      - name: Download Codex workspace tarball
-        uses: actions/download-artifact@v4
-        with:
-          name: developer-agent-fix-codex-output-${{ needs.prepare.outputs.issue_key }}-${{ github.run_id }}
-          path: .
-
-      - name: Expand Codex workspace overlay
-        run: |
-          set -euo pipefail
-          tar -xzf codex-followup-workspace.tgz
-          rm -f codex-followup-workspace.tgz
-
+      # Use `sdla` (not `.sdlc-agents`) so the runner clone does not replace consumer `.sdlc-agents/`
+      # where `/fix` commits `codex-fix-output.txt` for the job summary.
       - name: Checkout SDLCAgents
         uses: actions/checkout@v4
         with:
           repository: DmitryLukyanov/SDLCAgents
           ref: ${{ inputs.sdlc_agents_ref }}
-          path: .sdlc-agents
+          path: sdla
           token: ${{ secrets.COPILOT_PAT }}
 
       - name: Setup Node.js
@@ -217,11 +211,11 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: .sdlc-agents/package-lock.json
+          cache-dependency-path: sdla/package-lock.json
 
       - name: Install SDLCAgents dependencies
         run: npm ci
-        working-directory: .sdlc-agents
+        working-directory: sdla
 
       - name: Configure git
         run: |
@@ -229,11 +223,10 @@ jobs:
           git config user.name "SDLC Developer Agent"
 
       - name: Run fix agent — teardown
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-fix-teardown.ts
+        run: sdla/node_modules/.bin/tsx sdla/src/workflows/developer-agent/developer-agent-fix-teardown.ts
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           ISSUE_KEY: ${{ needs.prepare.outputs.issue_key }}
           PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
           FIX_INSTRUCTIONS: ${{ needs.prepare.outputs.fix_instructions }}
-          CODEX_OUTPUT_FILE: .sdlc-agents/codex-fix-output.txt

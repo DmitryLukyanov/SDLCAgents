@@ -2,15 +2,15 @@
 #
 # Three jobs:
 #   1. prepare — checkout branch, SDLCAgents, developer-agent-setup.ts → `.sdlc-agents/codex-prompt.md`, upload prompt artifact
-#   2. codex — `./_reusable-codex-run.yml` (feature-branch checkout + Codex + workspace tarball)
-#   3. teardown — expand tarball, developer-agent-teardown.ts — commit/push, PR comment
+#   2. codex — `./_reusable-codex-run.yml` (feature-branch checkout + Codex + commit/push artifact changes)
+#   3. teardown — developer-agent-teardown.ts — speckit-state.json, push, mark PR ready, PR comment
 #
 # Flow per invocation:
 #   1. Checkout consumer repo on the feature branch
 #   2. [specify only] Create branch + draft PR via developer-agent-setup.ts
 #   3. Write "$speckit-{step} {input}" prompt to .sdlc-agents/codex-prompt.md
-#   4. Reusable Codex job runs the skill; artifacts land in the workspace tarball
-#   5. developer-agent-teardown.ts — stage/commit/push, mark PR ready (implement/code_review),
+#   4. Reusable Codex job runs the skill and commits workspace changes to the branch
+#   5. developer-agent-teardown.ts — update speckit-state.json / push, mark PR ready (implement/code_review),
 #      job summary, PR comment (GITHUB_TOKEN GraphQL mark-ready + comments; PAT fallback + git via checkout)
 #
 # Triggered by AI Teammate (step=specify) or the proceed workflow (subsequent steps).
@@ -152,12 +152,15 @@ jobs:
       prompt_file: .sdlc-agents/codex-prompt.md
       output_file: .sdlc-agents/codex-output.txt
       upload_artifact_name: developer-agent-codex-output-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
-      upload_path: .
+      upload_path: |
+        .sdlc-agents/codex-output.txt
+        .sdlc-agents/codex-prompt.md
       upload_if_no_files_found: ignore
       codex_model: ${{ needs.prepare.outputs.codex_model }}
       codex_step_name: Run Codex skill — ${{ inputs.step }}
       timeout_minutes: 30
-      pack_workspace_tarball: true
+      commit_workspace_after_codex: true
+      workspace_commit_message: "${{ format('speckit({0}): add {0} artifacts for {1}', inputs.step, inputs.issue_key) }}"
 
   teardown:
     needs: [prepare, codex]
@@ -177,24 +180,14 @@ jobs:
           ref: ${{ needs.prepare.outputs.branch_name }}
           token: ${{ secrets.COPILOT_PAT }}
 
-      - name: Download Codex workspace tarball
-        uses: actions/download-artifact@v4
-        with:
-          name: developer-agent-codex-output-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
-          path: .
-
-      - name: Expand Codex workspace overlay
-        run: |
-          set -euo pipefail
-          tar -xzf codex-followup-workspace.tgz
-          rm -f codex-followup-workspace.tgz
-
+      # Use a path other than `.sdlc-agents` so we do not overwrite consumer-tracked files under
+      # `.sdlc-agents/` (e.g. fix flow commits `codex-fix-output.txt` there for the summary).
       - name: Checkout SDLCAgents
         uses: actions/checkout@v4
         with:
           repository: DmitryLukyanov/SDLCAgents
           ref: ${{ inputs.sdlc_agents_ref }}
-          path: .sdlc-agents
+          path: sdla
           token: ${{ secrets.COPILOT_PAT }}
 
       - name: Setup Node.js
@@ -202,11 +195,11 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: .sdlc-agents/package-lock.json
+          cache-dependency-path: sdla/package-lock.json
 
       - name: Install SDLCAgents dependencies
         run: npm ci
-        working-directory: .sdlc-agents
+        working-directory: sdla
 
       - name: Configure git
         run: |
@@ -214,7 +207,7 @@ jobs:
           git config user.name "SDLC Developer Agent"
 
       - name: Run developer agent — teardown
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-teardown.ts
+        run: sdla/node_modules/.bin/tsx sdla/src/workflows/developer-agent/developer-agent-teardown.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
@@ -225,4 +218,3 @@ jobs:
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
           PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
           FEATURE_DIR: ${{ needs.prepare.outputs.feature_dir }}
-          CODEX_OUTPUT_FILE: .sdlc-agents/codex-output.txt
