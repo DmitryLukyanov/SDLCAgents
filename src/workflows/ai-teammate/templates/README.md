@@ -146,7 +146,7 @@ issue is closed.
 
 ---
 
-### `copilot-agent-instructions.md`
+### `../prompts/copilot-agent-instructions.md`
 
 **Purpose:** The `agentInstructions` string sent to the Copilot Coding Agent
 alongside the GitHub issue assignment. Instructs Copilot on PR naming and

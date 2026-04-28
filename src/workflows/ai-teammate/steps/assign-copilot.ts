@@ -11,7 +11,7 @@ import type { AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types
 import { fillTemplate, loadTemplate } from '../../../lib/template-utils.js';
 
 const TEMPLATE_PATH = '.sdlc-agents/src/workflows/ai-teammate/templates/github-issue-with-copilot.md';
-const AGENT_INSTRUCTIONS_TEMPLATE = loadTemplate(import.meta.url, '..', 'templates', 'copilot-agent-instructions.md');
+const AGENT_INSTRUCTIONS_TEMPLATE = loadTemplate(import.meta.url, '..', 'prompts', 'copilot-agent-instructions.md');
 const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
 const TBD = '{TBD}';
 

@@ -207,7 +207,7 @@ async function main(): Promise<void> {
   const config = extractPipelineConfig(issue.body ?? '');
   const defaultCodeReviewPrompt = loadTemplate(
     import.meta.url,
-    'templates',
+    'prompts',
     'code-review-default-input.md',
   );
 

@@ -47,8 +47,8 @@ import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 const FIX_APPLIED_TEMPLATE           = loadTemplate(import.meta.url, 'templates', 'pr-comment-fix-applied.md');
 
 // Prompt templates
-const FIX_SYSTEM_PROMPT_TMPL         = loadTemplate(import.meta.url, 'templates', 'prompt-fix-system.md');
-const FILE_OUTPUT_INSTRUCTIONS_TMPL  = loadTemplate(import.meta.url, 'templates', 'prompt-file-output-instructions.md');
+const FIX_SYSTEM_PROMPT_TMPL         = loadTemplate(import.meta.url, 'prompts', 'prompt-fix-system.md');
+const FILE_OUTPUT_INSTRUCTIONS_TMPL  = loadTemplate(import.meta.url, 'prompts', 'prompt-file-output-instructions.md');
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */

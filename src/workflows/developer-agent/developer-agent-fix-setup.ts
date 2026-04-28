@@ -132,7 +132,7 @@ async function main(): Promise<void> {
     ? `## Reviewer Instructions\n\n${userInstruction}\n\n`
     : '';
 
-  const tmpl = loadTemplate(import.meta.url, 'templates', 'codex-fix-user-prompt.md');
+  const tmpl = loadTemplate(import.meta.url, 'prompts', 'codex-fix-user-prompt.md');
   const prompt = fillTemplate(tmpl, {
     FEATURE_DIR: featureDir,
     ISSUE_CONTEXT: issueSection,
