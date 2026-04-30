@@ -39,7 +39,7 @@ export interface AiTeammateDeps {
     repo: string,
     workflowFile: string,
     ref: string,
-    inputs: { issue_number: string; issue_key: string; step: string },
+    inputs: { issue_number: string; issue_key: string; step: string; branch_name?: string },
   ) => Promise<void>;
   closeGithubIssue: (owner: string, repo: string, issueNumber: number) => Promise<void>;
   addGithubIssueComment: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;

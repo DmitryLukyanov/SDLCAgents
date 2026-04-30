@@ -3,7 +3,10 @@
  *
  * Updates the GitHub issue body with Jira context and BA analysis results,
  * then dispatches the developer agent workflow to start the spec-kit pipeline
- * (beginning with the "specify" step).
+ * (beginning with the "specify" step). Branch, draft PR, and initial
+ * `speckit-state.json` are created by the consumer workflow's bootstrap job
+ * (`_reusable-developer-agent-bootstrap.yml`); this step only passes issue_key
+ * and issue_number (no branch_name — bootstrap chooses or reuses a branch).
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';

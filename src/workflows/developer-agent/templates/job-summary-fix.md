@@ -1,8 +1,8 @@
 # Spec-Kit · Fix — {{ISSUE_KEY}}
 
-## Fix Instructions
+## Input prompt
 
-{{FIX_INSTRUCTIONS}}
+{{INPUT_PROMPT}}
 
 ## Codex workspace
 

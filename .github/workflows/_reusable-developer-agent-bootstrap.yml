@@ -1,0 +1,106 @@
+# Reusable — Bootstrap spec-kit workspace before Developer Agent (specify only).
+#
+# Creates or reuses the feature branch, opens a draft PR when missing, and writes
+# `.specify/features/{ISSUE_KEY}/speckit-state.json` so developer-agent setup only
+# reads state + builds the Codex prompt.
+#
+# Consumer: chain a job that `needs` this workflow, then call `_reusable-developer-agent.yml`
+# with `branch_name` / `speckit_pr_number` from this workflow's outputs.
+#
+# Secrets: COPILOT_PAT (contents + PRs + issues)
+name: "[Reusable] Developer Agent — Bootstrap"
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        description: "GitHub issue number for the spec-kit pipeline"
+        required: true
+        type: string
+      issue_key:
+        description: "Jira issue key (e.g. PROJ-1)"
+        required: true
+        type: string
+      branch_name:
+        description: "Optional feature branch name; empty = reuse open draft PR for the issue or create feature/{slug}-{ts}"
+        required: false
+        type: string
+        default: ''
+      checkout_ref:
+        description: "Ref for actions/checkout before bootstrap (default: caller github.ref)"
+        required: false
+        type: string
+        default: ''
+      sdlc_agents_ref:
+        description: "SDLCAgents branch/tag/SHA for scripts"
+        required: false
+        type: string
+        default: 'master'
+    secrets:
+      COPILOT_PAT:
+        required: true
+    outputs:
+      branch_name:
+        description: "Feature branch to pass to developer-agent"
+        value: ${{ jobs.bootstrap.outputs.branch_name }}
+      pr_number:
+        description: "Draft PR number to pass to developer-agent"
+        value: ${{ jobs.bootstrap.outputs.pr_number }}
+      feature_dir:
+        description: "Feature directory containing speckit-state.json"
+        value: ${{ jobs.bootstrap.outputs.feature_dir }}
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      branch_name: ${{ steps.run.outputs.branch_name }}
+      pr_number: ${{ steps.run.outputs.pr_number }}
+      feature_dir: ${{ steps.run.outputs.feature_dir }}
+    steps:
+      - name: Checkout consumer repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.ref }}
+          token: ${{ secrets.COPILOT_PAT }}
+          fetch-depth: 0
+
+      - name: Checkout SDLCAgents
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Configure git
+        run: |
+          git config user.email "developer-agent@sdlc-agents.bot"
+          git config user.name "SDLC Developer Agent"
+
+      - name: Run developer-agent bootstrap
+        id: run
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_KEY: ${{ inputs.issue_key }}
+          BRANCH_NAME: ${{ inputs.branch_name }}
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-bootstrap.ts

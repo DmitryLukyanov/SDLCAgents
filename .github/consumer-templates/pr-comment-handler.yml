@@ -4,7 +4,7 @@
 # workflow based on the slash command:
 #
 #   /proceed   → developer-agent-proceed.yml
-#   /fix <…>   → developer-agent-fix.yml
+#   /fix <…>   → developer-agent.yml (mode=fix)
 #
 # NOTE: GitHub's issue_comment event covers both issues and PRs.
 # The `pull_request != null` guard ensures only PR comments are handled.

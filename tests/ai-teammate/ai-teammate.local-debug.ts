@@ -97,7 +97,7 @@ const mockDeps: AiTeammateDeps = {
 
   dispatchDeveloperAgent: async (owner, repo, workflowFile, ref, inputs) => {
     console.log(
-      `[mock] dispatchDeveloperAgent(${owner}/${repo}, ${workflowFile}@${ref}) issue=${inputs.issue_number} key=${inputs.issue_key} step=${inputs.step}`,
+      `[mock] dispatchDeveloperAgent(${owner}/${repo}, ${workflowFile}@${ref}) issue=${inputs.issue_number} key=${inputs.issue_key} step=${inputs.step} branch=${inputs.branch_name ?? '(bootstrap)'}`,
     );
   },
 

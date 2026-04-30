@@ -1,50 +1,56 @@
 # Reusable Developer Agent workflow.
 #
-# Three jobs:
-#   1. prepare — checkout branch, SDLCAgents, developer-agent-setup.ts → `.sdlc-agents/codex-prompt.md`, upload prompt artifact
-#   2. codex — `./_reusable-codex-run.yml` (feature-branch checkout + Codex + commit/push artifact changes)
-#   3. teardown — developer-agent-teardown.ts — speckit-state.json, push, mark PR ready, PR comment
+# Modes (`inputs.mode`):
+#   • speckit (default) — issue-driven spec-kit steps: developer-agent-setup.ts → input_prompt.md, Codex, developer-agent-teardown.ts.
+#     For `specify`, branch + draft PR + initial speckit-state.json are created by `_reusable-developer-agent-bootstrap.yml`
+#     in the consumer template; pass `speckit_pr_number` and `branch_name` from that job. Legacy: no state file on branch
+#     → setup still creates branch/PR.
+#   • fix — PR /fix flow: checkout PR head (inputs.branch_name), read state, developer-agent-setup.ts (AGENT_MODE=fix) → input_prompt.md …
 #
-# Flow per invocation:
-#   1. Checkout consumer repo on the feature branch
-#   2. [specify only] Create branch + draft PR via developer-agent-setup.ts
-#   3. Write "$speckit-{step} {input}" prompt to .sdlc-agents/codex-prompt.md
-#   4. Reusable Codex job runs the skill and commits workspace changes to the branch
-#   5. developer-agent-teardown.ts — update speckit-state.json / push, mark PR ready (implement/code_review),
-#      job summary, PR comment (GITHUB_TOKEN GraphQL mark-ready + comments; PAT fallback + git via checkout)
-#
-# Triggered by AI Teammate (step=specify) or the proceed workflow (subsequent steps).
+# Codex always reads `.sdlc-agents/input_prompt.md` (artifact + `_reusable-codex-run.yml`).
 #
 # Required secrets:
-#   COPILOT_PAT     — PAT for checkout, setup (GITHUB_TOKEN is overridden with PAT on the setup step only), and git push identity in the runner.
-#   OPENAI_API_KEY  — OpenAI key (passed through to `_reusable-codex-run.yml`)
+#   COPILOT_PAT     — PAT for checkout, setup, push
+#   OPENAI_API_KEY  — passed through to `_reusable-codex-run.yml`
 #
-# Teardown uses GITHUB_TOKEN for GraphQL markPullRequestReadyForReview + issues.createComment.
-# If the PR stays draft (token limits), teardown retries with COPILOT_PAT when present.
-#
-# Optional repo/org variables (all have sensible defaults):
-#   DEVELOPER_AGENT_MODEL            — Codex model for every spec-kit step (default: o4-mini)
-#
-# Consumer usage: see .github/consumer-templates/developer-agent.yml
+# Consumer usage: `.github/consumer-templates/developer-agent.yml` (`mode=speckit` | `mode=fix`)
 name: "[Reusable] Developer Agent"
 
 on:
   workflow_call:
     inputs:
+      mode:
+        description: "speckit — issue/spec-kit flow; fix — PR /fix comment flow"
+        required: false
+        type: string
+        default: 'speckit'
       issue_number:
-        description: "GitHub issue number"
-        required: true
+        description: "GitHub issue number (required when mode=speckit)"
+        required: false
         type: string
+        default: ''
       issue_key:
-        description: "Jira issue key (e.g. PROJ-1)"
-        required: true
+        description: "Jira issue key — required for speckit and fix (PR comment handler resolves it for /fix)"
+        required: false
         type: string
+        default: ''
       step:
-        description: "Spec-kit step to run (specify | clarify | plan | tasks | implement | code_review)"
-        required: true
+        description: "Spec-kit step (required when mode=speckit): specify | clarify | plan | tasks | implement | code_review"
+        required: false
         type: string
+        default: ''
       branch_name:
-        description: "Feature branch name — required for all steps except specify (read from speckit-state.json by the proceed workflow)"
+        description: "Required (non-empty). Git ref for actions/checkout and BRANCH_NAME in setup — the only branch the agent uses (feature branch, PR head, etc.). speckit specify: create that remote branch first (see start_developer_agent)."
+        required: false
+        type: string
+        default: ''
+      fix_pr_number:
+        description: "PR number (required when mode=fix)"
+        required: false
+        type: string
+        default: ''
+      prompt:
+        description: "Optional workflow input; echoed as job output input_prompt for teardown. Fix: /fix body (+ HIL). Speckit: after setup, if set — repo path copies to input_prompt.md, else raw text (skipped when fix template already wrote that file)."
         required: false
         type: string
         default: ''
@@ -53,6 +59,11 @@ on:
         required: false
         type: string
         default: 'master'
+      speckit_pr_number:
+        description: "When set (e.g. after bootstrap), specify setup skips branch/PR creation and trusts speckit-state + this PR #"
+        required: false
+        type: string
+        default: ''
     secrets:
       COPILOT_PAT:
         required: true
@@ -70,24 +81,44 @@ jobs:
       pull-requests: write
       issues: write
     outputs:
+      mode: ${{ inputs.mode }}
       branch_name: ${{ steps.agent_setup.outputs.branch_name }}
       pr_number: ${{ steps.agent_setup.outputs.pr_number }}
       feature_dir: ${{ steps.agent_setup.outputs.feature_dir }}
       codex_model: ${{ steps.agent_setup.outputs.codex_model }}
+      issue_key: ${{ inputs.issue_key }}
+      codex_step_slug: ${{ inputs.mode == 'fix' && 'fix' || inputs.step }}
+      input_prompt: ${{ inputs.prompt }}
     steps:
-      - name: Checkout consumer repo
+      - name: Require branch_name
+        env:
+          BRANCH_NAME: ${{ inputs.branch_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BRANCH_NAME" ]; then
+            echo "::error::inputs.branch_name is required (integration branch for speckit+specify, feature branch or PR head otherwise)"
+            exit 1
+          fi
+
+      - name: Checkout consumer
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ inputs.branch_name }}
           token: ${{ secrets.COPILOT_PAT }}
+          fetch-depth: 0
 
-      - name: Switch to feature branch
-        if: inputs.branch_name != ''
-        env:
-          BRANCH: ${{ inputs.branch_name }}
+      - name: Require speckit state on PR (fix)
+        if: inputs.mode == 'fix'
         run: |
-          git fetch origin "$BRANCH"
-          git checkout "$BRANCH"
+          set -euo pipefail
+          STATE_FILE=$(find . -name 'speckit-state.json' \
+            -not -path './.git/*' \
+            | head -1)
+          if [ -z "$STATE_FILE" ]; then
+            echo "::error::No speckit-state.json on the checked-out ref (fix — use PR head as branch_name)"
+            exit 1
+          fi
+          echo "Found speckit state: $STATE_FILE"
 
       - name: Checkout SDLCAgents
         uses: actions/checkout@v4
@@ -115,8 +146,8 @@ jobs:
 
       - name: Run developer agent — setup
         id: agent_setup
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-setup.ts
         env:
+          AGENT_MODE: ${{ inputs.mode }}
           GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -124,21 +155,47 @@ jobs:
           ISSUE_KEY: ${{ inputs.issue_key }}
           STEP: ${{ inputs.step }}
           BRANCH_NAME: ${{ inputs.branch_name }}
+          PR_NUMBER: ${{ inputs.speckit_pr_number }}
+          INPUT_PROMPT: ${{ inputs.prompt }}
           DEVELOPER_AGENT_MODEL: ${{ vars.DEVELOPER_AGENT_MODEL }}
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-setup.ts
 
-      - name: Print Codex prompt
+      - name: Materialize prompt into input_prompt.md
+        if: inputs.prompt != ''
+        env:
+          PROMPT_ARG: ${{ inputs.prompt }}
         run: |
-          cat .sdlc-agents/.github/content/job-summary-codex-prompt-header.md >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          mkdir -p .sdlc-agents
+          if [ -f "$PROMPT_ARG" ]; then
+            cp "$PROMPT_ARG" .sdlc-agents/input_prompt.md
+          else
+            if [ -f .sdlc-agents/input_prompt.md ] && grep -qF 'making targeted fixes to spec-kit artifacts' .sdlc-agents/input_prompt.md 2>/dev/null; then
+              echo '::notice::input_prompt.md already looks like fix-template output; not overwriting with raw prompt text.'
+              exit 0
+            fi
+            python3 -c "import os, pathlib; pathlib.Path('.sdlc-agents/input_prompt.md').write_text(os.environ['PROMPT_ARG'], encoding='utf-8')"
+          fi
+
+      - name: Print Codex input prompt
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "fix" ]; then
+            HDR=.sdlc-agents/.github/content/job-summary-codex-fix-header.md
+          else
+            HDR=.sdlc-agents/.github/content/job-summary-codex-prompt-header.md
+          fi
+          cat "$HDR" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' '```text' >> "$GITHUB_STEP_SUMMARY"
-          cat .sdlc-agents/codex-prompt.md >> "$GITHUB_STEP_SUMMARY"
+          cat .sdlc-agents/input_prompt.md >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload Codex prompt for Codex job
+      - name: Upload input_prompt.md for Codex job
         uses: actions/upload-artifact@v4
         with:
-          name: developer-agent-codex-input-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
-          path: .sdlc-agents/codex-prompt.md
+          name: developer-agent-codex-input-${{ github.run_id }}
+          path: .sdlc-agents/input_prompt.md
           if-no-files-found: error
 
   codex:
@@ -147,26 +204,26 @@ jobs:
     secrets: inherit
     with:
       checkout_ref: ${{ needs.prepare.outputs.branch_name }}
-      download_artifact_name: developer-agent-codex-input-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
-      # Single-file artifacts flatten to basename on download; extract into .sdlc-agents so paths match prompt_file.
+      download_artifact_name: developer-agent-codex-input-${{ github.run_id }}
       download_path: .sdlc-agents
-      prompt_file: .sdlc-agents/codex-prompt.md
+      prompt_file: .sdlc-agents/input_prompt.md
       output_file: .sdlc-agents/codex-output.txt
-      upload_artifact_name: developer-agent-codex-output-${{ inputs.issue_key }}-${{ inputs.step }}-${{ github.run_id }}
+      upload_artifact_name: developer-agent-codex-output-${{ github.run_id }}
       upload_path: |
         .sdlc-agents/codex-output.txt
-        .sdlc-agents/codex-prompt.md
+        .sdlc-agents/input_prompt.md
       upload_if_no_files_found: ignore
       codex_model: ${{ needs.prepare.outputs.codex_model }}
-      codex_step_name: Run Codex skill — ${{ inputs.step }}
-      timeout_minutes: 30
+      codex_step_name: ${{ needs.prepare.outputs.mode == 'fix' && 'Apply fix via Codex' || format('Run Codex skill — {0}', inputs.step) }}
+      timeout_minutes: ${{ needs.prepare.outputs.mode == 'fix' && 15 || 30 }}
       commit_workspace_after_codex: true
-      workspace_commit_message: "${{ format('speckit({0}): add {0} artifacts for {1}', inputs.step, inputs.issue_key) }}"
+      workspace_commit_message: "${{ needs.prepare.outputs.mode == 'fix' && format('speckit(fix): apply targeted fixes for {0}', needs.prepare.outputs.issue_key) || format('speckit({0}): add {0} artifacts for {1}', inputs.step, needs.prepare.outputs.issue_key) }}"
+      extra_git_add_paths: ${{ needs.prepare.outputs.mode == 'fix' && '.sdlc-agents/codex-output.txt' || '' }}
 
   teardown:
     needs: [prepare, codex]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ needs.prepare.outputs.mode == 'fix' && 15 || 30 }}
     env:
       GITHUB_TOKEN: ${{ github.token }}
     permissions:
@@ -181,8 +238,6 @@ jobs:
           ref: ${{ needs.prepare.outputs.branch_name }}
           token: ${{ secrets.COPILOT_PAT }}
 
-      # Use a path other than `.sdlc-agents` so we do not overwrite consumer-tracked files under
-      # `.sdlc-agents/` (e.g. fix flow commits `codex-fix-output.txt` there for the summary).
       - name: Checkout SDLCAgents
         uses: actions/checkout@v4
         with:
@@ -210,12 +265,14 @@ jobs:
       - name: Run developer agent — teardown
         run: sdla/node_modules/.bin/tsx sdla/src/workflows/developer-agent/developer-agent-teardown.ts
         env:
+          AGENT_MODE: ${{ needs.prepare.outputs.mode }}
           GITHUB_TOKEN: ${{ github.token }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
-          ISSUE_KEY: ${{ inputs.issue_key }}
+          ISSUE_KEY: ${{ needs.prepare.outputs.issue_key }}
           STEP: ${{ inputs.step }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
           PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
           FEATURE_DIR: ${{ needs.prepare.outputs.feature_dir }}
+          INPUT_PROMPT: ${{ needs.prepare.outputs.input_prompt }}

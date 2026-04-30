@@ -1,2 +1,2 @@
-## Codex Fix Prompt
+## Codex prompt (`.sdlc-agents/input_prompt.md`)
 

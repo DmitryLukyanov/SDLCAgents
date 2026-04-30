@@ -37,6 +37,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFil
 import { dirname, join } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
+import { findSpeckitStateFilePath } from './speckit-state-path.js';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -178,30 +179,6 @@ function extractPipelineConfig(issueBody: string): PipelineConfig {
   return JSON.parse(match[1]) as PipelineConfig;
 }
 
-
-/**
- * Locate speckit-state.json for an existing feature.
- *
- * Checks the legacy fixed location first (.specify/features/{key}/) for
- * backward compatibility. If the specify step ran using native Codex skills
- * the file may be at specs/{feature}/ instead — in that case `find` picks it up.
- */
-function findStateFilePath(issueKey: string): string {
-  const legacy = `.specify/features/${issueKey}/speckit-state.json`;
-  if (existsSync(legacy)) return legacy;
-
-  try {
-    const found = execSync(
-      `find . -maxdepth 5 -name 'speckit-state.json' -not -path './.git/*' -not -path './.sdlc-agents/*' 2>/dev/null | head -1`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
-    ).trim().replace(/^\.\//, '');
-    if (found) return found;
-  } catch { /* fall through */ }
-
-  return legacy; // will be created by specify step if missing
-}
-
-
 /* ------------------------------------------------------------------ */
 /*  Main                                                               */
 /* ------------------------------------------------------------------ */
@@ -231,7 +208,7 @@ async function main(): Promise<void> {
   const branchName = step === 'specify'
     ? (process.env['BRANCH_NAME']?.trim() || `feature/${issueKey}-${Date.now()}`)
     : (() => {
-        const statePath = findStateFilePath(issueKey);
+        const statePath = findSpeckitStateFilePath(issueKey);
         if (!existsSync(statePath)) throw new Error(`speckit-state.json not found (searched legacy + find)`);
         return (JSON.parse(readFileSync(statePath, 'utf8')) as SpeckitState).branchName;
       })();
@@ -299,7 +276,7 @@ async function main(): Promise<void> {
       console.log(`[dev-agent] Draft PR #${prNumber} created`);
     }
   } else {
-    const statePath = findStateFilePath(issueKey);
+    const statePath = findSpeckitStateFilePath(issueKey);
     if (!existsSync(statePath)) throw new Error(`speckit-state.json not found (searched legacy + find)`);
     const saved = JSON.parse(readFileSync(statePath, 'utf8')) as SpeckitState;
     prNumber = saved.prNumber;
@@ -330,7 +307,7 @@ async function main(): Promise<void> {
   let featureDir: string =
     step !== 'specify'
       ? (() => {
-          const sp = findStateFilePath(issueKey);
+          const sp = findSpeckitStateFilePath(issueKey);
           const saved = JSON.parse(readFileSync(sp, 'utf8')) as SpeckitState;
           return saved.featureDir ?? dirname(sp);
         })()

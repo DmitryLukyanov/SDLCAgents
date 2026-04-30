@@ -5,7 +5,7 @@
  * based on the slash command:
  *
  *   /proceed   → developer-agent-proceed.yml
- *   /fix <…>   → developer-agent-fix.yml
+ *   /fix <…>   → developer-agent.yml (mode=fix, issue_key, pr_number, prompt, branch_name)
  *
  * Environment variables (set by _reusable-pr-comment-handler.yml):
  *   GITHUB_TOKEN or COPILOT_PAT  — GitHub API token
@@ -41,6 +41,52 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function issueKeyFromJiraLabel(pr: { labels?: ReadonlyArray<{ name?: string }> }): string | null {
+  for (const l of pr.labels ?? []) {
+    const n = l.name?.trim();
+    if (!n) continue;
+    const m = /^jira:(.+)$/i.exec(n);
+    if (m?.[1]) return m[1].trim();
+  }
+  return null;
+}
+
+/** Jira key for /fix — PR `jira:KEY` label, else speckit-state.json on the PR head (code search + getContent). */
+async function resolveIssueKeyForFix(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pr: { labels?: ReadonlyArray<{ name?: string }>; head: { sha: string } },
+): Promise<string> {
+  const fromLabel = issueKeyFromJiraLabel(pr);
+  if (fromLabel) return fromLabel;
+
+  const q = `repo:${owner}/${repo} filename:speckit-state.json`;
+  const { data: search } = await octokit.rest.search.code({ q });
+  for (const item of search.items ?? []) {
+    try {
+      const { data: file } = await octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path: item.path,
+        ref: pr.head.sha,
+      });
+      if (!('content' in file) || Array.isArray(file)) continue;
+      const raw = Buffer.from(file.content, 'base64').toString('utf8');
+      const json = JSON.parse(raw) as { issueKey?: string };
+      const k = json.issueKey?.trim();
+      if (k) return k;
+    } catch {
+      /* try next path */
+    }
+  }
+
+  throw new Error(
+    `[pr-comment-handler] Could not resolve Jira issue key for /fix: add a \`jira:KEY\` label on the PR ` +
+      `or ensure speckit-state.json exists on the PR head.`,
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main                                                               */
 /* ------------------------------------------------------------------ */
@@ -66,8 +112,8 @@ async function main(): Promise<void> {
   const commandLine    = commandLineIdx >= 0 ? lines[commandLineIdx].trimStart() : '';
   const command        = commandLine.split(/\s+/)[0] ?? '';
 
-  // For /fix: pass only from the command line onwards so the reusable workflow's
-  // sed prefix-strip (`s|^/fix[[:space:]]*||`) receives a body that starts with /fix.
+  // For /fix: pass only from the command line onwards so `prompt` still starts with /fix;
+  // developer-agent-setup strips the /fix prefix when building the fix template.
   const commandBody = commandLineIdx >= 0
     ? lines.slice(commandLineIdx).join('\n').trimStart()
     : body;
@@ -113,17 +159,30 @@ async function main(): Promise<void> {
         console.warn('[pr-comment-handler] Could not fetch HIL comment (non-fatal):', err);
       }
 
+      const { data: pr } = await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: parseInt(prNumber, 10),
+      });
+      const prHeadRef = pr.head.ref;
+      const issueKey = await resolveIssueKeyForFix(octokit, owner, repo, pr);
+
       await octokit.rest.actions.createWorkflowDispatch({
         owner, repo,
-        workflow_id: 'developer-agent-fix.yml',
+        workflow_id: 'developer-agent.yml',
         ref,
         inputs: {
-          pr_number:        prNumber,
-          fix_comment_body: commandBody + hilContext,
+          mode:         'fix',
+          issue_number: '',
+          issue_key:    issueKey,
+          step:         '',
+          branch_name:  prHeadRef,
+          pr_number:    prNumber,
+          prompt:       commandBody + hilContext,
         },
       });
-      console.log(`[pr-comment-handler] Dispatched developer-agent-fix.yml`);
-      outcome = 'Dispatched **developer-agent-fix.yml** (includes HIL context when found).';
+      console.log(`[pr-comment-handler] Dispatched developer-agent.yml (mode=fix)`);
+      outcome = 'Dispatched **developer-agent.yml** (`mode=fix`; includes HIL context when found).';
       break;
     }
 

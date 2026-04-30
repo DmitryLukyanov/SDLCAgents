@@ -4,7 +4,7 @@
 # the appropriate consumer workflow based on the slash command in the comment:
 #
 #   /proceed   → developer-agent-proceed.yml
-#   /fix <…>   → developer-agent-fix.yml
+#   /fix <…>   → developer-agent.yml (mode=fix)
 #
 # Triggered by: pr-comment-handler.yml (consumer) on PR issue_comment events
 name: "[Reusable] PR Comment Handler"
