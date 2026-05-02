@@ -36,6 +36,7 @@ jobs:
       pr_number: ${{ steps.pr.outputs.pr_number }}
       feature_dir: ${{ steps.paths.outputs.feature_dir }}
       gate_step: ${{ steps.step.outputs.step }}
+      run_gate: ${{ steps.step.outputs.run_gate }}
     steps:
       - name: Checkout consumer repo
         uses: actions/checkout@v4
@@ -86,27 +87,32 @@ jobs:
       - name: Read speckit step from state file
         id: step
         if: steps.pr.outputs.pr_number != ''
+        env:
+          STATE_FILE: ${{ steps.paths.outputs.state_file }}
         run: |
-          STATE_FILE="${{ steps.paths.outputs.state_file }}"
           if [ ! -f "$STATE_FILE" ]; then
             echo "::error::State file not found: $STATE_FILE"
             exit 1
           fi
-          STEP=$(cat "$STATE_FILE" | python3 -c "
-          import json, sys
-          s = json.load(sys.stdin)
-          steps = s.get('completedSteps', [])
-          print(steps[-1] if steps else '')
+          STEP=$(python3 -c "
+          import json, os
+          with open(os.environ['STATE_FILE'], encoding='utf-8') as f:
+              s = json.load(f)
+          steps = s.get('completedSteps') or []
+          print(steps[-1] if steps else '', end='')
           ")
           if [ -z "$STEP" ]; then
-            echo "::error::Could not read completedSteps from $STATE_FILE"
-            exit 1
+            echo "::notice::Skipping spec gate: completedSteps is empty (e.g. bootstrap only — nothing to validate yet)."
+            echo "run_gate=false" >> "$GITHUB_OUTPUT"
+            echo "step=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "run_gate=true" >> "$GITHUB_OUTPUT"
           echo "step=$STEP" >> "$GITHUB_OUTPUT"
           echo "Completed step: $STEP"
 
       - name: Checkout SDLCAgents
-        if: steps.pr.outputs.pr_number != ''
+        if: steps.pr.outputs.pr_number != '' && steps.step.outputs.run_gate == 'true'
         uses: actions/checkout@v4
         with:
           repository: DmitryLukyanov/SDLCAgents
@@ -115,7 +121,7 @@ jobs:
           token: ${{ secrets.COPILOT_PAT }}
 
       - name: Setup Node.js
-        if: steps.pr.outputs.pr_number != ''
+        if: steps.pr.outputs.pr_number != '' && steps.step.outputs.run_gate == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -123,12 +129,12 @@ jobs:
           cache-dependency-path: .sdlc-agents/package-lock.json
 
       - name: Install dependencies
-        if: steps.pr.outputs.pr_number != ''
+        if: steps.pr.outputs.pr_number != '' && steps.step.outputs.run_gate == 'true'
         run: npm ci
         working-directory: .sdlc-agents
 
       - name: Spec gate — prepare Codex prompt
-        if: steps.pr.outputs.pr_number != ''
+        if: steps.pr.outputs.pr_number != '' && steps.step.outputs.run_gate == 'true'
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/spec-gate/spec-gate-agent.ts
         env:
           SPEC_GATE_MODE: codex_prepare
@@ -142,7 +148,7 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
 
       - name: Upload Codex prompt for analysis job
-        if: steps.pr.outputs.pr_number != ''
+        if: steps.pr.outputs.pr_number != '' && steps.step.outputs.run_gate == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: spec-gate-codex-input-${{ github.run_id }}
@@ -151,7 +157,7 @@ jobs:
 
   codex:
     needs: prepare
-    if: needs.prepare.outputs.pr_number != ''
+    if: needs.prepare.outputs.pr_number != '' && needs.prepare.outputs.run_gate == 'true'
     uses: ./.github/workflows/_reusable-codex-run.yml
     secrets: inherit
     with:
