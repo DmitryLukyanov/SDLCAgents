@@ -5,9 +5,10 @@
 # Optional `checkout_ref` + secret `COPILOT_PAT`: checkout a feature branch (e.g. workflow_dispatch
 # where GITHUB_REF is not the branch Codex should run on).
 #
-# Optional `commit_workspace_after_codex`: after a successful Codex run, `git add` (excluding
-# `.sdlc-agents` except paths listed in `extra_git_add_paths`), commit with `workspace_commit_message`,
-# and push to `checkout_ref`. Used by Developer Agent so teardown only updates state / PR metadata.
+# Optional `commit_workspace_after_codex`: after a successful Codex run, stage changes with
+# `git add -u` + untracked (respecting .gitignore), skip `.sdlc-agents/` except `extra_git_add_paths`,
+# never stage `node_modules`, then commit with `workspace_commit_message` and push to `checkout_ref`.
+# Used by Developer Agent so teardown only updates state / PR metadata.
 #
 # Prompt (exactly one — XOR):
 #   • prompt_file — non-empty path to an existing file after checkout/download (passed to codex-action).
@@ -231,7 +232,21 @@ jobs:
           fi
           git config user.email "$GIT_USER_EMAIL"
           git config user.name "$GIT_USER_NAME"
-          git add -A -- ":!.sdlc-agents" ":!node_modules"
+          # Do not use `git add -A` + pathspec excludes: nested `**/node_modules` is easy to miss and
+          # Git then tries to stage ignored trees and aborts ("ignored by .gitignore").
+          git add -u
+          while IFS= read -r -d '' f; do
+            case "$f" in
+              .sdlc-agents/*|.sdlc-agents) continue ;;
+            esac
+            git add -- "$f"
+          done < <(git ls-files -z --others --exclude-standard)
+          git diff --cached --name-only -z \
+            | { grep -zE '(^|/)node_modules(/|$)' || true; } \
+            | while IFS= read -r -d '' p; do
+              [ -z "$p" ] && continue
+              git restore --staged -- "$p" || true
+            done
           if [ -n "${EXTRA_PATHS:-}" ]; then
             printf '%s\n' "$EXTRA_PATHS" | while IFS= read -r line || [ -n "$line" ]; do
               [ -z "${line// }" ] && continue
