@@ -7,7 +7,7 @@
 #
 # Required secrets: COPILOT_PAT, OPENAI_API_KEY
 name: Developer Agent
-run-name: ${{ inputs.mode == 'fix' && format('Developer Agent — Fix (PR #{0})', inputs.pr_number) || format('{0} · Developer Agent ({1})', inputs.issue_key, inputs.step) }}
+run-name: ${{ inputs.mode == 'fix' && format('Developer Agent — Fix (PR {0})', inputs.pr_number) || format('{0} · Developer Agent ({1})', inputs.issue_key, inputs.step) }}
 
 concurrency:
   group: developer-agent-${{ inputs.mode == 'fix' && format('fix-pr-{0}', inputs.pr_number) || inputs.issue_key }}
