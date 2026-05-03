@@ -9,6 +9,7 @@
 #        Artifacts: full `spec-output/<KEY>/` bundle plus optional `*-ba-codex-state` when `ba-codex-state.json` exists.
 #   2. ba_codex — `./_reusable-codex-run.yml` writes `ba-codex-output.txt` (skipped when BA not needed)
 #   3. finish — parses Codex JSON, posts Jira / GitHub outcome, dispatches Developer Agent
+#      (TEMP: dispatch skipped via env in the finish step — flip when re-enabling the downstream workflow).
 #
 #
 # Usage in consumer repo:
@@ -235,6 +236,9 @@ jobs:
         env:
           AI_TEAMMATE_MODE: codex_ba_finish
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          # TEMP: stop workflow_dispatch to developer-agent.yml (same idea as `if: false` on a dispatch step).
+          # Re-enable: set to 'false' or remove this line.
+          AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH: 'true'
           AI_TEAMMATE_SKIP_BA_REASON: ${{ needs.create_github_issue_and_prepare_ba.outputs.skip_reason }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}

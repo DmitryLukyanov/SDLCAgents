@@ -12,6 +12,7 @@
  *   codex_ba_finish              — read Codex output + finish pipeline (CI finish job)
  *
  * Optional (CI): `AI_TEAMMATE_SKIP_BA_REASON` — when non-empty (from job output `skip_reason`), finish skips BA without `ba-codex-state.json`.
+ * Optional (CI): `AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH` — when `true`, finish still updates the issue but does not dispatch developer-agent (temporary toggle in reusable workflow YAML).
  */
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';

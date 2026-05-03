@@ -8,7 +8,7 @@
  * (`_reusable-developer-agent-bootstrap.yml`); this step only passes issue_key
  * and issue_number (no branch_name — bootstrap chooses or reuses a branch).
  */
-import { readFile } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types.js';
 import { fillTemplate } from '../../../lib/template-utils.js';
@@ -24,6 +24,11 @@ const TBD = '{TBD}';
  */
 function toJsonSafe(val: string): string {
   return JSON.stringify(val).slice(1, -1);
+}
+
+/** TEMP: reusable workflow sets `AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH=true` to skip developer-agent dispatch only. */
+function skipDeveloperAgentDispatch(): boolean {
+  return process.env.AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH?.trim() === 'true';
 }
 
 /** Step config shape as it appears in ai-teammate.config */
@@ -94,6 +99,20 @@ export async function runStartDeveloperAgent(
   console.log(`\n── Updating GitHub issue #${ctx.githubIssueNumber} ──`);
   await deps.updateGithubIssueBody(owner, repo, ctx.githubIssueNumber, issueBody);
   console.log(`   ✅ Issue body updated`);
+
+  if (skipDeveloperAgentDispatch()) {
+    console.log(
+      '\n── Skipping developer agent workflow_dispatch (AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH) ──',
+    );
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+      await appendFile(
+        summaryPath,
+        '\n## Developer agent dispatch\n\nSkipped (`AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH` in reusable workflow). Issue body was still updated from BA.\n',
+      );
+    }
+    return { status: 'continue' };
+  }
 
   // ── Dispatch developer agent workflow ────────────────────────────
   const workflowFile = step.workflowFile ?? 'developer-agent.yml';
