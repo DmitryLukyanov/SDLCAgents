@@ -114,7 +114,8 @@ jobs:
           echo "✅ Spec-Kit v${CURRENT} (matches SDLCAgents)"
 
       - name: Validate spec-kit files (agents + skills)
-        uses: ./.github/actions/check-speckit-prerequisites
+        # Local action path resolves to the *caller* repo; the action lives in SDLCAgents (.sdlc-agents).
+        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
         with:
           fail_on_not_ready: 'true'
 

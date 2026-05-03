@@ -83,7 +83,8 @@ jobs:
 
       - name: Check spec-kit prerequisites
         id: speckit_check
-        uses: ./.github/actions/check-speckit-prerequisites
+        # Local action path resolves to the *caller* repo; the action lives in SDLCAgents (.sdlc-agents).
+        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
 
       - uses: actions/setup-node@v4
         with:
