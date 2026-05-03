@@ -51,7 +51,8 @@ export interface RunnerContext {
   owner: string;
   repo: string;
   ref: string;
-  encodedConfig: string;
+  /** URL-encoded JSON from workflow `caller_config` / env `CALLER_CONFIG`. */
+  callerConfig: string;
   configFile: string;
   /** Written by create_github_issue; read by subsequent steps. */
   githubIssueNumber?: number;
@@ -70,18 +71,21 @@ export type StepOutcome =
   | { status: 'continue' }
   | { status: 'stop'; reason: string };
 
-/** A single step inside a pipeline config. */
+/** A single step inside a pipeline config (see `src/lib/pipeline-config.ts` for `async_call` / `id`). */
 export interface PipelineStep {
+  id?: string;
   runner: string;
+  enabled?: boolean;
+  async_call?: { workflowFile: string; workflowRef?: string; inputs?: Record<string, string> };
   [key: string]: unknown;
 }
 
-/** Config for the BA phase (Codex reads this step from the pipeline JSON). */
-export interface BaInlineStep extends PipelineStep {
-  runner: 'run_ba_inline';
-  /** Skip BA and stop pipeline if Jira ticket already has this label. */
+/**
+ * Shared Jira label gate on agent `params` (same idea as scrum-master rules):
+ * CI may skip a segment if `skipIfLabel` is present on the ticket; runners may `addLabel` after success.
+ */
+export interface AgentLabelParams {
   skipIfLabel?: string;
-  /** Add this label to the Jira ticket after successful analysis. */
   addLabel?: string;
 }
 

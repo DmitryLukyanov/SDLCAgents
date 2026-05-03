@@ -41,15 +41,15 @@ SCRUM MASTER — rules from scrum-master.config only (JQL per rule in JSON)
               --> [TS:src/lib/jira/jira-client.ts] jiraFetch( POST /rest/api/3/search )
             |
   FOR each issue key:
-            buildEncodedConfig(key)
-              --> [TS:src/workflows/scrum-master/build-encoded-config.ts]
+            buildCallerConfig(key)
+              --> [TS:src/workflows/scrum-master/build-caller-config.ts]
                   customParams: taken_status, status_to_move_to,
                   ticket_context_depth (default '1' via env TICKET_CONTEXT_DEPTH)
             |
             Octokit.rest.actions.createWorkflowDispatch({
               workflow_id: rule.workflowFile,  ← e.g. "ai-teammate.yml" from rule
               ref: rule.workflowRef || ctx.ref (GITHUB_REF_NAME),
-              inputs: { concurrency_key, config_file, encoded_config }
+              inputs: { concurrency_key, config_file, caller_config }
             })
             |
             transitionIssueToPostRead(key)    [jira-client.ts]
@@ -68,8 +68,8 @@ AI TEAMMATE — one run per dispatched issue
     v
   Step 5: tsx .../ai-teammate-agent.ts (workflow) or npm run ai-teammate-agent (SDLCAgents root)
     --> [TS:src/workflows/ai-teammate/ai-teammate-agent.ts] → runAiTeammateAgent() [ai-teammate-core.ts]
-          decodeEncodedConfig(ENCODED_CONFIG)   [src/lib/encoded-config.ts]
-          extractIssueKeyFromEncoded(root)       [src/lib/encoded-config.ts]
+          decodeCallerConfig(CALLER_CONFIG)     [src/lib/caller-config.ts]
+          extractIssueKeyFromCallerConfig(root) [src/lib/caller-config.ts]
           runPipeline(issueKey, steps, deps)     [ai-teammate-pipeline.ts]
             (steps from config/workflows/ai-teammate/ai-teammate.config)
             For print_jira_context_to_stdout step (typical):
@@ -92,7 +92,7 @@ AI TEAMMATE — one run per dispatched issue
           ctx.githubIssueNumber ← new issue number
     |
     v
-  Step: run_ba_inline
+  Step: Codex BA (params.skipIfLabel / addLabel)
     --> [TS:src/workflows/ai-teammate/steps/run-ba-inline.ts] runBaInline()
           deps.getIssue(issueKey, fields)             [jira-client.ts]
           adfToPlain(description / comments)          [adf-to-plain.ts]

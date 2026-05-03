@@ -2,6 +2,8 @@
  * AI Teammate entry point: wires real deps and runs the agent.
  *
  * Environment (from _reusable-ai-teammate.yml):
+ *   CONFIG_FILE   — workflow input `config_file` → agent JSON path in consumer repo
+ *   CALLER_CONFIG — workflow input `caller_config` → URL-encoded JSON { params: { inputJql, customParams? } }
  *   COPILOT_PAT   — PAT for GitHub REST except issue comments (create issue, dispatch, …)
  *   GITHUB_TOKEN  — ${{ github.token }} at job level (github-actions[bot]) for createComment only
  *
@@ -12,7 +14,6 @@
  *   codex_ba_finish              — read Codex output + finish pipeline (CI finish job)
  *
  * Optional (CI): `AI_TEAMMATE_SKIP_BA_REASON` — when non-empty (from job output `skip_reason`), finish skips BA without `ba-codex-state.json`.
- * Optional (CI): `AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH` — when `true`, finish still updates the issue but does not dispatch developer-agent (temporary toggle in reusable workflow YAML).
  */
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';

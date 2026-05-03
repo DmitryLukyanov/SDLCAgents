@@ -1,15 +1,11 @@
 # Reusable AI Teammate workflow.
 # Checks out the calling (consumer) repo for config, SDLCAgents for Node scripts.
 #
-# Three jobs (Codex BA — avoids GitHub Models rate limits on BA):
-#   1. create_github_issue_and_prepare_ba — display name "Create GitHub issue and prepare BA":
-#        Jira skip-label check → (a) Jira + spec-kit through `create_github_issue` → `ba-github-issue-prep.json`;
-#        if `jira_ba_skip.outputs.skip_reason` non-empty: skip `codex_ba_prepare_prompt` + Codex (no skip file); else prepare prompt + state.
-#        No PR here — GitHub Issue only.
-#        Artifacts: full `spec-output/<KEY>/` bundle plus optional `*-ba-codex-state` when `ba-codex-state.json` exists.
-#   2. ba_codex — `./_reusable-codex-run.yml` writes `ba-codex-output.txt` (skipped when BA not needed)
-#   3. finish — parses Codex JSON, posts Jira / GitHub outcome, dispatches Developer Agent
-#      (TEMP: dispatch skipped via env in the finish step — flip when re-enabling the downstream workflow).
+# Modes:
+#   • Normal / inline BA — same run: prepare → `ba_codex` → `finish` (when config has no `async_call` or BA skipped).
+#   • Async BA — when a pipeline step defines `async_call`, after prepare this run dispatches that workflow and
+#     sets `dispatched=true`; `ba_codex` / `finish` are skipped. The child run ends by dispatching the consumer
+#     entry workflow again with `caller_config.params.async_child_run_id` set → job `resume_after_async_ba`.
 #
 #
 # Usage in consumer repo:
@@ -19,7 +15,7 @@
 #       with:
 #         concurrency_key: ${{ inputs.concurrency_key }}
 #         config_file: ${{ inputs.config_file }}
-#         encoded_config: ${{ inputs.encoded_config }}
+#         caller_config: ${{ inputs.caller_config }}
 #       secrets: inherit
 name: "[Reusable] AI Teammate"
 
@@ -27,15 +23,15 @@ on:
   workflow_call:
     inputs:
       concurrency_key:
-        description: "Jira issue key — must match the key inside encoded_config (artifact paths are spec-output/<this value>/)."
+        description: "Jira issue key — must match the key inside caller_config (artifact paths are spec-output/<this value>/)."
         required: true
         type: string
       config_file:
         description: "Path to agent JSON in consumer repo (e.g. config/workflows/ai-teammate/ai-teammate.config)"
         required: true
         type: string
-      encoded_config:
-        description: "URL-encoded JSON { params: { inputJql, customParams } }"
+      caller_config:
+        description: "Caller payload: URL-encoded JSON { params: { inputJql, customParams? } } (ticket + overrides; see buildAiTeammateCallerConfigEncoded in src/lib/routing_helper.ts)."
         required: true
         type: string
       sdlc_agents_ref:
@@ -56,13 +52,33 @@ on:
         required: true
 
 jobs:
+  detect:
+    name: Detect resume (async BA callback)
+    runs-on: ubuntu-latest
+    outputs:
+      is_resume: ${{ steps.resume.outputs.is_resume }}
+    steps:
+      - uses: actions/github-script@v7
+        id: resume
+        env:
+          CALLER_CONFIG_RAW: ${{ inputs.caller_config }}
+        with:
+          script: |
+            const raw = decodeURIComponent(process.env.CALLER_CONFIG_RAW.trim());
+            const j = JSON.parse(raw);
+            const id = (j?.params?.async_child_run_id ?? '').toString().trim();
+            core.setOutput('is_resume', id ? 'true' : 'false');
+
   create_github_issue_and_prepare_ba:
     name: Create GitHub issue and prepare BA
+    needs: [detect]
+    if: needs.detect.outputs.is_resume != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
       run_codex: ${{ steps.ba_flags.outputs.run_codex }}
       skip_reason: ${{ steps.jira_ba_skip.outputs.skip_reason }}
+      dispatched: ${{ steps.dispatch_async.outputs.dispatched || 'false' }}
     env:
       GITHUB_TOKEN: ${{ github.token }}
     permissions:
@@ -70,6 +86,24 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      # workflow_call `required: true` still allows empty strings — fail fast with a clear message (manual dispatch, typos, bad callers).
+      - name: Require workflow_call inputs (concurrency_key, config_file, caller_config)
+        env:
+          CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          CALLER_CONFIG: ${{ inputs.caller_config }}
+        run: |
+          set -euo pipefail
+          trim() { printf '%s' "${1:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
+          ck=$(trim "${CONCURRENCY_KEY-}")
+          cf=$(trim "${CONFIG_FILE-}")
+          cc=$(trim "${CALLER_CONFIG-}")
+          err=0
+          if [ -z "$ck" ]; then echo "::error::concurrency_key must be non-empty."; err=1; fi
+          if [ -z "$cf" ]; then echo "::error::config_file must be non-empty — path to agent JSON in the consumer repo (e.g. config/workflows/ai-teammate/ai-teammate.config). Pass it from workflow_dispatch like Scrum Master does."; err=1; fi
+          if [ -z "$cc" ]; then echo "::error::caller_config must be non-empty."; err=1; fi
+          exit "$err"
+
       - name: Checkout consumer repo
         uses: actions/checkout@v4
 
@@ -96,12 +130,12 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
-      - name: Jira — check BA skip label (run_ba_inline skipIfLabel)
+      - name: Jira — check skip-if-label (params.skipIfLabel)
         id: jira_ba_skip
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/check-ba-skip-label-ci.ts
         env:
           CONFIG_FILE: ${{ inputs.config_file }}
-          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+          CALLER_CONFIG: ${{ inputs.caller_config }}
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -117,7 +151,7 @@ jobs:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
-          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+          CALLER_CONFIG: ${{ inputs.caller_config }}
 
       - name: Codex BA — prepare BA prompt for Codex + post 'BA analysis started' GitHub issue comment (tsx, no LLM; writes ba-codex-prompt.md + ba-codex-state.json for finish)
         if: steps.jira_ba_skip.outputs.skip_reason == ''
@@ -130,7 +164,7 @@ jobs:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
-          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+          CALLER_CONFIG: ${{ inputs.caller_config }}
 
       - name: Decide if Codex BA job should run
         id: ba_flags
@@ -160,6 +194,37 @@ jobs:
           path: spec-output/${{ inputs.concurrency_key }}/ba-codex-state.json
           if-no-files-found: ignore
 
+      - name: Optionally dispatch async BA child (config async_call)
+        id: dispatch_async
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.ba_flags.outputs.run_codex }}" != "true" ] || [ -n "${{ steps.jira_ba_skip.outputs.skip_reason }}" ]; then
+            echo "dispatched=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Async parent callback: consumer entry workflow filename (workflow_dispatch id). github.context is the caller;
+          # github.workflow_ref = org/repo/.github/workflows/foo.yml@refs/heads/branch → basename foo.yml
+          WORKFLOW_REF="${{ github.workflow_ref }}"
+          path_part="${WORKFLOW_REF%%@*}"
+          ENTRY_FILE="$(basename "${path_part}")"
+          if [ -z "${ENTRY_FILE}" ]; then
+            echo "::error::Could not derive callback workflow file from github.workflow_ref (got: ${WORKFLOW_REF})"
+            exit 1
+          fi
+          echo "Callback workflow_dispatch file: ${ENTRY_FILE}"
+          export CONFIG_FILE="${{ inputs.config_file }}"
+          export CALLER_CONFIG="${{ inputs.caller_config }}"
+          export COPILOT_PAT="${{ secrets.COPILOT_PAT }}"
+          export GITHUB_REPOSITORY="${{ github.repository }}"
+          export GITHUB_SERVER_URL="${{ github.server_url }}"
+          export GITHUB_RUN_ID="${{ github.run_id }}"
+          export GITHUB_REF_NAME="${{ github.ref_name }}"
+          export AI_TEAMMATE_CONCURRENCY_KEY="${{ inputs.concurrency_key }}"
+          export AI_TEAMMATE_SKIP_BA_REASON="${{ steps.jira_ba_skip.outputs.skip_reason }}"
+          export AI_TEAMMATE_RUN_CODEX="${{ steps.ba_flags.outputs.run_codex }}"
+          export AI_TEAMMATE_ENTRY_WORKFLOW_FILE="${ENTRY_FILE}"
+          .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/dispatch-pipeline-async-child-ci.ts
+
       - name: Upload Spec Kit artifacts (partial)
         if: always()
         uses: actions/upload-artifact@v4
@@ -169,8 +234,11 @@ jobs:
           if-no-files-found: ignore
 
   ba_codex:
-    needs: create_github_issue_and_prepare_ba
-    if: needs.create_github_issue_and_prepare_ba.outputs.run_codex == 'true'
+    needs: [create_github_issue_and_prepare_ba]
+    if: >-
+      needs.create_github_issue_and_prepare_ba.result == 'success'
+      && needs.create_github_issue_and_prepare_ba.outputs.run_codex == 'true'
+      && needs.create_github_issue_and_prepare_ba.outputs.dispatched != 'true'
     uses: ./.github/workflows/_reusable-codex-run.yml
     secrets: inherit
     with:
@@ -186,9 +254,14 @@ jobs:
       timeout_minutes: 30
 
   finish:
-    needs: [create_github_issue_and_prepare_ba, ba_codex]
-    # Run after Codex success, when Codex was skipped (BA not needed), or when Codex failed (finish posts incomplete BA from missing/invalid output).
-    if: always() && needs.create_github_issue_and_prepare_ba.result == 'success' && (needs.ba_codex.result == 'success' || needs.ba_codex.result == 'skipped' || needs.ba_codex.result == 'failure')
+    needs: [detect, create_github_issue_and_prepare_ba, ba_codex]
+    # Inline BA only — not when an async child was dispatched (that path uses `resume_after_async_ba`).
+    if: >-
+      always()
+      && needs.detect.outputs.is_resume != 'true'
+      && needs.create_github_issue_and_prepare_ba.result == 'success'
+      && needs.create_github_issue_and_prepare_ba.outputs.dispatched != 'true'
+      && (needs.ba_codex.result == 'success' || needs.ba_codex.result == 'skipped' || needs.ba_codex.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -237,21 +310,107 @@ jobs:
         env:
           AI_TEAMMATE_MODE: codex_ba_finish
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
-          # TEMP: stop workflow_dispatch to developer-agent.yml (same idea as `if: false` on a dispatch step).
-          # Re-enable: set to 'false' or remove this line.
-          AI_TEAMMATE_SKIP_DEVELOPER_AGENT_DISPATCH: 'true'
           AI_TEAMMATE_SKIP_BA_REASON: ${{ needs.create_github_issue_and_prepare_ba.outputs.skip_reason }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
-          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+          CALLER_CONFIG: ${{ inputs.caller_config }}
 
       - name: Upload Spec Kit artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: spec-kit-${{ inputs.concurrency_key }}
+          path: spec-output/
+          if-no-files-found: ignore
+
+  resume_after_async_ba:
+    name: Resume after async BA (callback)
+    needs: [detect]
+    if: needs.detect.outputs.is_resume == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      - name: Checkout SDLCAgents (scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: ${{ inputs.sdlc_agents_ref }}
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - uses: actions/github-script@v7
+        id: artifact_runs
+        env:
+          CALLER_CONFIG_RAW: ${{ inputs.caller_config }}
+        with:
+          script: |
+            const raw = decodeURIComponent(process.env.CALLER_CONFIG_RAW.trim());
+            const j = JSON.parse(raw);
+            const parent = (j?.params?.parent_run_id ?? '').toString().trim();
+            const child = (j?.params?.async_child_run_id ?? '').toString().trim();
+            if (!parent || !child) {
+              core.setFailed('caller_config.params.parent_run_id and async_child_run_id are required for resume');
+            }
+            core.setOutput('prepare_run_id', parent);
+            core.setOutput('codex_run_id', child);
+
+      - name: Download BA prepare artifact (parent run)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.COPILOT_PAT }}
+          run_id: ${{ steps.artifact_runs.outputs.prepare_run_id }}
+          name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+          path: spec-output/${{ inputs.concurrency_key }}/
+
+      - name: Download BA post-Codex artifact (async child run)
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.COPILOT_PAT }}
+          run_id: ${{ steps.artifact_runs.outputs.codex_run_id }}
+          name: ai-teammate-ba-${{ inputs.concurrency_key }}-post-codex
+          path: spec-output/${{ inputs.concurrency_key }}/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Codex BA — finish (resume path)
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
+        env:
+          AI_TEAMMATE_MODE: codex_ba_finish
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          AI_TEAMMATE_SKIP_BA_REASON: ''
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          CALLER_CONFIG: ${{ inputs.caller_config }}
+
+      - name: Upload Spec Kit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-kit-${{ inputs.concurrency_key }}-resume
           path: spec-output/
           if-no-files-found: ignore

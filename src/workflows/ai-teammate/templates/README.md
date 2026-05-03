@@ -130,7 +130,7 @@ observers know the agent is running.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `steps/ba-apply-outcome.ts` (after Codex BA output is interpreted)
+**Set by:** `steps/apply-codex-ba-outcome-to-jira-github.ts` (`codex_ba_finish`, after Codex output is interpreted)
 
 ---
 
@@ -142,7 +142,7 @@ issue is closed.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `steps/ba-apply-outcome.ts` (after Codex BA output is interpreted)
+**Set by:** `steps/apply-codex-ba-outcome-to-jira-github.ts` (`codex_ba_finish`, after Codex output is interpreted)
 
 ---
 

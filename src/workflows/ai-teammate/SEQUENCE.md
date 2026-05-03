@@ -1,12 +1,12 @@
 # AI Teammate — text sequence (GitHub Actions)
 
 High-level order when the consumer repo calls `_reusable-ai-teammate.yml`.  
-Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-teammate-codex-ba-finish.ts`, `ai-teammate-codex-ba-shared.ts` (barrel: `ai-teammate-codex-ba.ts`), `check-ba-skip-label-ci.ts`, `.github/workflows/_reusable-ai-teammate.yml`.
+Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-teammate-codex-ba-finish.ts`, `ai-teammate-codex-ba-shared.ts` (barrel: `ai-teammate-codex-ba.ts`), shared skip-if-label (`lib/agent-skip-if-label.ts`, CI entry `check-ba-skip-label-ci.ts`), `.github/workflows/_reusable-ai-teammate.yml`.
 
 ```
 [Optional] Scrum Master (Jira rules)
     |
-    | workflow_dispatch + encoded_config, concurrency_key, config_file
+    | workflow_dispatch + caller_config, concurrency_key, config_file
     v
 +-------------------------------------------------------------------+
 | Job: Create GitHub issue and prepare BA                           |
@@ -16,7 +16,7 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
     |-- check spec-kit / agent files exist
     |-- npm ci (.sdlc-agents)
     |
-    |-- TS: check-ba-skip-label-ci (Jira vs skipIfLabel) -> output skip_reason (empty = run BA; non-empty = skip)
+    |-- TS: check-ba-skip-label-ci -> lib/agent-skip-if-label (Jira vs skipIfLabel) -> output skip_reason (empty = run BA; non-empty = skip)
     |
     |-- TS: codex_ba_create_github_issue
     |       Jira validate / read context
@@ -77,14 +77,14 @@ For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
 
 These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `spec-output/<KEY>/`, then the **prepare** job uploads that folder as artifact **`ai-teammate-ba-<KEY>-prepare`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue holds the human-facing placeholder, comments, and (after BA) the filled body from `start_developer_agent`.
 
-**Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt`, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so **`codex_ba_finish`** exits early without `ba-codex-state.json`.
+**Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`, invoked from `check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt`, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so **`codex_ba_finish`** exits early without `ba-codex-state.json`.
 
 | File / output | Written by | Read by | Purpose |
 |---------------|------------|---------|---------|
 | **`skip_reason`** (job output) | `jira_ba_skip` step | `ba_flags`, `if:` on `codex_ba_prepare_prompt`, finish env `AI_TEAMMATE_SKIP_BA_REASON` | Single string: empty = BA allowed; non-empty = skip BA/Codex/finish BA apply (reason text for logs / step summary). |
 | **`ba-github-issue-prep.json`** | `codex_ba_create_github_issue` (prepare job) | `codex_ba_prepare_prompt` (prepare job), **only if** `skip_reason` is empty | Checkpoint after pipeline through `create_github_issue`: runner context + partial step records so the **second** `tsx` step does not re-run Jira/issue creation. |
 | **`ba-codex-prompt.md`** | `codex_ba_prepare_prompt` | `ba_codex` job (`openai/codex-action` **prompt-file** input) | Full text prompt for the **BA LLM** (Codex). |
-| **`ba-codex-state.json`** | `codex_ba_prepare_prompt` | `codex_ba_finish` (finish job) | Checkpoint for **after Codex**: Jira ticket snapshot, `run_ba_inline` config, runner context, partial pipeline records, and expected **`ba-codex-output.txt`** path so finish can apply BA and call `start_developer_agent`. |
+| **`ba-codex-state.json`** | `codex_ba_prepare_prompt` | `codex_ba_finish` (finish job) | Checkpoint for **after Codex**: Jira ticket snapshot, `agentLabelParams` (from `params.skipIfLabel` / `params.addLabel`), runner context, partial pipeline records, and expected **`ba-codex-output.txt`** path so finish can apply BA and call `start_developer_agent`. |
 | **`ba-codex-output.txt`** | `ba_codex` (Codex action **output-file**) | `codex_ba_finish` (after download **post-codex** artifact overlay) | Raw Codex stdout / model reply; finish **parses** it (no second LLM call in TS). |
 
 **Artifact chain (short):**

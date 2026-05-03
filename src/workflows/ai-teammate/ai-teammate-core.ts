@@ -1,13 +1,13 @@
 /**
- * AI Teammate core: CONFIG_FILE + ENCODED_CONFIG → pipeline metadata for Codex BA phases.
+ * AI Teammate core: CONFIG_FILE + CALLER_CONFIG → pipeline metadata for Codex BA phases.
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {
-  decodeEncodedConfig,
-  extractIssueKeyFromEncoded,
-} from '../../lib/encoded-config.js';
-import type { PipelineStep, RunnerContext } from './runner-types.js';
+  decodeCallerConfig,
+  extractIssueKeyFromCallerConfig,
+} from '../../lib/caller-config.js';
+import type { AgentLabelParams, PipelineStep, RunnerContext } from './runner-types.js';
 
 interface AgentJson {
   name?: string;
@@ -15,6 +15,8 @@ interface AgentJson {
     runner?: string;
     /** 0 = primary issue only; >=1 = linked issues + subtasks. */
     ticketContextDepth?: number;
+    skipIfLabel?: string;
+    addLabel?: string;
     /** Pipeline runner: ordered list of steps with conditional routing. */
     steps?: PipelineStep[];
   };
@@ -23,20 +25,30 @@ interface AgentJson {
 export interface LoadedAiTeammatePipeline {
   issueKey: string;
   steps: PipelineStep[];
+  /** From `params.skipIfLabel` / `params.addLabel`. */
+  agentLabelParams: AgentLabelParams;
   ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>;
   configFileAbs: string;
   runner: string;
 }
 
-/** Load CONFIG_FILE + ENCODED_CONFIG into pipeline metadata (Codex BA prepare/finish). */
+function parseAgentLabelParams(agent: AgentJson): AgentLabelParams {
+  const p = agent.params;
+  const skipIfLabel = typeof p?.skipIfLabel === 'string' ? p.skipIfLabel.trim() : undefined;
+  const addLabel = typeof p?.addLabel === 'string' ? p.addLabel.trim() : undefined;
+  if (skipIfLabel === undefined && addLabel === undefined) return {};
+  return { skipIfLabel, addLabel };
+}
+
+/** Load CONFIG_FILE + CALLER_CONFIG into pipeline metadata (Codex BA prepare/finish). */
 export async function loadAiTeammatePipelineFromEnv(): Promise<LoadedAiTeammatePipeline> {
   const configFile = process.env.CONFIG_FILE?.trim();
-  const encoded = process.env.ENCODED_CONFIG?.trim();
+  const callerConfigEncoded = process.env.CALLER_CONFIG?.trim();
   if (!configFile) throw new Error('CONFIG_FILE is required');
-  if (!encoded) throw new Error('ENCODED_CONFIG is required');
+  if (!callerConfigEncoded) throw new Error('CALLER_CONFIG is required');
 
-  const root = decodeEncodedConfig(encoded);
-  const issueKey = extractIssueKeyFromEncoded(root);
+  const root = decodeCallerConfig(callerConfigEncoded);
+  const issueKey = extractIssueKeyFromCallerConfig(root);
   const custom = root.params?.customParams ?? {};
 
   const abs = resolve(process.cwd(), configFile);
@@ -75,6 +87,8 @@ export async function loadAiTeammatePipelineFromEnv(): Promise<LoadedAiTeammateP
   const [owner, repo] = (process.env.GITHUB_REPOSITORY ?? '/').split('/');
   const ref = process.env.GITHUB_REF_NAME ?? 'main';
 
+  const agentLabelParams = parseAgentLabelParams(agent);
+
   console.log(
     `Agent runner: ${runner || '(missing)'} · config: ${configFile} · key: ${issueKey} · ticketContextDepth: ${depth}`,
   );
@@ -82,7 +96,8 @@ export async function loadAiTeammatePipelineFromEnv(): Promise<LoadedAiTeammateP
   return {
     issueKey,
     steps: (steps ?? []) as PipelineStep[],
-    ctxInit: { owner, repo, ref, encodedConfig: encoded, configFile: abs },
+    agentLabelParams,
+    ctxInit: { owner, repo, ref, callerConfig: callerConfigEncoded, configFile: abs },
     configFileAbs: abs,
     runner,
   };

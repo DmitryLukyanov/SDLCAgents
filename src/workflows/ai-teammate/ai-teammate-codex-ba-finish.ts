@@ -13,7 +13,7 @@ import {
   writeAiTeammatePipelineSummary,
   type StepRecord,
 } from './ai-teammate-pipeline.js';
-import { applyBaOutcome } from './steps/ba-apply-outcome.js';
+import { applyCodexBaOutcomeToJiraAndGithub } from './steps/apply-codex-ba-outcome-to-jira-github.js';
 import type { AiTeammateDeps, RunnerContext } from './runner-types.js';
 import {
   STATE_VERSION,
@@ -48,15 +48,33 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     throw new Error(`[codex-ba-finish] Missing state file: ${p.state}`);
   }
 
-  const state = JSON.parse(readFileSync(p.state, 'utf8')) as BaCodexStateFile;
-  if (state.version !== STATE_VERSION) {
-    throw new Error(`[codex-ba-finish] Unsupported ba-codex-state.json version: ${state.version}`);
+  const rawState = JSON.parse(readFileSync(p.state, 'utf8')) as BaCodexStateFile & {
+    baOptions?: { skipIfLabel?: string; addLabel?: string };
+    baStep?: { skipIfLabel?: string; addLabel?: string };
+  };
+  if (rawState.version !== STATE_VERSION) {
+    throw new Error(`[codex-ba-finish] Unsupported ba-codex-state.json version: ${rawState.version}`);
   }
+  const agentLabelParams =
+    rawState.agentLabelParams ??
+    rawState.baOptions ??
+    (rawState.baStep ? { skipIfLabel: rawState.baStep.skipIfLabel, addLabel: rawState.baStep.addLabel } : undefined);
+  if (!agentLabelParams) {
+    throw new Error('[codex-ba-finish] ba-codex-state.json must include agentLabelParams (or legacy baOptions / baStep)');
+  }
+  const state: BaCodexStateFile = {
+    version: rawState.version,
+    ticketCtx: rawState.ticketCtx,
+    agentLabelParams,
+    runnerCtx: rawState.runnerCtx,
+    codexRelativeOutputPath: rawState.codexRelativeOutputPath,
+    partialRecords: rawState.partialRecords,
+  };
 
   const outAbs = join(process.cwd(), state.codexRelativeOutputPath);
-  let raw = '';
+  let codexOutput = '';
   try {
-    raw = readFileSync(outAbs, 'utf8');
+    codexOutput = readFileSync(outAbs, 'utf8');
   } catch {
     console.warn(`[codex-ba-finish] Missing or unreadable Codex output: ${outAbs}`);
   }
@@ -66,15 +84,14 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     baOutcome: undefined,
   };
 
-  const baStep = state.baStep;
   console.log('\n── BA: Interpreting Codex output ──');
-  const outcome = interpretBaModelOutput(raw, state.ticketCtx);
+  const outcome = interpretBaModelOutput(codexOutput, state.ticketCtx);
   ctx.baOutcome = outcome;
 
-  const stepOutcome = await applyBaOutcome(ctx, baStep, deps, outcome);
+  const stepOutcome = await applyCodexBaOutcomeToJiraAndGithub(ctx, agentLabelParams, deps, outcome);
 
   const inlineRecord: StepRecord = {
-    runner: 'run_ba_inline',
+    runner: 'ba_codex',
     status: stepOutcome.status,
     reason: stepOutcome.status === 'stop' ? stepOutcome.reason : undefined,
     durationMs: 0,

@@ -10,7 +10,8 @@
     "scrum-master:debug": "tsx tests/scrum-agent/scrum-master.local-debug.ts",
     "ai-teammate-agent": "tsx src/workflows/ai-teammate/ai-teammate-agent.ts",
     "ai-teammate:debug": "tsx tests/ai-teammate/ai-teammate.local-debug.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test:lib": "tsx tests/lib/pipeline-routing.test.ts && tsx tests/lib/agent-skip-if-label.test.ts"
   },
   "dependencies": {
     "@octokit/rest": "^21.0.2"

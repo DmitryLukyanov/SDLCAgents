@@ -8,12 +8,13 @@
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
  *   print_jira_context_to_stdout — logs Jira ticket details + prepares spec-kit workspace
  *   create_github_issue          — creates a GitHub issue placeholder; stores issue number in context
- *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow
+ *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow (omit or set `"enabled": false` to skip dispatch only)
  *
- * A `run_ba_inline` entry may appear in the pipeline JSON for BA options; BA is executed by Codex
- * between `create_github_issue` and `start_developer_agent`, not by this switch.
+ * Codex BA runs in CI or via an `async_call` child workflow between `create_github_issue` and
+ * `start_developer_agent`. Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
 import { join } from 'node:path';
+import { isStepEnabled } from '../../lib/pipeline-expected-step-helper.js';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runPrintJiraContextToStdout } from './steps/print-jira-context-to-stdout.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
@@ -57,11 +58,6 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     }
 
     default:
-      if (step.runner === 'run_ba_inline') {
-        throw new Error(
-          'Pipeline step "run_ba_inline" is configuration only — BA runs via Codex (`codex_ba_prepare_prompt` + `codex_ba_finish`, or `codex_ba_prepare` for both TS phases locally).',
-        );
-      }
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
           `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, start_developer_agent.`,
@@ -135,14 +131,22 @@ export async function runPipelineThroughInclusive(
     const step = steps[i];
     console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} (partial → "${lastInclusiveRunner}") ──`);
 
+    const stepEnabled = isStepEnabled(step);
     const t0 = Date.now();
-    const outcome = await runPipelineStep(ctx, step, deps);
+    let outcome: StepOutcome;
+    if (!stepEnabled) {
+      console.log(`   ⏭ Skipped — step.enabled is false in config`);
+      outcome = { status: 'continue' };
+    } else {
+      outcome = await runPipelineStep(ctx, step, deps);
+    }
     const durationMs = Date.now() - t0;
 
     records.push({
       runner: step.runner,
       status: outcome.status,
-      reason: outcome.status === 'stop' ? outcome.reason : undefined,
+      reason:
+        outcome.status === 'stop' ? outcome.reason : !stepEnabled ? 'skipped (enabled: false)' : undefined,
       durationMs,
     });
 
@@ -189,14 +193,22 @@ export async function runPipelineFromRunner(
     const step = steps[i];
     console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} ──`);
 
+    const stepEnabled = isStepEnabled(step);
     const t0 = Date.now();
-    const outcome = await runPipelineStep(ctx, step, deps);
+    let outcome: StepOutcome;
+    if (!stepEnabled) {
+      console.log(`   ⏭ Skipped — step.enabled is false in config`);
+      outcome = { status: 'continue' };
+    } else {
+      outcome = await runPipelineStep(ctx, step, deps);
+    }
     const durationMs = Date.now() - t0;
 
     records.push({
       runner: step.runner,
       status: outcome.status,
-      reason: outcome.status === 'stop' ? outcome.reason : undefined,
+      reason:
+        outcome.status === 'stop' ? outcome.reason : !stepEnabled ? 'skipped (enabled: false)' : undefined,
       durationMs,
     });
 

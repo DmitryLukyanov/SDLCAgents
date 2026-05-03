@@ -8,7 +8,11 @@ import {
   getRequiredIssueStatus,
   jqlRequireStatus,
 } from '../../lib/jira-status.js';
-import { buildEncodedConfig } from './build-encoded-config.js';
+import {
+  dispatchEntryWorkflowForMappedIssue,
+  resolveEntryWorkflowDispatchTarget,
+  type GithubWorkflowDispatchPayload,
+} from '../../lib/routing_helper.js';
 import { interpolateJql, loadSmConfig } from './load-sm-config.js';
 import type { SmRule } from './sm-types.js';
 
@@ -32,13 +36,7 @@ export interface ScrumMasterDeps {
   addIssueLabel: (issueKey: string, label: string) => Promise<void>;
   /** Move ticket to POST_READ_STATUS (e.g. In Progress) after a successful workflow dispatch. */
   transitionIssueToPostRead: (issueKey: string) => Promise<void>;
-  dispatchWorkflow: (args: {
-    owner: string;
-    repo: string;
-    workflow_id: string;
-    ref: string;
-    inputs: Record<string, string>;
-  }) => Promise<void>;
+  dispatchWorkflow: (args: GithubWorkflowDispatchPayload) => Promise<void>;
 }
 
 interface DispatchRecord {
@@ -133,8 +131,7 @@ async function processRule(
   let dispatched = 0;
 
   const ruleLabel = rule.description || `Rule #${ruleIndex + 1}`;
-  const workflowFile = rule.workflowFile || ctx.defaultWorkflowFile;
-  const ruleRef = rule.workflowRef || ctx.ref;
+  const { workflowId: workflowFile, ref: ruleRef } = resolveEntryWorkflowDispatchTarget(ctx, rule);
   const limit = Math.min(50, rule.limit ?? ctx.globalLimit);
 
   const baseJql = interpolateJql(rule.jql);
@@ -174,21 +171,9 @@ async function processRule(
 
   for (const issue of issues) {
     const key = issue.key;
-    const encoded = buildEncodedConfig(key);
-
     console.log(`   Dispatching ${workflowFile} for ${key}...`);
     try {
-      await deps.dispatchWorkflow({
-        owner: ctx.owner,
-        repo: ctx.repo,
-        workflow_id: workflowFile,
-        ref: ruleRef,
-        inputs: {
-          concurrency_key: key,
-          config_file: rule.configFile,
-          encoded_config: encoded,
-        },
-      });
+      await dispatchEntryWorkflowForMappedIssue(deps, ctx, rule, key);
       console.log(`   ok: ${key}`);
       dispatched++;
       records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'dispatched', repo: `${ctx.owner}/${ctx.repo}` });

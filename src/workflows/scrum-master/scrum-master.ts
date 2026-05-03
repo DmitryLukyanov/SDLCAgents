@@ -5,6 +5,7 @@ import { Octokit } from '@octokit/rest';
 import { addIssueComment, addIssueLabel, searchIssues, transitionIssueToStatusName, validateJiraAuth } from '../../lib/jira/jira-client.js';
 import { getPostReadTargetStatus } from '../../lib/jira-status.js';
 import { messages } from '../../lib/messages.js';
+import { dispatchGithubWorkflow, type GithubWorkflowDispatchPayload } from '../../lib/routing_helper.js';
 import { runScrumMaster } from './scrum-master-core.js';
 
 const [owner, repo] = (process.env.GITHUB_REPOSITORY || '').split('/');
@@ -51,7 +52,7 @@ const deps = {
   },
   dispatchWorkflow: async (args: WorkflowDispatchParams) => {
     try {
-      await octokit.rest.actions.createWorkflowDispatch(args);
+      await dispatchGithubWorkflow(octokit, args as GithubWorkflowDispatchPayload);
     } catch (err: unknown) {
       const status =
         err && typeof err === 'object' && 'status' in err ? Number((err as { status: unknown }).status) : NaN;

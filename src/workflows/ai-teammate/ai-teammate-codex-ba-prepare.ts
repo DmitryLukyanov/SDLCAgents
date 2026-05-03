@@ -2,7 +2,7 @@
  * Codex BA — prepare (no LLM): GitHub issue checkpoint, BA prompt, `ba-codex-state.json`.
  *
  * Modes: `codex_ba_create_github_issue`, `codex_ba_prepare_prompt`, `codex_ba_prepare` (both phases).
- * Skip-by-label is handled in CI (`check-ba-skip-label-ci.ts`) before `codex_ba_prepare_prompt`.
+ * Skip-by-label is handled in CI (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`; entry: `check-ba-skip-label-ci.ts`) before `codex_ba_prepare_prompt`.
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,8 +10,8 @@ import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { getBaAnalysisSystemPrompt, buildBaTicketPrompt } from '../business-analyst/analyze-ticket.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import { runPipelineThroughInclusive } from './ai-teammate-pipeline.js';
-import { collectBaTicketContext } from './steps/ba-collect-ticket-context.js';
-import type { AiTeammateDeps, BaInlineStep, PipelineStep, RunnerContext } from './runner-types.js';
+import { collectCodexBaTicketContextFromJira } from './steps/collect-codex-ba-ticket-context-from-jira.js';
+import type { AgentLabelParams, AiTeammateDeps, PipelineStep, RunnerContext } from './runner-types.js';
 import {
   GITHUB_ISSUE_PREP_VERSION,
   STATE_VERSION,
@@ -23,27 +23,23 @@ import {
 
 const BA_STARTED = loadTemplate(import.meta.url, 'templates', 'ba-started.md');
 
-async function requirePipelineAndBaStep(): Promise<{
+async function requireCodexBaPipelineContext(): Promise<{
   issueKey: string;
   steps: PipelineStep[];
-  baStep: BaInlineStep;
+  agentLabelParams: AgentLabelParams;
   ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>;
 }> {
-  const { issueKey, steps, ctxInit, runner } = await loadAiTeammatePipelineFromEnv();
+  const { issueKey, steps, ctxInit, runner, agentLabelParams } = await loadAiTeammatePipelineFromEnv();
   assertConcurrencyKeyMatchesIssue(issueKey);
   if (runner !== 'pipeline') {
     throw new Error('Codex BA prepare phases require params.runner "pipeline"');
   }
-  const baStep = steps.find(s => s.runner === 'run_ba_inline') as BaInlineStep | undefined;
-  if (!baStep) {
-    throw new Error('Codex BA: no run_ba_inline step in pipeline config');
-  }
-  return { issueKey, steps, baStep, ctxInit };
+  return { issueKey, steps, agentLabelParams, ctxInit };
 }
 
 /** Pipeline through `create_github_issue`; persists `ba-github-issue-prep.json` for `codex_ba_prepare_prompt`. */
 export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Promise<void> {
-  const { issueKey, steps, ctxInit } = await requirePipelineAndBaStep();
+  const { issueKey, steps, ctxInit } = await requireCodexBaPipelineContext();
 
   const { ctx, records } = await runPipelineThroughInclusive(
     issueKey,
@@ -64,7 +60,7 @@ export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Pr
       owner: ctx.owner,
       repo: ctx.repo,
       ref: ctx.ref,
-      encodedConfig: ctx.encodedConfig,
+      callerConfig: ctx.callerConfig,
       configFile: ctx.configFile,
       githubIssueNumber: ctx.githubIssueNumber,
       specKitContextFile: ctx.specKitContextFile,
@@ -77,7 +73,7 @@ export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Pr
 
 /** After `codex_ba_create_github_issue`; writes BA Codex prompt + `ba-codex-state.json`. */
 export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promise<void> {
-  const { issueKey, steps, baStep } = await requirePipelineAndBaStep();
+  const { issueKey, steps, agentLabelParams } = await requireCodexBaPipelineContext();
   const p = codexBaPaths(issueKey);
 
   if (!existsSync(p.githubIssuePrep)) {
@@ -92,7 +88,7 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
   }
   if (prep.runnerCtx.issueKey !== issueKey) {
     throw new Error(
-      `[codex_ba_prepare_prompt] Checkpoint issueKey "${prep.runnerCtx.issueKey}" does not match CONFIG/ENCODED_CONFIG "${issueKey}".`,
+      `[codex_ba_prepare_prompt] Checkpoint issueKey "${prep.runnerCtx.issueKey}" does not match CONFIG/CALLER_CONFIG "${issueKey}".`,
     );
   }
 
@@ -102,7 +98,7 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
   };
   const records = prep.partialRecords;
 
-  const { ticketCtx } = await collectBaTicketContext(ctx, baStep, deps);
+  const { ticketCtx } = await collectCodexBaTicketContextFromJira(ctx, agentLabelParams, deps);
   mkdirSync(p.base, { recursive: true });
 
   if (ctx.githubIssueNumber) {
@@ -143,13 +139,13 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
   const state: BaCodexStateFile = {
     version: STATE_VERSION,
     ticketCtx,
-    baStep,
+    agentLabelParams,
     runnerCtx: {
       issueKey: ctx.issueKey,
       owner: ctx.owner,
       repo: ctx.repo,
       ref: ctx.ref,
-      encodedConfig: ctx.encodedConfig,
+      callerConfig: ctx.callerConfig,
       configFile: ctx.configFile,
       githubIssueNumber: ctx.githubIssueNumber,
       specKitContextFile: ctx.specKitContextFile,

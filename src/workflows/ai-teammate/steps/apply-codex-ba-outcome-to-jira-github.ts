@@ -1,21 +1,22 @@
 /**
- * Post BA outcome to Jira / GitHub (labels, comments, close issue on incomplete).
+ * After the Codex BA job (`codex_ba_finish` / `AI_TEAMMATE_MODE=codex_ba_finish`): take the interpreted
+ * BA result and persist it to Jira and the placeholder GitHub issue (labels, comments, close on incomplete).
  */
 import { loadTemplate, fillTemplate } from '../../../lib/template-utils.js';
 import type { BaOutcome } from '../../business-analyst/ba-types.js';
-import type { AiTeammateDeps, BaInlineStep, RunnerContext, StepOutcome } from '../runner-types.js';
+import type { AgentLabelParams, AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types.js';
 
-const BA_COMPLETE   = loadTemplate(import.meta.url, '..', 'templates', 'ba-complete.md');
+const BA_COMPLETE = loadTemplate(import.meta.url, '..', 'templates', 'ba-complete.md');
 const BA_INCOMPLETE = loadTemplate(import.meta.url, '..', 'templates', 'ba-incomplete.md');
 
-export async function applyBaOutcome(
+export async function applyCodexBaOutcomeToJiraAndGithub(
   ctx: RunnerContext,
-  step: BaInlineStep,
+  agentLabelParams: AgentLabelParams,
   deps: AiTeammateDeps,
   outcome: BaOutcome,
 ): Promise<StepOutcome> {
   const { issueKey } = ctx;
-  const { addLabel } = step;
+  const { addLabel } = agentLabelParams;
 
   if (outcome.status === 'complete') {
     console.log('   ✅ BA analysis complete — all 5 fields extracted');
@@ -27,9 +28,11 @@ export async function applyBaOutcome(
     }
 
     if (ctx.githubIssueNumber) {
-      await deps.addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber,
-        fillTemplate(BA_COMPLETE, { ISSUE_KEY: issueKey })
-      ).catch(() => { /* non-fatal */ });
+      await deps
+        .addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber, fillTemplate(BA_COMPLETE, { ISSUE_KEY: issueKey }))
+        .catch(() => {
+          /* non-fatal */
+        });
     }
 
     return { status: 'continue' };
@@ -46,9 +49,11 @@ export async function applyBaOutcome(
 
   if (ctx.githubIssueNumber) {
     try {
-      await deps.addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber,
-        fillTemplate(BA_INCOMPLETE, { ISSUE_KEY: issueKey })
-      ).catch(() => { /* non-fatal */ });
+      await deps
+        .addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber, fillTemplate(BA_INCOMPLETE, { ISSUE_KEY: issueKey }))
+        .catch(() => {
+          /* non-fatal */
+        });
       await deps.closeGithubIssue(ctx.owner, ctx.repo, ctx.githubIssueNumber);
       console.log(`   ✅ Closed placeholder GitHub issue #${ctx.githubIssueNumber}`);
     } catch (e) {

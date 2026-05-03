@@ -17,6 +17,8 @@ export interface JiraSearchResponse {
 
 export interface JiraIssueFields {
   summary?: string;
+  /** Issue label names from `GET /rest/api/3/issue/{key}?fields=labels`. */
+  labels?: string[];
   description?: unknown;
   issuetype?: { name?: string };
   status?: { name?: string };

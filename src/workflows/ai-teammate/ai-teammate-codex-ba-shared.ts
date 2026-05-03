@@ -3,7 +3,7 @@
  */
 import { join } from 'node:path';
 import type { TicketContext } from '../business-analyst/ba-types.js';
-import type { BaInlineStep, RunnerContext } from './runner-types.js';
+import type { AgentLabelParams, RunnerContext } from './runner-types.js';
 import type { StepRecord } from './ai-teammate-pipeline.js';
 
 export const STATE_VERSION = 1 as const;
@@ -15,17 +15,17 @@ export interface BaGithubIssuePrepFile {
   partialRecords: StepRecord[];
   runnerCtx: Pick<
     RunnerContext,
-    'issueKey' | 'owner' | 'repo' | 'ref' | 'encodedConfig' | 'configFile' | 'githubIssueNumber' | 'specKitContextFile'
+    'issueKey' | 'owner' | 'repo' | 'ref' | 'callerConfig' | 'configFile' | 'githubIssueNumber' | 'specKitContextFile'
   >;
 }
 
 export interface BaCodexStateFile {
   version: typeof STATE_VERSION;
   ticketCtx: TicketContext;
-  baStep: BaInlineStep;
+  agentLabelParams: AgentLabelParams;
   runnerCtx: Pick<
     RunnerContext,
-    'issueKey' | 'owner' | 'repo' | 'ref' | 'encodedConfig' | 'configFile' | 'githubIssueNumber' | 'specKitContextFile'
+    'issueKey' | 'owner' | 'repo' | 'ref' | 'callerConfig' | 'configFile' | 'githubIssueNumber' | 'specKitContextFile'
   >;
   /** Path relative to repository root for Codex `output-file` */
   codexRelativeOutputPath: string;
@@ -33,15 +33,15 @@ export interface BaCodexStateFile {
 }
 
 /**
- * `workflow_call` passes `concurrency_key` for artifact paths; `ENCODED_CONFIG` carries the real Jira key.
+ * `workflow_call` passes `concurrency_key` for artifact paths; `CALLER_CONFIG` carries the real Jira key.
  */
 export function assertConcurrencyKeyMatchesIssue(issueKey: string): void {
   const w = process.env['AI_TEAMMATE_CONCURRENCY_KEY']?.trim();
   if (!w) return;
   if (w !== issueKey) {
     throw new Error(
-      `AI Teammate concurrency_key mismatch: workflow input is "${w}" but ENCODED_CONFIG resolves to "${issueKey}". ` +
-        'Use the same Jira issue key for `concurrency_key` and inside `encoded_config`.',
+      `AI Teammate concurrency_key mismatch: workflow input is "${w}" but CALLER_CONFIG resolves to "${issueKey}". ` +
+        'Use the same Jira issue key for `concurrency_key` and inside `caller_config`.',
     );
   }
 }

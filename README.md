@@ -98,20 +98,20 @@ Repositories that run **Spec Gate** or **AI Teammate / Developer Agent** with Co
 
 ## AI Teammate — Issue & Agent Flow
 
-Implementation lives in `src/workflows/ai-teammate/` (text flow: `SEQUENCE.md`; diagrams: `docs/pipeline-flow.md`). The **Business Analyst (BA)** `run_ba_inline` block is config for Codex, not an inline pipeline runner. CI job **Create GitHub issue and prepare BA** runs a **Jira skip-label** check, then up to two **tsx** steps (no LLM), then **Codex**, then **finish**. For a dry run with mocks, use `npm run ai-teammate:debug` (`codex_ba_prepare` = both TS phases; skip-by-label is CI-only).
+Implementation lives in `src/workflows/ai-teammate/` (text flow: `SEQUENCE.md`; diagrams: `docs/pipeline-flow.md`). Shared **`params.skipIfLabel`** / **`params.addLabel`** gate Codex BA (and match the scrum-master label pattern); Codex runs in CI (inline or async child workflow). CI job **Create GitHub issue and prepare BA** runs a **Jira skip-label** check, then up to two **tsx** steps (no LLM), then **Codex**, then **finish**. For a dry run with mocks, use `npm run ai-teammate:debug` (`codex_ba_prepare` = both TS phases; skip-by-label is CI-only).
 
 ### Codex BA — prepare, LLM run, and finish
 
 | Phase | `AI_TEAMMATE_MODE` / job | What runs | LLM? |
 |-------|--------------------------|-----------|------|
-| **0** | _(workflow step)_ | **`check-ba-skip-label-ci.ts`** → step output **`skip_reason`**: **empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt` + Codex (no skip file; job output → finish via **`AI_TEAMMATE_SKIP_BA_REASON`**). | **No** |
+| **0** | _(workflow step)_ | **`lib/agent-skip-if-label.ts`** (`evaluateSkipIfLabel`), entry **`check-ba-skip-label-ci.ts`** → step output **`skip_reason`**: **empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt` + Codex (no skip file; job output → finish via **`AI_TEAMMATE_SKIP_BA_REASON`**). | **No** |
 | **1a. GitHub issue** | `codex_ba_create_github_issue` — `tsx …/ai-teammate-agent.ts` | Runs the TypeScript pipeline **through and including** `create_github_issue` (Jira validation/context, spec-kit prep, **GitHub Issue** placeholder + `jira:KEY` — **not a PR**). Writes **`ba-github-issue-prep.json`**. | **No** |
 | **1b. BA prompt** | `codex_ba_prepare_prompt` — same entrypoint _(skipped when `skip_reason` is non-empty)_ | Reads prep JSON; collects BA ticket context; optional “BA started” GitHub comment; writes **`ba-codex-prompt.md`** + **`ba-codex-state.json`**. | **No** |
 | **1 (local)** | `codex_ba_prepare` | Runs **1a** then **1b** in one process (debug / compat). | **No** |
 | **2. Codex BA** | separate workflow job — `openai/codex-action@v1` | Reads the prepared prompt (and repo context per action config), writes **`spec-output/<JIRA_KEY>/ba-codex-output.txt`**. | **Yes** — this is the BA LLM call. |
 | **3. Finish** | `codex_ba_finish` — same `ai-teammate-agent.ts` entrypoint | If **`AI_TEAMMATE_SKIP_BA_REASON`** is set (from job output **`skip_reason`**), records that and exits. Otherwise loads **`ba-codex-state.json`**, reads Codex output, parses/interprets the BA JSON, applies the outcome (Jira comment/transition, GitHub issue updates, labels), then continues the pipeline from **`start_developer_agent`** (or stops on incomplete BA). | **No** — parses Codex output; does not invoke Codex again. |
 
-`AI_TEAMMATE_CONCURRENCY_KEY` (workflow input) must match the Jira key embedded in `ENCODED_CONFIG`, or artifact paths and the workflow disagree.
+`AI_TEAMMATE_CONCURRENCY_KEY` (workflow input) must match the Jira key embedded in `CALLER_CONFIG`, or artifact paths and the workflow disagree.
 
 In **consumer** repositories the same script is often installed under **`.sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts`** (see reusable workflow steps); paths above refer to this repo’s **`src/`** layout.
 
@@ -125,7 +125,7 @@ sequenceDiagram
 
     Note over AT: runPipeline steps from ai-teammate.config
 
-    AT->>AT: check-ba-skip-label-ci (Jira vs skipIfLabel) → skip_reason
+    AT->>AT: agent-skip-if-label (Jira vs skipIfLabel) → skip_reason
     AT->>AT: codex_ba_create_github_issue — pipeline → ba-github-issue-prep.json
     AT->>AT: codex_ba_prepare_prompt (if skip_reason empty) — prompt + state (no LLM)
     AT->>CX: Codex job — ba-codex-output.txt
@@ -161,7 +161,7 @@ sequenceDiagram
 
     SM->>SM: Load scrum-master.config, search Jira
     SM->>J: transition + sm_triggered (per rule)
-    SM->>AT: workflow_dispatch + encoded_config
+    SM->>AT: workflow_dispatch + caller_config
 
     AT->>J: validate fields, build spec context
     AT->>GH: placeholder issue
@@ -195,7 +195,7 @@ flowchart TD
         A1[ensure_jira_fields_expected]
         A2[print_jira_context_to_stdout\n+ spec-output issueContext.md]
         A3[create_github_issue]
-        A4[Codex BA — openai/codex-action\n(config step run_ba_inline)]
+        A4[Codex BA — openai/codex-action\n(params.skipIfLabel / addLabel)]
         A5[start_developer_agent]
         A1 --> A2 --> A3 --> A4 --> A5
     end

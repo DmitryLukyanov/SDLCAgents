@@ -1,5 +1,6 @@
 /**
- * Shared Jira fetch + ticket assembly for Business Analyst steps (inline or Codex).
+ * During `codex_ba_prepare_prompt` / `AI_TEAMMATE_MODE=codex_ba_prepare_prompt`: load Jira issue + related
+ * issues and assemble {@link TicketContext} for the Codex BA prompt (`ba-codex-prompt.md`).
  */
 import { adfToPlain } from '../../../lib/adf-to-plain.js';
 import {
@@ -8,19 +9,19 @@ import {
 } from '../../business-analyst/business-analyst-core.js';
 import type { RelatedIssueSummary } from '../../../lib/jira/jira-related.js';
 import type { TicketContext } from '../../business-analyst/ba-types.js';
-import type { AiTeammateDeps, BaInlineStep, RunnerContext } from '../runner-types.js';
+import type { AgentLabelParams, AiTeammateDeps, RunnerContext } from '../runner-types.js';
 
-/** Jira snapshot for BA prompt building (`run_ba_inline.skipIfLabel` is enforced in CI — see `check-ba-skip-label-ci.ts`). */
-export interface BaTicketContextBundle {
+/** Jira snapshot + label params carried into `ba-codex-state.json` for finish (`params.skipIfLabel` enforced in CI — see `lib/agent-skip-if-label.ts`). */
+export interface CodexBaTicketContextBundle {
   ticketCtx: TicketContext;
-  step: BaInlineStep;
+  agentLabelParams: AgentLabelParams;
 }
 
-export async function collectBaTicketContext(
+export async function collectCodexBaTicketContextFromJira(
   ctx: RunnerContext,
-  step: BaInlineStep,
+  agentLabelParams: AgentLabelParams,
   deps: AiTeammateDeps,
-): Promise<BaTicketContextBundle> {
+): Promise<CodexBaTicketContextBundle> {
   const { issueKey } = ctx;
 
   console.log('\n── BA: Fetching Jira data ──');
@@ -49,5 +50,5 @@ export async function collectBaTicketContext(
     relatedIssues: mapRelated(related),
   };
 
-  return { ticketCtx, step };
+  return { ticketCtx, agentLabelParams };
 }

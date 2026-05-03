@@ -43,7 +43,7 @@
 │  │   Scans Jira for      │    │   1. ensure_jira_fields_expected — validate description  │  │
 │  │   tickets, dispatches │    │   2. print_jira_context_to_stdout — spec-kit workspace   │  │
 │  │   ai-teammate.yml     │    │   3. create_github_issue — placeholder issue             │  │
-│  │   per ticket          │    │   4. run_ba_inline — GPT-4o analysis inline              │  │
+│  │   per ticket          │    │   4. params.skipIfLabel / Codex BA — GPT-4o analysis inline              │  │
 │  │                       │    │      complete → continue                                 │  │
 │  │                       │    │      incomplete → block Jira, close issue, stop          │  │
 │  │                       │    │   5. assign_copilot — fill template, assign Copilot      │  │
@@ -84,7 +84,7 @@
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
 │  │  Run ai-teammate-agent.ts  (src/workflows/ai-teammate/ai-teammate-agent.ts)        │  │
 │  │                                                                                   │  │
-│  │  decodeEncodedConfig(ENCODED_CONFIG) → issueKey + customParams                    │  │
+│  │  decodeCallerConfig(CALLER_CONFIG) → issueKey + customParams                       │  │
 │  │  runPipeline(issueKey, steps, deps)  → ai-teammate-pipeline.ts                    │  │
 │  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
 │                               │                                                          │
@@ -121,7 +121,7 @@
 │                               │                                                          │
 │                               ▼                                                          │
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
-│  │  Step: run_ba_inline                                                              │  │
+│  │  Step: params.skipIfLabel / Codex BA                                                              │  │
 │  │  src/workflows/ai-teammate/steps/run-ba-inline.ts                                 │  │
 │  │                                                                                   │  │
 │  │  getIssue() + adfToPlain()             ← jira-client.ts / adf-to-plain.ts        │  │
@@ -236,7 +236,7 @@
 │  - Created GitHub issue placeholder "{KEY}: Copilot Coding Agent Task"               │
 │    (label: jira:{KEY}, body: "⏳ BA analysis in progress...")                         │
 │                                                                                       │
-│  Step: run_ba_inline                                                                  │
+│  Step: params.skipIfLabel / Codex BA                                                                  │
 │  - Read Jira ticket: summary, description, comments, related tickets                  │
 │  - Called GPT-4o inline to analyze ticket requirements                                │
 │  - Path: BA complete   → stored baOutcome in pipeline context → continue              │
@@ -264,7 +264,7 @@
 
 ## End-to-end sequence (Mermaid)
 
-The diagram below matches the **current** automation in this repository: `scrum-master` dispatches the workflow named in `scrum-master.config` (often `ai-teammate.yml` in consumer repos), the pipeline runs the steps in `config/workflows/ai-teammate/ai-teammate.config`, BA runs **inline** (`run_ba_inline` → GitHub Models), Copilot is assigned on the GitHub issue (`custom_agent: sdlc.pipeline` in `ai-teammate-agent.ts`), and `_reusable-pr-merged.yml` finishes Jira when the PR merges.
+The diagram below matches the **current** automation in this repository: `scrum-master` dispatches the workflow named in `scrum-master.config` (often `ai-teammate.yml` in consumer repos), the pipeline runs the steps in `config/workflows/ai-teammate/ai-teammate.config`, BA runs **inline** (`params.skipIfLabel / Codex BA` → GitHub Models), Copilot is assigned on the GitHub issue (`custom_agent: sdlc.pipeline` in `ai-teammate-agent.ts`), and `_reusable-pr-merged.yml` finishes Jira when the PR merges.
 
 ```mermaid
 sequenceDiagram
@@ -281,12 +281,12 @@ sequenceDiagram
     rect rgb(240, 248, 255)
         Note over SM,J: Scrum master (scrum-master-core): JQL + status filter; skip tickets with skipIfLabel
         SM->>J: Search issues
-        SM->>SM: dispatchWorkflow (per rule: workflow_id + encoded_config)
+        SM->>SM: dispatchWorkflow (per rule: workflow_id + caller_config)
         SM->>J: transitionIssueToPostRead (POST_READ_STATUS env, default In Progress)
         SM->>J: addIssueLabel (addLabel from rule, e.g. sm_triggered)
     end
 
-    SM->>AT: workflow_dispatch with encoded_config (issue key)
+    SM->>AT: workflow_dispatch with caller_config (issue key)
 
     rect rgb(255, 250, 240)
         Note over AT,J: ensure_jira_fields_expected
@@ -299,7 +299,7 @@ sequenceDiagram
             AT->>AT: prepareSpecKitWorkspace + log context
             AT->>GH: create_github_issue (placeholder: BA in progress…)
             rect rgb(220, 255, 220)
-                Note over AT,LLM: run_ba_inline (skipIfLabel ba_analyzed → stop if already labeled)
+                Note over AT,LLM: params.skipIfLabel / Codex BA (skipIfLabel ba_analyzed → stop if already labeled)
                 AT->>J: getIssue + related issues
                 AT->>GH: optional comment: BA analysis started
                 AT->>LLM: analyzeTicket → structured BA result

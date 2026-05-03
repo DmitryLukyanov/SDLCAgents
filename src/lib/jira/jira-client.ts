@@ -163,6 +163,12 @@ export async function getIssue(issueKey: string, fields: string[]): Promise<Jira
   return jiraFetch<JiraIssue>(path);
 }
 
+/** Label names on the issue (shared helper for skip-if-label and other agents). */
+export async function getIssueLabelNames(issueKey: string): Promise<string[]> {
+  const issue = await getIssue(issueKey, ['labels']);
+  return issue.fields?.labels ?? [];
+}
+
 async function getTransitions(issueKey: string): Promise<JiraTransitionsResponse> {
   return jiraFetch<JiraTransitionsResponse>(
     `/rest/api/3/issue/${encodeURIComponent(issueKey)}/transitions`,

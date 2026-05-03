@@ -3,9 +3,10 @@
  * Run:   npm run ai-teammate:debug
  *
  * Runs **Codex BA prepare** only (writes `spec-output/<KEY>/ba-codex-prompt.md` under the repo).
- * `skipIfLabel` is evaluated in GitHub Actions only (`check-ba-skip-label-ci.ts`); this script does not skip BA by label.
+ * `params.skipIfLabel` is evaluated in GitHub Actions only (`lib/agent-skip-if-label.ts` via `check-ba-skip-label-ci.ts`); this script does not skip BA by label.
  * Edit ISSUE_KEY or mock data below to experiment.
  */
+import { buildAiTeammateCallerConfigEncoded } from '../../src/lib/routing_helper.js';
 import { runCodexBaPrepare } from '../../src/workflows/ai-teammate/ai-teammate-codex-ba.js';
 import type { AiTeammateDeps } from '../../src/workflows/ai-teammate/runner-types.js';
 
@@ -13,10 +14,10 @@ const ISSUE_KEY = process.env.DEBUG_ISSUE_KEY?.trim() ?? 'SDLCSPAC-1';
 
 process.env.AI_TEAMMATE_MODE = 'codex_ba_prepare';
 process.env.CONFIG_FILE          ??= 'config/workflows/ai-teammate/ai-teammate.config';
-process.env.ENCODED_CONFIG       ??= encodeURIComponent(JSON.stringify({ params: { inputJql: `key = ${ISSUE_KEY}` } }));
 process.env.REQUIRED_JIRA_STATUS ??= 'To Do';
 process.env.POST_READ_STATUS     ??= 'In Progress';
 process.env.TICKET_CONTEXT_DEPTH ??= '1';
+process.env.CALLER_CONFIG        ??= buildAiTeammateCallerConfigEncoded(ISSUE_KEY);
 process.env.GITHUB_REPOSITORY    ??= 'acme/consumer';
 process.env.GITHUB_REF_NAME        ??= 'main';
 
