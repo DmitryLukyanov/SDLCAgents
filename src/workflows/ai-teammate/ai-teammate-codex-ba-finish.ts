@@ -1,7 +1,7 @@
 /**
  * Codex BA — finish (no LLM here): read Codex output file, apply BA outcome, resume pipeline.
  *
- * Mode: `codex_ba_finish`. The BA LLM runs in GitHub Actions `openai/codex-action@v1` (`ba_codex` job).
+ * Mode: `codex_ba_finish` / resume `pipeline_ci`. The BA LLM runs in the consumer async workflow (`business-analyst.yml` → `_reusable-codex-run.yml`).
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
@@ -91,7 +91,7 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
   const stepOutcome = await applyCodexBaOutcomeToJiraAndGithub(ctx, agentLabelParams, deps, outcome);
 
   const inlineRecord: StepRecord = {
-    runner: 'ba_codex',
+    runner: 'ba_codex_async',
     status: stepOutcome.status,
     reason: stepOutcome.status === 'stop' ? stepOutcome.reason : undefined,
     durationMs: 0,

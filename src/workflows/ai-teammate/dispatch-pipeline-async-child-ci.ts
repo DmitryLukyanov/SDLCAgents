@@ -1,7 +1,6 @@
 /**
  * After BA prep artifacts are uploaded: if the agent config defines an `async_call` step and Codex BA
- * should run, dispatch the child workflow and set `dispatched=true`. Otherwise `dispatched=false`
- * (inline `ba_codex` + `finish` jobs in the same run).
+ * should run, dispatch the child workflow and set `dispatched=true`. Otherwise `dispatched=false`.
  *
  * Env: CONFIG_FILE, CALLER_CONFIG, COPILOT_PAT, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID,
  *      GITHUB_REF_NAME, AI_TEAMMATE_CONCURRENCY_KEY, AI_TEAMMATE_SKIP_BA_REASON (empty = run BA),
@@ -47,7 +46,7 @@ async function main(): Promise<void> {
   if (!runCodex || skipReason || asyncIdx < 0) {
     setOutput('dispatched', 'false');
     if (asyncIdx < 0) {
-      console.log('[dispatch-pipeline-async-child] No enabled step with async_call — using inline Codex BA job.');
+      console.log('[dispatch-pipeline-async-child] No enabled step with async_call — not dispatching async child.');
     } else if (!runCodex || skipReason) {
       console.log('[dispatch-pipeline-async-child] BA skipped or disabled — not dispatching async child.');
     }

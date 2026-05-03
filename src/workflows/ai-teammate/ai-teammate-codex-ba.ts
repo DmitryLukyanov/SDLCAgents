@@ -19,6 +19,7 @@ export {
   runCodexBaCreateGithubIssuePhase,
   runCodexBaPreparePromptPhase,
   runCodexBaPrepare,
+  writeBaGithubIssuePrepCheckpoint,
 } from './ai-teammate-codex-ba-prepare.js';
 
 export { runCodexBaFinish } from './ai-teammate-codex-ba-finish.js';

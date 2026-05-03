@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { getBaAnalysisSystemPrompt, buildBaTicketPrompt } from '../business-analyst/analyze-ticket.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
-import { runPipelineThroughInclusive } from './ai-teammate-pipeline.js';
+import { runPipelineThroughInclusive, type StepRecord } from './ai-teammate-pipeline.js';
 import { collectCodexBaTicketContextFromJira } from './steps/collect-codex-ba-ticket-context-from-jira.js';
 import type { AgentLabelParams, AiTeammateDeps, PipelineStep, RunnerContext } from './runner-types.js';
 import {
@@ -37,18 +37,12 @@ async function requireCodexBaPipelineContext(): Promise<{
   return { issueKey, steps, agentLabelParams, ctxInit };
 }
 
-/** Pipeline through `create_github_issue`; persists `ba-github-issue-prep.json` for `codex_ba_prepare_prompt`. */
-export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Promise<void> {
-  const { issueKey, steps, ctxInit } = await requireCodexBaPipelineContext();
-
-  const { ctx, records } = await runPipelineThroughInclusive(
-    issueKey,
-    steps,
-    deps,
-    ctxInit,
-    'create_github_issue',
-  );
-
+/** Persist checkpoint after `create_github_issue` for `codex_ba_prepare_prompt` / async BA handoff. */
+export function writeBaGithubIssuePrepCheckpoint(
+  issueKey: string,
+  ctx: RunnerContext,
+  records: StepRecord[],
+): void {
   const p = codexBaPaths(issueKey);
   mkdirSync(p.base, { recursive: true });
 
@@ -69,6 +63,21 @@ export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Pr
 
   writeFileSync(p.githubIssuePrep, JSON.stringify(prep, null, 2) + '\n', 'utf8');
   console.log(`[codex-ba-github-issue] Wrote ${p.githubIssuePrep} (GitHub issue #${ctx.githubIssueNumber ?? '?'})`);
+}
+
+/** Pipeline through `create_github_issue`; persists `ba-github-issue-prep.json` for `codex_ba_prepare_prompt`. */
+export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Promise<void> {
+  const { issueKey, steps, ctxInit } = await requireCodexBaPipelineContext();
+
+  const { ctx, records } = await runPipelineThroughInclusive(
+    issueKey,
+    steps,
+    deps,
+    ctxInit,
+    'create_github_issue',
+  );
+
+  writeBaGithubIssuePrepCheckpoint(issueKey, ctx, records);
 }
 
 /** After `codex_ba_create_github_issue`; writes BA Codex prompt + `ba-codex-state.json`. */

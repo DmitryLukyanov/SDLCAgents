@@ -2,25 +2,27 @@
 
 This folder holds the **agent JSON** consumed by `ai-teammate-agent.ts` when the consumer repo runs **`_reusable-ai-teammate.yml`**.
 
-## How BA runs today
+## How BA runs in CI
 
-Business Analyst work is **not** done inside the TypeScript pipeline as a normal step. It runs in three GitHub Actions jobs:
+Business Analyst Codex is **not** a `runPipelineStep` runner; it is **`ba_codex_async`** in this JSON, wired by `_reusable-ai-teammate.yml`:
 
-1. **Prepare** — CI runs `check-ba-skip-label-ci` (shared `lib/agent-skip-if-label.ts`: sets **`skip_reason`**: empty = BA OK, non-empty = skip), then `codex_ba_create_github_issue`, then `codex_ba_prepare_prompt` **only if** `skip_reason` is empty (writes `ba-codex-prompt.md` and `ba-codex-state.json`). For a single process, `codex_ba_prepare` runs both TS phases (e.g. local debug) and does **not** apply the YAML-only label check.
-2. **Codex** — `openai/codex-action@v1` reads that prompt and writes `ba-codex-output.txt`.
-3. **Finish** — `AI_TEAMMATE_MODE=codex_ba_finish`: parses Codex output, applies BA outcome, runs **`start_developer_agent`**.
+1. **Prepare** — `check-ba-skip-label-ci` sets **`skip_reason`** (empty = BA OK). `AI_TEAMMATE_MODE=pipeline_ci` runs `params.steps` until **`ba_codex_async`**: if enabled and not gated, it writes `ba-codex-prompt.md` and `ba-codex-state.json`.
+2. **Upload + dispatch** — the reusable workflow uploads the prepare bundle, then dispatches the consumer workflow from **`async_call.workflowFile`** (e.g. `business-analyst.yml`), which runs Codex and callbacks the parent.
+3. **Resume** — early YAML steps download parent + child artifacts when `caller_config.params.async_child_run_id` is set; the same `pipeline_ci` step runs **`codex_ba_finish`** logic (apply BA, then **`start_developer_agent`**).
+
+For local debugging without Actions, `codex_ba_prepare` / `codex_ba_finish` modes on `ai-teammate-agent.ts` still exist.
 
 The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON file.
 
 ## Required pipeline shape
 
 - **`params.runner`** must be **`"pipeline"`**.
-- **`params.skipIfLabel`** / **`params.addLabel`** (optional strings) — shared Jira label gate for the pipeline (same pattern as scrum-master rules): if the ticket already has **`skipIfLabel`**, `_reusable-ai-teammate.yml` skips `codex_ba_prepare_prompt` and Codex BA (see **Jira — check skip-if-label**). After a **complete** BA outcome, **`addLabel`** is applied on the Jira ticket.
+- **`params.skipIfLabel`** / **`params.addLabel`** (optional strings) — shared Jira label gate for the pipeline (same pattern as scrum-master rules): if the ticket already has **`skipIfLabel`**, `_reusable-ai-teammate.yml` skips the BA segment (`ba_codex_async` and **`start_developer_agent`** on that run; see **Jira — check skip-if-label**). After a **complete** BA outcome, **`addLabel`** is applied on the Jira ticket.
 - **`params.steps`** must be a non-empty array in **execution order**:
   1. **`ensure_jira_fields_expected`** (optional but recommended) — block empty descriptions.
   2. **`print_jira_context_to_stdout`** — spec-kit workspace / `issueContext.md`.
   3. **`create_github_issue`** — placeholder GitHub issue; prepare stops **after** this step.
-  4. Optional step with **`async_call`** (e.g. **`ba_codex_async`**) — when **`enabled`: true**, Codex runs in a separate consumer workflow; otherwise Codex runs inline in the same reusable run.
+  4. Optional step with **`async_call`** (e.g. **`ba_codex_async`**) — when **`enabled`: true**, Codex runs only in the separate consumer workflow named by **`async_call.workflowFile`** (see consumer-templates `business-analyst.yml`). AI Teammate does not run Codex inline.
   5. **`start_developer_agent`** — issue body from BA template + `workflow_dispatch` of the developer agent. Set **`"enabled": false`** on this step to skip it entirely (no issue-body rewrite from `github-issue.md`, no developer-agent dispatch). Default is enabled when the field is omitted.
 
 ## Consumer setup

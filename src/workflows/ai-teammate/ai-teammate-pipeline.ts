@@ -10,16 +10,22 @@
  *   create_github_issue          — creates a GitHub issue placeholder; stores issue number in context
  *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow (omit or set `"enabled": false` to skip dispatch only)
  *
- * Codex BA runs in CI or via an `async_call` child workflow between `create_github_issue` and
- * `start_developer_agent`. Shared label gate: `params.skipIfLabel` / `params.addLabel`.
+ * `ba_codex_async` is handled in `runPipelineCi` (`AI_TEAMMATE_MODE=pipeline_ci`): prepares prompt + state,
+ * then the reusable workflow uploads artifacts and dispatches the `async_call` child (Codex is not inline here).
+ * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isStepEnabled } from '../../lib/pipeline-expected-step-helper.js';
+import { decodeCallerConfig } from '../../lib/caller-config.js';
+import { normalizePipelineStepIds, type PipelineStepConfig } from '../../lib/pipeline-config.js';
+import { getPipelineStartIndexFromCallerRoot, isStepEnabled } from '../../lib/pipeline-expected-step-helper.js';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runPrintJiraContextToStdout } from './steps/print-jira-context-to-stdout.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
+import { assertConcurrencyKeyMatchesIssue } from './ai-teammate-codex-ba-shared.js';
+import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
 
 const AI_TEAMMATE_JOB_SUMMARY_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'job-summary-pipeline.md');
@@ -60,7 +66,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, start_developer_agent.`,
+          `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, start_developer_agent (ba_codex_async is orchestrated by runPipelineCi).`,
       );
   }
 }
@@ -221,4 +227,136 @@ export async function runPipelineFromRunner(
 
   console.log(`\nPipeline finished tail step(s) for ${issueKey}.`);
   await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+}
+
+function setGithubActionsOutput(name: string, value: string): void {
+  const out = process.env.GITHUB_OUTPUT;
+  if (out) appendFileSync(out, `${name}=${value}\n`, 'utf8');
+  console.log(`[runPipelineCi] ${name}=${value}`);
+}
+
+function requireEnvNonEmpty(name: string): string {
+  const v = process.env[name]?.trim();
+  if (!v) throw new Error(`Missing required environment variable: ${name}`);
+  return v;
+}
+
+async function runFreshPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
+  setGithubActionsOutput('needs_async_handoff', 'false');
+
+  const callerEncoded = requireEnvNonEmpty('CALLER_CONFIG');
+  const root = decodeCallerConfig(callerEncoded);
+  const { issueKey, steps, ctxInit, runner } = await loadAiTeammatePipelineFromEnv();
+  assertConcurrencyKeyMatchesIssue(issueKey);
+
+  if (runner !== 'pipeline') {
+    throw new Error('pipeline_ci requires params.runner "pipeline" in the agent JSON');
+  }
+
+  const stepsNorm = normalizePipelineStepIds(steps as PipelineStepConfig[]);
+  const startIdx = getPipelineStartIndexFromCallerRoot(stepsNorm, root);
+  const skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
+
+  const ctx: RunnerContext = { issueKey, ...ctxInit };
+  const records: StepRecord[] = [];
+
+  for (let i = startIdx; i < stepsNorm.length; i++) {
+    const step = stepsNorm[i]! as PipelineStep;
+    console.log(`\n── Step ${i + 1}/${stepsNorm.length}: ${step.runner} ──`);
+
+    if (step.runner === 'ba_codex_async') {
+      const t0 = Date.now();
+      if (!isStepEnabled(step)) {
+        console.log('   ⏭ Skipped — step.enabled is false in config');
+        records.push({
+          runner: step.runner,
+          status: 'continue',
+          reason: 'skipped (enabled: false)',
+          durationMs: Date.now() - t0,
+        });
+        continue;
+      }
+      if (skipBa) {
+        console.log(`   ⏭ Skipped — BA segment gated (${skipBa})`);
+        records.push({
+          runner: step.runner,
+          status: 'continue',
+          reason: `skipped (${skipBa})`,
+          durationMs: Date.now() - t0,
+        });
+        continue;
+      }
+      const wf = step.async_call?.workflowFile?.trim();
+      if (!wf) {
+        throw new Error(
+          'ba_codex_async is enabled but has no async_call.workflowFile. ' +
+            'Inline Codex was removed from AI Teammate — add async_call (e.g. business-analyst.yml) or set enabled: false.',
+        );
+      }
+      const { runCodexBaPreparePromptPhase, writeBaGithubIssuePrepCheckpoint } = await import(
+        './ai-teammate-codex-ba-prepare.js',
+      );
+      writeBaGithubIssuePrepCheckpoint(issueKey, ctx, records);
+      await runCodexBaPreparePromptPhase(deps);
+      records.push({ runner: step.runner, status: 'continue', durationMs: Date.now() - t0 });
+      setGithubActionsOutput('needs_async_handoff', 'true');
+      await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+      return;
+    }
+
+    if (step.runner === 'start_developer_agent' && skipBa) {
+      const t0 = Date.now();
+      console.log('   ⏭ Skipped start_developer_agent — BA segment skipped (skipIfLabel)');
+      records.push({
+        runner: step.runner,
+        status: 'continue',
+        reason: 'skipped (BA gated)',
+        durationMs: Date.now() - t0,
+      });
+      continue;
+    }
+
+    const stepEnabled = isStepEnabled(step);
+    const t0 = Date.now();
+    let outcome: StepOutcome;
+    if (!stepEnabled) {
+      console.log('   ⏭ Skipped — step.enabled is false in config');
+      outcome = { status: 'continue' };
+    } else {
+      outcome = await runPipelineStep(ctx, step, deps);
+    }
+    const durationMs = Date.now() - t0;
+
+    records.push({
+      runner: step.runner,
+      status: outcome.status,
+      reason:
+        outcome.status === 'stop' ? outcome.reason : !stepEnabled ? 'skipped (enabled: false)' : undefined,
+      durationMs,
+    });
+
+    if (outcome.status === 'stop') {
+      console.log(`\n🛑 Pipeline halted at ${step.runner}: ${outcome.reason}`);
+      await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+      throw new Error(`Pipeline stopped at ${step.runner}: ${outcome.reason}`);
+    }
+  }
+
+  console.log(`\nPipeline finished for ${issueKey}.`);
+  await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+}
+
+/**
+ * `_reusable-ai-teammate.yml` entry: `AI_TEAMMATE_MODE=pipeline_ci`.
+ * Resume uses a dynamic import of finish to avoid a circular module graph with this file.
+ */
+export async function runPipelineCi(deps: AiTeammateDeps): Promise<void> {
+  const isResume = process.env.AI_TEAMMATE_IS_RESUME === 'true';
+  if (isResume) {
+    setGithubActionsOutput('needs_async_handoff', 'false');
+    const { runCodexBaFinish } = await import('./ai-teammate-codex-ba-finish.js');
+    await runCodexBaFinish(deps);
+    return;
+  }
+  await runFreshPipelineFromConfigForCi(deps);
 }
