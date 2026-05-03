@@ -1,0 +1,169 @@
+/**
+ * Codex BA — prepare (no LLM): GitHub issue checkpoint, BA prompt, `ba-codex-state.json`.
+ *
+ * Modes: `codex_ba_create_github_issue`, `codex_ba_prepare_prompt`, `codex_ba_prepare` (both phases).
+ * Skip-by-label is handled in CI (`check-ba-skip-label-ci.ts`) before `codex_ba_prepare_prompt`.
+ */
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
+import { getBaAnalysisSystemPrompt, buildBaTicketPrompt } from '../business-analyst/analyze-ticket.js';
+import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
+import { runPipelineThroughInclusive } from './ai-teammate-pipeline.js';
+import { collectBaTicketContext } from './steps/ba-collect-ticket-context.js';
+import type { AiTeammateDeps, BaInlineStep, PipelineStep, RunnerContext } from './runner-types.js';
+import {
+  GITHUB_ISSUE_PREP_VERSION,
+  STATE_VERSION,
+  assertConcurrencyKeyMatchesIssue,
+  codexBaPaths,
+  type BaCodexStateFile,
+  type BaGithubIssuePrepFile,
+} from './ai-teammate-codex-ba-shared.js';
+
+const BA_STARTED = loadTemplate(import.meta.url, 'templates', 'ba-started.md');
+
+async function requirePipelineAndBaStep(): Promise<{
+  issueKey: string;
+  steps: PipelineStep[];
+  baStep: BaInlineStep;
+  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>;
+}> {
+  const { issueKey, steps, ctxInit, runner } = await loadAiTeammatePipelineFromEnv();
+  assertConcurrencyKeyMatchesIssue(issueKey);
+  if (runner !== 'pipeline') {
+    throw new Error('Codex BA prepare phases require params.runner "pipeline"');
+  }
+  const baStep = steps.find(s => s.runner === 'run_ba_inline') as BaInlineStep | undefined;
+  if (!baStep) {
+    throw new Error('Codex BA: no run_ba_inline step in pipeline config');
+  }
+  return { issueKey, steps, baStep, ctxInit };
+}
+
+/** Pipeline through `create_github_issue`; persists `ba-github-issue-prep.json` for `codex_ba_prepare_prompt`. */
+export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Promise<void> {
+  const { issueKey, steps, ctxInit } = await requirePipelineAndBaStep();
+
+  const { ctx, records } = await runPipelineThroughInclusive(
+    issueKey,
+    steps,
+    deps,
+    ctxInit,
+    'create_github_issue',
+  );
+
+  const p = codexBaPaths(issueKey);
+  mkdirSync(p.base, { recursive: true });
+
+  const prep: BaGithubIssuePrepFile = {
+    version: GITHUB_ISSUE_PREP_VERSION,
+    partialRecords: records,
+    runnerCtx: {
+      issueKey: ctx.issueKey,
+      owner: ctx.owner,
+      repo: ctx.repo,
+      ref: ctx.ref,
+      encodedConfig: ctx.encodedConfig,
+      configFile: ctx.configFile,
+      githubIssueNumber: ctx.githubIssueNumber,
+      specKitContextFile: ctx.specKitContextFile,
+    },
+  };
+
+  writeFileSync(p.githubIssuePrep, JSON.stringify(prep, null, 2) + '\n', 'utf8');
+  console.log(`[codex-ba-github-issue] Wrote ${p.githubIssuePrep} (GitHub issue #${ctx.githubIssueNumber ?? '?'})`);
+}
+
+/** After `codex_ba_create_github_issue`; writes BA Codex prompt + `ba-codex-state.json`. */
+export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promise<void> {
+  const { issueKey, steps, baStep } = await requirePipelineAndBaStep();
+  const p = codexBaPaths(issueKey);
+
+  if (!existsSync(p.githubIssuePrep)) {
+    throw new Error(
+      `[codex_ba_prepare_prompt] Missing ${p.githubIssuePrep} — run codex_ba_create_github_issue first (same job or prior step).`,
+    );
+  }
+
+  const prep = JSON.parse(readFileSync(p.githubIssuePrep, 'utf8')) as BaGithubIssuePrepFile;
+  if (prep.version !== GITHUB_ISSUE_PREP_VERSION) {
+    throw new Error(`[codex_ba_prepare_prompt] Unsupported ba-github-issue-prep.json version: ${prep.version}`);
+  }
+  if (prep.runnerCtx.issueKey !== issueKey) {
+    throw new Error(
+      `[codex_ba_prepare_prompt] Checkpoint issueKey "${prep.runnerCtx.issueKey}" does not match CONFIG/ENCODED_CONFIG "${issueKey}".`,
+    );
+  }
+
+  const ctx: RunnerContext = {
+    ...prep.runnerCtx,
+    baOutcome: undefined,
+  };
+  const records = prep.partialRecords;
+
+  const { ticketCtx } = await collectBaTicketContext(ctx, baStep, deps);
+  mkdirSync(p.base, { recursive: true });
+
+  if (ctx.githubIssueNumber) {
+    await deps
+      .addGithubIssueComment(
+        ctx.owner,
+        ctx.repo,
+        ctx.githubIssueNumber,
+        fillTemplate(BA_STARTED, { ISSUE_KEY: ctx.issueKey }),
+      )
+      .catch(() => {
+        /* non-fatal */
+      });
+  }
+
+  const system = getBaAnalysisSystemPrompt();
+  const ticketBlock = buildBaTicketPrompt(ticketCtx);
+  const promptBody = [
+    system,
+    '',
+    '---',
+    '',
+    '## Jira ticket and context',
+    '',
+    ticketBlock,
+    '',
+    '---',
+    '',
+    'Respond with ONLY a single JSON object (no markdown code fences) with exactly these keys: ' +
+      '"specifyInput","clarifyInput","planInput","tasksInput","implementInput". ' +
+      'Each value must be a string or null. Follow every rule from the system instructions above.',
+  ].join('\n');
+
+  writeFileSync(p.prompt, promptBody + '\n', 'utf8');
+
+  const codexRelativeOutputPath = join('spec-output', issueKey, 'ba-codex-output.txt').replace(/\\/g, '/');
+
+  const state: BaCodexStateFile = {
+    version: STATE_VERSION,
+    ticketCtx,
+    baStep,
+    runnerCtx: {
+      issueKey: ctx.issueKey,
+      owner: ctx.owner,
+      repo: ctx.repo,
+      ref: ctx.ref,
+      encodedConfig: ctx.encodedConfig,
+      configFile: ctx.configFile,
+      githubIssueNumber: ctx.githubIssueNumber,
+      specKitContextFile: ctx.specKitContextFile,
+    },
+    codexRelativeOutputPath,
+    partialRecords: records,
+  };
+
+  writeFileSync(p.state, JSON.stringify(state, null, 2) + '\n', 'utf8');
+  console.log(`[codex-ba-prepare-prompt] Wrote ${p.prompt} and ${p.state} (Codex output → ${codexRelativeOutputPath})`);
+}
+
+/** Runs GitHub-issue phase then BA prompt phase (same as two dedicated workflow steps). */
+export async function runCodexBaPrepare(deps: AiTeammateDeps): Promise<void> {
+  await runCodexBaCreateGithubIssuePhase(deps);
+  await runCodexBaPreparePromptPhase(deps);
+}

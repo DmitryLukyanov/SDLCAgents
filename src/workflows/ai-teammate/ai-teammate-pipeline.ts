@@ -59,7 +59,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       if (step.runner === 'run_ba_inline') {
         throw new Error(
-          'Pipeline step "run_ba_inline" is configuration only — BA runs via Codex (AI_TEAMMATE_MODE=codex_ba_prepare / codex_ba_finish).',
+          'Pipeline step "run_ba_inline" is configuration only — BA runs via Codex (`codex_ba_prepare_prompt` + `codex_ba_finish`, or `codex_ba_prepare` for both TS phases locally).',
         );
       }
       throw new Error(

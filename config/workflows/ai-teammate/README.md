@@ -6,7 +6,7 @@ This folder holds the **agent JSON** consumed by `ai-teammate-agent.ts` when the
 
 Business Analyst work is **not** done inside the TypeScript pipeline as a normal step. It runs in three GitHub Actions jobs:
 
-1. **Prepare** — `AI_TEAMMATE_MODE=codex_ba_prepare`: Jira + GitHub issue setup, then writes `spec-output/<JIRA_KEY>/ba-codex-prompt.md` (and state JSON).
+1. **Prepare** — CI runs `check-ba-skip-label-ci` (sets **`skip_reason`**: empty = BA OK, non-empty = skip), then `codex_ba_create_github_issue`, then `codex_ba_prepare_prompt` **only if** `skip_reason` is empty (writes `ba-codex-prompt.md` and `ba-codex-state.json`). For a single process, `codex_ba_prepare` runs both TS phases (e.g. local debug) and does **not** apply the YAML-only label check.
 2. **Codex** — `openai/codex-action@v1` reads that prompt and writes `ba-codex-output.txt`.
 3. **Finish** — `AI_TEAMMATE_MODE=codex_ba_finish`: parses Codex output, applies BA outcome, runs **`start_developer_agent`**.
 
@@ -20,7 +20,7 @@ The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON fi
   2. **`print_jira_context_to_stdout`** — spec-kit workspace / `issueContext.md`.
   3. **`create_github_issue`** — placeholder GitHub issue; prepare stops **after** this step.
   4. **`run_ba_inline`** — **configuration only** (not executed as a runner). Codex BA uses this object for:
-     - **`skipIfLabel`** — if the Jira ticket already has this label, the Codex BA job is skipped.
+     - **`skipIfLabel`** — if the Jira ticket already has this label, `_reusable-ai-teammate.yml` skips `codex_ba_prepare_prompt` and Codex BA (see step **Jira — check BA skip label**).
      - **`addLabel`** — label applied on the Jira ticket after a **complete** BA outcome.
   5. **`start_developer_agent`** — issue body + Copilot assignment + `workflow_dispatch` of the developer agent.
 

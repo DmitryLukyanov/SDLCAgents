@@ -119,7 +119,7 @@ observers know the agent is running.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `ai-teammate-codex-ba.ts` (`codex_ba_prepare`, before the Codex job)
+**Set by:** `ai-teammate-codex-ba-prepare.ts` (`codex_ba_prepare_prompt` after `codex_ba_create_github_issue`, before the Codex job; re-exported from `ai-teammate-codex-ba.ts`)
 
 ---
 

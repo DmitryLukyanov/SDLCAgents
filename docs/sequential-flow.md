@@ -70,7 +70,7 @@ AI TEAMMATE — one run per dispatched issue
     concurrency: ai-teammate-{concurrency_key}
     |
     ── Steps 1-2: checkout consumer repo + SDLCAgents into .sdlc-agents/
-    ── Steps 3-4: speckit_check + node setup + npm ci
+    ── Steps 3-4: composite `.github/actions/check-speckit-prerequisites` (speckit_check) + node setup + npm ci
     |
     v
   Step 5: tsx .../ai-teammate-agent.ts (workflow) or npm run ai-teammate-agent (SDLCAgents root)

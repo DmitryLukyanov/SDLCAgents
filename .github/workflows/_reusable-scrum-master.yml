@@ -93,7 +93,7 @@ jobs:
         working-directory: .sdlc-agents
 
       # ── Step 4: Validate spec-kit in consumer repo ──────────────────────
-      - name: Validate Spec-Kit initialization
+      - name: Validate Spec-Kit version (consumer vs SDLCAgents)
         env:
           SPECKIT_TARGET_VERSION: "0.5.0"
         run: |
@@ -113,27 +113,10 @@ jobs:
 
           echo "✅ Spec-Kit v${CURRENT} (matches SDLCAgents)"
 
-          MISSING=0
-          for f in \
-            .github/agents/sdlc.pipeline.agent.md \
-            .github/agents/code.review.agent.md \
-            .agents/skills/speckit-specify/SKILL.md \
-            .agents/skills/speckit-clarify/SKILL.md \
-            .agents/skills/speckit-plan/SKILL.md \
-            .agents/skills/speckit-tasks/SKILL.md \
-            .agents/skills/speckit-implement/SKILL.md; do
-            if [ ! -f "$f" ]; then
-              echo "::error::Missing file: $f"
-              MISSING=1
-            fi
-          done
-
-          if [ "$MISSING" -eq 1 ]; then
-            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai codex --script sh --force"
-            exit 1
-          fi
-
-          echo "✅ All agent and prompt files present"
+      - name: Validate spec-kit files (agents + skills)
+        uses: ./.github/actions/check-speckit-prerequisites
+        with:
+          fail_on_not_ready: 'true'
 
       # ── Step 5: Run Scrum Master (CWD = consumer workspace root) ────────
       # Scripts run from .sdlc-agents/ but process.cwd() = workspace root,

@@ -8,35 +8,23 @@ import {
 } from '../../business-analyst/business-analyst-core.js';
 import type { RelatedIssueSummary } from '../../../lib/jira/jira-related.js';
 import type { TicketContext } from '../../business-analyst/ba-types.js';
-import type { AiTeammateDeps, BaInlineStep, RunnerContext, StepOutcome } from '../runner-types.js';
+import type { AiTeammateDeps, BaInlineStep, RunnerContext } from '../runner-types.js';
 
-export type CollectBaTicketContextResult =
-  | { kind: 'skip_pipeline'; outcome: StepOutcome }
-  | { kind: 'ready'; ticketCtx: TicketContext; step: BaInlineStep };
+/** Jira snapshot for BA prompt building (`run_ba_inline.skipIfLabel` is enforced in CI — see `check-ba-skip-label-ci.ts`). */
+export interface BaTicketContextBundle {
+  ticketCtx: TicketContext;
+  step: BaInlineStep;
+}
 
 export async function collectBaTicketContext(
   ctx: RunnerContext,
   step: BaInlineStep,
   deps: AiTeammateDeps,
-): Promise<CollectBaTicketContextResult> {
+): Promise<BaTicketContextBundle> {
   const { issueKey } = ctx;
-  const { skipIfLabel } = step;
 
   console.log('\n── BA: Fetching Jira data ──');
-  const requestFields = ['summary', 'description', 'comment'];
-  if (skipIfLabel) requestFields.push('labels');
-  const issue = await deps.getIssue(issueKey, requestFields);
-
-  if (skipIfLabel) {
-    const existingLabels: string[] = (issue.fields as unknown as Record<string, string[]>)?.labels ?? [];
-    if (existingLabels.includes(skipIfLabel)) {
-      console.log(`   ⏭️ Skipping BA — ticket already has label "${skipIfLabel}"`);
-      return {
-        kind: 'skip_pipeline',
-        outcome: { status: 'stop', reason: `already labelled "${skipIfLabel}"` },
-      };
-    }
-  }
+  const issue = await deps.getIssue(issueKey, ['summary', 'description', 'comment']);
 
   const fields = issue.fields;
   const summary = fields?.summary?.trim() || '(no summary)';
@@ -61,5 +49,5 @@ export async function collectBaTicketContext(
     relatedIssues: mapRelated(related),
   };
 
-  return { kind: 'ready', ticketCtx, step };
+  return { ticketCtx, step };
 }

@@ -6,15 +6,24 @@
  *   GITHUB_TOKEN  — ${{ github.token }} at job level (github-actions[bot]) for createComment only
  *
  * Modes (`AI_TEAMMATE_MODE`, required):
- *   codex_ba_prepare — Jira + issue prep + write `spec-output/<KEY>/ba-codex-*.md` (CI prepare job)
- *   codex_ba_finish    — read Codex output + finish pipeline (CI finish job)
+ *   codex_ba_create_github_issue — pipeline through `create_github_issue`; writes `ba-github-issue-prep.json`
+ *   codex_ba_prepare_prompt      — read checkpoint; write BA Codex prompt + `ba-codex-state.json` (CI: second prepare step)
+ *   codex_ba_prepare             — both phases in one process (local debug / compat)
+ *   codex_ba_finish              — read Codex output + finish pipeline (CI finish job)
+ *
+ * Optional (CI): `AI_TEAMMATE_SKIP_BA_REASON` — when non-empty (from job output `skip_reason`), finish skips BA without `ba-codex-state.json`.
  */
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { getIssue, addIssueComment, addIssueLabel, transitionIssueToStatusName } from '../../lib/jira/jira-client.js';
 import { fetchRelatedIssueSummaries } from '../../lib/jira/jira-related.js';
 import { prepareIssueContextWithLogging } from './spec-kit/pipeline.js';
-import { runCodexBaPrepare, runCodexBaFinish } from './ai-teammate-codex-ba.js';
+import {
+  runCodexBaCreateGithubIssuePhase,
+  runCodexBaPrepare,
+  runCodexBaPreparePromptPhase,
+  runCodexBaFinish,
+} from './ai-teammate-codex-ba.js';
 import type { AiTeammateDeps } from './runner-types.js';
 
 const PLACEHOLDER_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'github-issue-placeholder.md');
@@ -101,6 +110,14 @@ const deps: AiTeammateDeps = {
 
 async function main(): Promise<void> {
   const mode = process.env.AI_TEAMMATE_MODE?.trim() ?? '';
+  if (mode === 'codex_ba_create_github_issue') {
+    await runCodexBaCreateGithubIssuePhase(deps);
+    return;
+  }
+  if (mode === 'codex_ba_prepare_prompt') {
+    await runCodexBaPreparePromptPhase(deps);
+    return;
+  }
   if (mode === 'codex_ba_prepare') {
     await runCodexBaPrepare(deps);
     return;
@@ -110,7 +127,7 @@ async function main(): Promise<void> {
     return;
   }
   throw new Error(
-    `AI_TEAMMATE_MODE must be "codex_ba_prepare" or "codex_ba_finish" (got "${mode || '(empty)'}").`,
+    `AI_TEAMMATE_MODE must be "codex_ba_create_github_issue", "codex_ba_prepare_prompt", "codex_ba_prepare", or "codex_ba_finish" (got "${mode || '(empty)'}").`,
   );
 }
 

@@ -1,0 +1,77 @@
+# Composite action: validate consumer repo has specify init + SDLC Codex skills + agent files.
+# Same file list as onboarding / AI Teammate / Scrum Master expectations.
+name: Check spec-kit prerequisites
+description: >-
+  Verifies .specify/init-options.json and required .github/agents + .agents/skills files exist.
+  Sets output speckit_ready (true|false). Optional fail_on_not_ready exits 1 when not ready.
+
+inputs:
+  fail_on_not_ready:
+    description: >-
+      If true, emit ::error:: annotations and exit with code 1 when anything is missing
+      (CI hard-fail). If false, only set speckit_ready=false and print hints (soft check).
+    required: false
+    default: 'false'
+  suggest_uvx_version:
+    description: >-
+      Used only when fail_on_not_ready is true: printed in the final ::error:: hint
+      (spec-kit specify init via uvx).
+    required: false
+    default: '0.5.0'
+
+outputs:
+  speckit_ready:
+    description: 'true when all prerequisite files exist; false otherwise'
+    value: ${{ steps.check.outputs.speckit_ready }}
+
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        FAIL_ON_NOT_READY: ${{ inputs.fail_on_not_ready }}
+        SUGGEST_UVX_VERSION: ${{ inputs.suggest_uvx_version }}
+      run: |
+        MISSING=0
+
+        if [ ! -f ".specify/init-options.json" ]; then
+          if [ "$FAIL_ON_NOT_READY" = "true" ]; then
+            echo "::error::Spec-Kit is not initialized in this repo (missing .specify/init-options.json)"
+          else
+            echo "❌ Missing: .specify/init-options.json"
+          fi
+          MISSING=1
+        fi
+
+        for f in \
+          .github/agents/sdlc.pipeline.agent.md \
+          .github/agents/code.review.agent.md \
+          .agents/skills/speckit-specify/SKILL.md \
+          .agents/skills/speckit-clarify/SKILL.md \
+          .agents/skills/speckit-plan/SKILL.md \
+          .agents/skills/speckit-tasks/SKILL.md \
+          .agents/skills/speckit-implement/SKILL.md; do
+          if [ ! -f "$f" ]; then
+            if [ "$FAIL_ON_NOT_READY" = "true" ]; then
+              echo "::error::Missing file: $f"
+            else
+              echo "❌ Missing: $f"
+            fi
+            MISSING=1
+          fi
+        done
+
+        if [ "$MISSING" -eq 1 ]; then
+          echo "speckit_ready=false" >> "$GITHUB_OUTPUT"
+          if [ "$FAIL_ON_NOT_READY" = "true" ]; then
+            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SUGGEST_UVX_VERSION} specify init --here --ai codex --script sh --force"
+            exit 1
+          fi
+          echo ""
+          echo "⚠️ Spec-kit / Codex prerequisites are missing in this repo."
+          echo "   Run SDLC onboarding (or specify init + copy .agents/skills and .github/agents from SDLCAgents)."
+        else
+          echo "speckit_ready=true" >> "$GITHUB_OUTPUT"
+          echo "✅ Spec-kit init, Codex skills, and SDLC agent files found."
+        fi

@@ -1,0 +1,101 @@
+/**
+ * Codex BA — finish (no LLM here): read Codex output file, apply BA outcome, resume pipeline.
+ *
+ * Mode: `codex_ba_finish`. The BA LLM runs in GitHub Actions `openai/codex-action@v1` (`ba_codex` job).
+ */
+import { readFileSync, existsSync } from 'node:fs';
+import { appendFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { interpretBaModelOutput } from '../business-analyst/analyze-ticket.js';
+import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
+import {
+  runPipelineFromRunner,
+  writeAiTeammatePipelineSummary,
+  type StepRecord,
+} from './ai-teammate-pipeline.js';
+import { applyBaOutcome } from './steps/ba-apply-outcome.js';
+import type { AiTeammateDeps, RunnerContext } from './runner-types.js';
+import {
+  STATE_VERSION,
+  assertConcurrencyKeyMatchesIssue,
+  codexBaPaths,
+  type BaCodexStateFile,
+} from './ai-teammate-codex-ba-shared.js';
+
+export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
+  const { issueKey, steps, runner } = await loadAiTeammatePipelineFromEnv();
+  assertConcurrencyKeyMatchesIssue(issueKey);
+  if (runner !== 'pipeline') {
+    throw new Error('codex_ba_finish requires params.runner "pipeline"');
+  }
+
+  const p = codexBaPaths(issueKey);
+
+  const skipReasonFromWorkflow = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
+  if (skipReasonFromWorkflow) {
+    console.log(`[codex-ba-finish] BA skipped (workflow) — ${skipReasonFromWorkflow}`);
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+      await appendFile(
+        summaryPath,
+        `\n## Codex BA skipped\n\n**${issueKey}** — ${skipReasonFromWorkflow}\n`,
+      );
+    }
+    return;
+  }
+
+  if (!existsSync(p.state)) {
+    throw new Error(`[codex-ba-finish] Missing state file: ${p.state}`);
+  }
+
+  const state = JSON.parse(readFileSync(p.state, 'utf8')) as BaCodexStateFile;
+  if (state.version !== STATE_VERSION) {
+    throw new Error(`[codex-ba-finish] Unsupported ba-codex-state.json version: ${state.version}`);
+  }
+
+  const outAbs = join(process.cwd(), state.codexRelativeOutputPath);
+  let raw = '';
+  try {
+    raw = readFileSync(outAbs, 'utf8');
+  } catch {
+    console.warn(`[codex-ba-finish] Missing or unreadable Codex output: ${outAbs}`);
+  }
+
+  const ctx: RunnerContext = {
+    ...state.runnerCtx,
+    baOutcome: undefined,
+  };
+
+  const baStep = state.baStep;
+  console.log('\n── BA: Interpreting Codex output ──');
+  const outcome = interpretBaModelOutput(raw, state.ticketCtx);
+  ctx.baOutcome = outcome;
+
+  const stepOutcome = await applyBaOutcome(ctx, baStep, deps, outcome);
+
+  const inlineRecord: StepRecord = {
+    runner: 'run_ba_inline',
+    status: stepOutcome.status,
+    reason: stepOutcome.status === 'stop' ? stepOutcome.reason : undefined,
+    durationMs: 0,
+  };
+
+  if (stepOutcome.status === 'stop') {
+    await writeAiTeammatePipelineSummary(
+      issueKey,
+      `${ctx.owner}/${ctx.repo}`,
+      [...state.partialRecords, inlineRecord],
+      ctx,
+    );
+    return;
+  }
+
+  await runPipelineFromRunner(
+    issueKey,
+    steps,
+    'start_developer_agent',
+    deps,
+    ctx,
+    [...state.partialRecords, inlineRecord],
+  );
+}

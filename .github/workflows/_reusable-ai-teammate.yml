@@ -2,7 +2,11 @@
 # Checks out the calling (consumer) repo for config, SDLCAgents for Node scripts.
 #
 # Three jobs (Codex BA — avoids GitHub Models rate limits on BA):
-#   1. prepare — Jira + spec-kit prep + GitHub placeholder; writes `spec-output/<KEY>/ba-codex-*`
+#   1. create_github_issue_and_prepare_ba — display name "Create GitHub issue and prepare BA":
+#        Jira skip-label check → (a) Jira + spec-kit through `create_github_issue` → `ba-github-issue-prep.json`;
+#        if `jira_ba_skip.outputs.skip_reason` non-empty: skip `codex_ba_prepare_prompt` + Codex (no skip file); else prepare prompt + state.
+#        No PR here — GitHub Issue only.
+#        Artifacts: full `spec-output/<KEY>/` bundle plus optional `*-ba-codex-state` when `ba-codex-state.json` exists.
 #   2. ba_codex — `./_reusable-codex-run.yml` writes `ba-codex-output.txt` (skipped when BA not needed)
 #   3. finish — parses Codex JSON, posts Jira / GitHub outcome, dispatches Developer Agent
 #
@@ -51,11 +55,13 @@ on:
         required: true
 
 jobs:
-  prepare:
+  create_github_issue_and_prepare_ba:
+    name: Create GitHub issue and prepare BA
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
       run_codex: ${{ steps.ba_flags.outputs.run_codex }}
+      skip_reason: ${{ steps.jira_ba_skip.outputs.skip_reason }}
     env:
       GITHUB_TOKEN: ${{ github.token }}
     permissions:
@@ -76,34 +82,7 @@ jobs:
 
       - name: Check spec-kit prerequisites
         id: speckit_check
-        run: |
-          MISSING=0
-          if [ ! -f ".specify/init-options.json" ]; then
-            echo "❌ Missing: .specify/init-options.json"
-            MISSING=1
-          fi
-          for f in \
-            .github/agents/sdlc.pipeline.agent.md \
-            .github/agents/code.review.agent.md \
-            .agents/skills/speckit-specify/SKILL.md \
-            .agents/skills/speckit-clarify/SKILL.md \
-            .agents/skills/speckit-plan/SKILL.md \
-            .agents/skills/speckit-tasks/SKILL.md \
-            .agents/skills/speckit-implement/SKILL.md; do
-            if [ ! -f "$f" ]; then
-              echo "❌ Missing: $f"
-              MISSING=1
-            fi
-          done
-          if [ "$MISSING" -eq 1 ]; then
-            echo "speckit_ready=false" >> "$GITHUB_OUTPUT"
-            echo ""
-            echo "⚠️ Spec-kit / Codex prerequisites are missing in this repo."
-            echo "   Run SDLC onboarding (or specify init + copy .agents/skills and .github/agents from SDLCAgents)."
-          else
-            echo "speckit_ready=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Spec-kit init, Codex skills, and SDLC agent files found."
-          fi
+        uses: ./.github/actions/check-speckit-prerequisites
 
       - uses: actions/setup-node@v4
         with:
@@ -115,10 +94,34 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
-      - name: Codex BA — prepare (Jira + issue + BA prompt)
+      - name: Jira — check BA skip label (run_ba_inline skipIfLabel)
+        id: jira_ba_skip
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/check-ba-skip-label-ci.ts
+        env:
+          CONFIG_FILE: ${{ inputs.config_file }}
+          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+      - name: AI Teammate — create GitHub issue from placeholder (Jira pipeline through create_github_issue; Issue only, not a PR)
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
         env:
-          AI_TEAMMATE_MODE: codex_ba_prepare
+          AI_TEAMMATE_MODE: codex_ba_create_github_issue
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+
+      - name: Codex BA — prepare BA prompt for Codex + post 'BA analysis started' GitHub issue comment (tsx, no LLM; writes ba-codex-prompt.md + ba-codex-state.json for finish)
+        if: steps.jira_ba_skip.outputs.skip_reason == ''
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
+        env:
+          AI_TEAMMATE_MODE: codex_ba_prepare_prompt
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -129,14 +132,15 @@ jobs:
 
       - name: Decide if Codex BA job should run
         id: ba_flags
+        env:
+          SKIP_REASON: ${{ steps.jira_ba_skip.outputs.skip_reason }}
         run: |
-          KEY="${{ inputs.concurrency_key }}"
-          if [ -f "spec-output/$KEY/ba-codex-skip.json" ]; then
+          if [ -n "${SKIP_REASON}" ]; then
             echo "run_codex=false" >> "$GITHUB_OUTPUT"
-            echo "BA skip file present — ba_codex job will be skipped."
+            echo "skip_reason set (${SKIP_REASON}) — ba_codex job will be skipped."
           else
             echo "run_codex=true" >> "$GITHUB_OUTPUT"
-            echo "BA prompt/state present — ba_codex job will run."
+            echo "skip_reason empty — ba_codex job will run."
           fi
 
       - name: Upload BA workspace (for Codex + finish)
@@ -145,6 +149,14 @@ jobs:
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
           path: spec-output/${{ inputs.concurrency_key }}/
           if-no-files-found: error
+
+      # Dedicated artifact so `ba-codex-state.json` is easy to find/download (also included in the bundle above).
+      - name: Upload BA checkpoint (ba-codex-state.json)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-teammate-ba-${{ inputs.concurrency_key }}-ba-codex-state
+          path: spec-output/${{ inputs.concurrency_key }}/ba-codex-state.json
+          if-no-files-found: ignore
 
       - name: Upload Spec Kit artifacts (partial)
         if: always()
@@ -155,8 +167,8 @@ jobs:
           if-no-files-found: ignore
 
   ba_codex:
-    needs: prepare
-    if: needs.prepare.outputs.run_codex == 'true'
+    needs: create_github_issue_and_prepare_ba
+    if: needs.create_github_issue_and_prepare_ba.outputs.run_codex == 'true'
     uses: ./.github/workflows/_reusable-codex-run.yml
     secrets: inherit
     with:
@@ -172,9 +184,9 @@ jobs:
       timeout_minutes: 30
 
   finish:
-    needs: [prepare, ba_codex]
+    needs: [create_github_issue_and_prepare_ba, ba_codex]
     # Run after Codex success, when Codex was skipped (BA not needed), or when Codex failed (finish posts incomplete BA from missing/invalid output).
-    if: always() && needs.prepare.result == 'success' && (needs.ba_codex.result == 'success' || needs.ba_codex.result == 'skipped' || needs.ba_codex.result == 'failure')
+    if: always() && needs.create_github_issue_and_prepare_ba.result == 'success' && (needs.ba_codex.result == 'success' || needs.ba_codex.result == 'skipped' || needs.ba_codex.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -205,7 +217,7 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
-      - name: Download BA workspace (prepare)
+      - name: Download BA workspace (issue + BA prep job)
         uses: actions/download-artifact@v4
         with:
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
@@ -218,11 +230,12 @@ jobs:
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-post-codex
           path: spec-output/${{ inputs.concurrency_key }}
 
-      - name: Codex BA — finish (parse + dispatch)
+      - name: Codex BA — finish (interpret Codex; on success — update GitHub issue body from BA + Jira template; dispatch developer agent)
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
         env:
           AI_TEAMMATE_MODE: codex_ba_finish
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          AI_TEAMMATE_SKIP_BA_REASON: ${{ needs.create_github_issue_and_prepare_ba.outputs.skip_reason }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}

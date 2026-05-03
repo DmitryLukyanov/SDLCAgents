@@ -3,6 +3,7 @@
  * Run:   npm run ai-teammate:debug
  *
  * Runs **Codex BA prepare** only (writes `spec-output/<KEY>/ba-codex-prompt.md` under the repo).
+ * `skipIfLabel` is evaluated in GitHub Actions only (`check-ba-skip-label-ci.ts`); this script does not skip BA by label.
  * Edit ISSUE_KEY or mock data below to experiment.
  */
 import { runCodexBaPrepare } from '../../src/workflows/ai-teammate/ai-teammate-codex-ba.js';

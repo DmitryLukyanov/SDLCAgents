@@ -1,0 +1,94 @@
+# AI Teammate — text sequence (GitHub Actions)
+
+High-level order when the consumer repo calls `_reusable-ai-teammate.yml`.  
+Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-teammate-codex-ba-finish.ts`, `ai-teammate-codex-ba-shared.ts` (barrel: `ai-teammate-codex-ba.ts`), `check-ba-skip-label-ci.ts`, `.github/workflows/_reusable-ai-teammate.yml`.
+
+```
+[Optional] Scrum Master (Jira rules)
+    |
+    | workflow_dispatch + encoded_config, concurrency_key, config_file
+    v
++-------------------------------------------------------------------+
+| Job: Create GitHub issue and prepare BA                           |
++-------------------------------------------------------------------+
+    |
+    |-- checkout consumer repo + SDLCAgents (scripts)
+    |-- check spec-kit / agent files exist
+    |-- npm ci (.sdlc-agents)
+    |
+    |-- TS: check-ba-skip-label-ci (Jira vs skipIfLabel) -> output skip_reason (empty = run BA; non-empty = skip)
+    |
+    |-- TS: codex_ba_create_github_issue
+    |       Jira validate / read context
+    |       spec-output/<KEY>/ issueContext.md + constitution.md (typical)
+    |       GitHub: create Issue (placeholder title/body, jira:KEY label)
+    |       write ba-github-issue-prep.json
+    |
+    |-- if skip_reason empty: TS codex_ba_prepare_prompt (else skipped — no skip file; reason stays in job output)
+    |       read prep JSON, Jira read for BA context
+    |       GitHub comment "BA analysis started" + ba-codex-prompt.md + ba-codex-state.json
+    |
+    |-- shell ba_flags: if skip_reason non-empty -> run_codex=false else true
+    |-- upload artifacts (spec-output/<KEY>/ …)
+    v
++-------------------------------------------------------------------+
+| Job: ba_codex  (only if run_codex == true)                        |
+|   openai/codex-action: read prompt -> ba-codex-output.txt         |
+|   upload post-codex artifact                                     |
++-------------------------------------------------------------------+
+    |
+    v
++-------------------------------------------------------------------+
+| Job: finish                                                        |
++-------------------------------------------------------------------+
+    |
+    |-- download prepare (+ post-codex if Codex ran)
+    |-- TS: codex_ba_finish (env AI_TEAMMATE_SKIP_BA_REASON = job output skip_reason)
+    |       if skip_reason non-empty -> summary, stop (no state / no Codex apply)
+    |       else read state + Codex output
+    |       interpret BA JSON
+    |       apply BA outcome (Jira comment/transition/labels; GitHub on incomplete)
+    |       if BA complete -> pipeline: start_developer_agent
+    |             -> update GitHub issue body (BA + Jira template)
+    |             -> workflow_dispatch developer-agent.yml (step specify)
+    |       if incomplete -> e.g. Jira Blocked, close GitHub issue not_planned
+    v
+Developer Agent (consumer)  -->  branch, draft PR, spec-kit steps, Copilot/Codex per config
+    |
+    v
+PR merge flow (consumer pr-merged / Jira Done)  [optional, separate workflow]
+```
+
+## Actors (mental model)
+
+| Actor | Role in this flow |
+|-------|-------------------|
+| **Jira** | Read/write in prepare and finish (per pipeline config). |
+| **GitHub Issues** | Placeholder issue → comment → body update after BA; may close on incomplete BA. |
+| **GitHub Actions + tsx** | `create_github_issue_and_prepare_ba` and `finish` jobs run the TypeScript agent. |
+| **Codex** | Only in `ba_codex` (`openai/codex-action`). |
+| **Developer agent + Copilot** | After successful finish / `start_developer_agent` dispatches consumer `developer-agent.yml`. |
+
+For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
+
+---
+
+## Codex BA files under `spec-output/<JIRA_KEY>/` (how each is used)
+
+These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `spec-output/<KEY>/`, then the **prepare** job uploads that folder as artifact **`ai-teammate-ba-<KEY>-prepare`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue holds the human-facing placeholder, comments, and (after BA) the filled body from `start_developer_agent`.
+
+**Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt`, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so **`codex_ba_finish`** exits early without `ba-codex-state.json`.
+
+| File / output | Written by | Read by | Purpose |
+|---------------|------------|---------|---------|
+| **`skip_reason`** (job output) | `jira_ba_skip` step | `ba_flags`, `if:` on `codex_ba_prepare_prompt`, finish env `AI_TEAMMATE_SKIP_BA_REASON` | Single string: empty = BA allowed; non-empty = skip BA/Codex/finish BA apply (reason text for logs / step summary). |
+| **`ba-github-issue-prep.json`** | `codex_ba_create_github_issue` (prepare job) | `codex_ba_prepare_prompt` (prepare job), **only if** `skip_reason` is empty | Checkpoint after pipeline through `create_github_issue`: runner context + partial step records so the **second** `tsx` step does not re-run Jira/issue creation. |
+| **`ba-codex-prompt.md`** | `codex_ba_prepare_prompt` | `ba_codex` job (`openai/codex-action` **prompt-file** input) | Full text prompt for the **BA LLM** (Codex). |
+| **`ba-codex-state.json`** | `codex_ba_prepare_prompt` | `codex_ba_finish` (finish job) | Checkpoint for **after Codex**: Jira ticket snapshot, `run_ba_inline` config, runner context, partial pipeline records, and expected **`ba-codex-output.txt`** path so finish can apply BA and call `start_developer_agent`. |
+| **`ba-codex-output.txt`** | `ba_codex` (Codex action **output-file**) | `codex_ba_finish` (after download **post-codex** artifact overlay) | Raw Codex stdout / model reply; finish **parses** it (no second LLM call in TS). |
+
+**Artifact chain (short):**
+
+1. **Prepare** uploads `spec-output/<KEY>/` (prep JSON; plus prompt + state **when** `skip_reason` was empty).
+2. **`ba_codex`** downloads that artifact, runs Codex, writes **`ba-codex-output.txt`**, uploads **`…-post-codex`** artifact (same folder path + output file).
+3. **Finish** downloads **prepare** artifact again, then **post-codex** overlay when Codex succeeded, passes **`skip_reason`** into **`codex_ba_finish`**; TS reads **state** + **output** when BA ran, or exits early when **`AI_TEAMMATE_SKIP_BA_REASON`** is set.
