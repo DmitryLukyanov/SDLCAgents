@@ -1,7 +1,7 @@
 /**
  * Scrum Master orchestration — dependency-injected for tests / local debug.
  */
-import { writeFile } from 'node:fs/promises';
+import { appendFile } from 'node:fs/promises';
 import type { JiraSearchResponse } from '../../lib/jira/jira-types.js';
 import {
   getPostReadTargetStatus,
@@ -17,10 +17,9 @@ export interface ScrumMasterContext {
   repo: string;
   ref: string;
   globalLimit: number;
-  smRulesFile: string;
-  /** If set, rules file is skipped (legacy mode). */
-  legacyJql: string | undefined;
-  legacyConfigFile: string;
+  /** Path to `scrum-master.config` JSON (env `RULES_FILE`). */
+  rulesFile: string;
+  /** Default workflow filename when a rule omits `workflowFile` (env `WORKFLOW_FILE`). */
   defaultWorkflowFile: string;
 }
 
@@ -109,13 +108,14 @@ async function printSummaryTable(records: DispatchRecord[]): Promise<void> {
   lines.push('');
   const md = lines.join('\n');
 
-  // Write to file for workflow to pick up via $GITHUB_STEP_SUMMARY
-  const summaryPath = process.env.SM_SUMMARY_FILE || 'sm-summary.md';
-  try {
-    await writeFile(summaryPath, md, 'utf8');
-    console.log(`\nMarkdown summary written to ${summaryPath}`);
-  } catch (e) {
-    console.warn('Could not write markdown summary file (non-fatal):', e);
+  // GitHub Actions exposes GITHUB_STEP_SUMMARY as a path — append markdown directly (no temp copy step).
+  const stepSummary = process.env.GITHUB_STEP_SUMMARY?.trim();
+  if (stepSummary) {
+    try {
+      await appendFile(stepSummary, `${md}\n`, 'utf8');
+    } catch (e) {
+      console.warn('Could not append to GITHUB_STEP_SUMMARY (non-fatal):', e);
+    }
   }
 }
 
@@ -214,29 +214,15 @@ async function processRule(
   return dispatched;
 }
 
-/** Loads config/workflows/scrum-master/scrum-master.config and runs each rule. If legacyJql is set, treats it as a single synthetic rule. */
-export async function runScrumMasterWithRulesOrSingleJql(
-  ctx: ScrumMasterContext,
-  deps: ScrumMasterDeps,
-): Promise<void> {
+/**
+ * Loads rules from `scrum-master.config` (JQL per rule) and dispatches AI Teammate per matched issue.
+ * JQL is defined only inside that file — not via env `JQL` or workflow inputs.
+ */
+export async function runScrumMaster(ctx: ScrumMasterContext, deps: ScrumMasterDeps): Promise<void> {
   const records: DispatchRecord[] = [];
 
-  if (ctx.legacyJql) {
-    const syntheticRule: SmRule = {
-      description: 'legacy JQL',
-      jql: ctx.legacyJql,
-      configFile: ctx.legacyConfigFile,
-      workflowFile: ctx.defaultWorkflowFile,
-      workflowRef: ctx.ref,
-      limit: ctx.globalLimit,
-    };
-    await processRule(ctx, deps, syntheticRule, 0, records);
-    await printSummaryTable(records);
-    return;
-  }
-
-  const cfg = await loadSmConfig(ctx.smRulesFile);
-  console.log(`SM rules file: ${ctx.smRulesFile} (${cfg.rules.length} rule(s))`);
+  const cfg = await loadSmConfig(ctx.rulesFile);
+  console.log(`Rules file: ${ctx.rulesFile} (${cfg.rules.length} rule(s))`);
   console.log(
     `Global limit: ${ctx.globalLimit} · taken status: ${getRequiredIssueStatus()} → ${getPostReadTargetStatus()}`,
   );

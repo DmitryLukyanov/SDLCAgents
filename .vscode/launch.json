@@ -10,6 +10,9 @@
       "runtimeArgs": ["--import", "tsx"],
       "args": ["${workspaceFolder}/src/workflows/scrum-master/scrum-master.ts"],
       "envFile": "${workspaceFolder}/.env.local",
+      "env": {
+        "RULES_FILE": "config/workflows/scrum-master/scrum-master.config"
+      },
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"]
     },

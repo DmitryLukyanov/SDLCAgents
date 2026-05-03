@@ -4,10 +4,7 @@
  * Debug: set breakpoints in src/workflows/scrum-master/scrum-master-core.ts or here.
  */
 import type { JiraSearchResponse } from '../../src/lib/jira/jira-types.js';
-import {
-  runScrumMasterWithRulesOrSingleJql,
-  type ScrumMasterDeps,
-} from '../../src/workflows/scrum-master/scrum-master-core.js';
+import { runScrumMaster, type ScrumMasterDeps } from '../../src/workflows/scrum-master/scrum-master-core.js';
 
 process.env.REQUIRED_JIRA_STATUS ??= 'To Do';
 process.env.POST_READ_STATUS ??= 'In Progress';
@@ -55,21 +52,13 @@ const ctx = {
   repo: 'debug-repo',
   ref: 'main',
   globalLimit: 10,
-  smRulesFile: 'tests/scrum-agent/fixtures/sm-debug.json',
-  legacyJql: undefined as string | undefined,
-  legacyConfigFile: 'config/workflows/ai-teammate/ai-teammate.config',
+  rulesFile: process.env.RULES_FILE?.trim() || 'tests/scrum-agent/fixtures/sm-debug.json',
   defaultWorkflowFile: 'ai-teammate.yml',
 };
 
 async function main(): Promise<void> {
-  const legacy = process.env.SCRUM_LOCAL_LEGACY === '1' || process.env.SCRUM_LOCAL_LEGACY === 'true';
-  if (legacy) {
-    ctx.legacyJql = 'project = DEBUG AND status = "To Do"';
-    ctx.smRulesFile = 'tests/scrum-agent/fixtures/sm-debug.json';
-  }
-
   console.log('=== Scrum Master local test (mocks) ===\n');
-  await runScrumMasterWithRulesOrSingleJql(ctx, mockDeps);
+  await runScrumMaster(ctx, mockDeps);
 
   console.log('\n--- Summary ---');
   console.log(`dispatchWorkflow calls: ${dispatchLog.length}`);

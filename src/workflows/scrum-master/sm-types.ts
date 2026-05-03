@@ -1,4 +1,4 @@
-/** Scrum Master rules: JQL + agent config path + optional labels. */
+/** One Scrum Master query: JQL + paths passed through to workflow_dispatch. */
 
 export interface SmRule {
   description?: string;

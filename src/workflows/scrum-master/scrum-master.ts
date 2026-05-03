@@ -1,11 +1,11 @@
 /**
- * Scrum Master CLI: reads env, wires real Jira + Octokit, calls runScrumMasterWithRulesOrSingleJql().
+ * Scrum Master CLI: reads env, wires real Jira + Octokit, calls runScrumMaster().
  */
 import { Octokit } from '@octokit/rest';
 import { addIssueComment, addIssueLabel, searchIssues, transitionIssueToStatusName, validateJiraAuth } from '../../lib/jira/jira-client.js';
 import { getPostReadTargetStatus } from '../../lib/jira-status.js';
 import { messages } from '../../lib/messages.js';
-import { runScrumMasterWithRulesOrSingleJql } from './scrum-master-core.js';
+import { runScrumMaster } from './scrum-master-core.js';
 
 const [owner, repo] = (process.env.GITHUB_REPOSITORY || '').split('/');
 if (!owner || !repo) {
@@ -19,10 +19,8 @@ if (!token) {
 
 const ref = process.env.GITHUB_REF_NAME || 'main';
 const globalLimit = Math.min(50, Math.max(1, parseInt(process.env.GLOBAL_LIMIT || '10', 10) || 10));
-const smRulesFile = process.env.SM_RULES_FILE?.trim() || 'config/workflows/scrum-master/scrum-master.config';
-const legacyJql = process.env.JQL?.trim() || undefined;
-const legacyConfigFile =
-  process.env.AGENT_CONFIG_FILE?.trim() || 'config/workflows/ai-teammate/ai-teammate.config';
+const rulesFile =
+  process.env.RULES_FILE?.trim() || 'config/workflows/scrum-master/scrum-master.config';
 const defaultWorkflowFile = process.env.WORKFLOW_FILE?.trim() || 'ai-teammate.yml';
 
 const octokit = new Octokit({ auth: token });
@@ -32,9 +30,7 @@ const ctx = {
   repo,
   ref,
   globalLimit,
-  smRulesFile,
-  legacyJql,
-  legacyConfigFile,
+  rulesFile,
   defaultWorkflowFile,
 };
 
@@ -129,7 +125,7 @@ const deps = {
 };
 
 validateJiraAuth()
-  .then(() => runScrumMasterWithRulesOrSingleJql(ctx, deps))
+  .then(() => runScrumMaster(ctx, deps))
   .catch((err: unknown) => {
   console.error(err);
   process.exit(1);

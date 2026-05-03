@@ -7,7 +7,7 @@ export async function loadSmConfig(filePath: string): Promise<SmConfig> {
   const raw = await readFile(abs, 'utf8');
   const data = JSON.parse(raw) as SmConfig;
   if (!data.rules || !Array.isArray(data.rules)) {
-    throw new Error(`SM config must contain a "rules" array: ${abs}`);
+    throw new Error(`Scrum Master config must contain a "rules" array: ${abs}`);
   }
   return data;
 }

@@ -6,19 +6,14 @@
 #     call:
 #       uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-scrum-master.yml@master
 #       with:
-#         jira_project: MY-PROJECT
+#         jira_project: MY-PROJECT   # optional: replaces {jiraProject} in rule JQL in scrum-master.config
 #       secrets: inherit
+# JQL and workflow paths are read only from config/workflows/scrum-master/scrum-master.config (RULES_FILE).
 name: "[Reusable] Scrum Master (Jira)"
 
 on:
   workflow_call:
     inputs:
-      jql:
-        description: >-
-          Optional. Legacy mode — single JQL. If empty: uses config/workflows/scrum-master/scrum-master.config rules.
-        required: false
-        type: string
-        default: ''
       taken_status:
         description: "Jira status tickets must be in"
         required: false
@@ -120,28 +115,18 @@ jobs:
           fail_on_not_ready: 'true'
 
       # ── Step 5: Run Scrum Master (CWD = consumer workspace root) ────────
-      # Scripts run from .sdlc-agents/ but process.cwd() = workspace root,
-      # so config/workflows/scrum-master/scrum-master.config and config/spec-kit/*.json resolve to consumer files.
+      # Scripts run from .sdlc-agents/ but process.cwd() = workspace root.
+      # JQL and agent paths come only from config/workflows/scrum-master/scrum-master.config (RULES_FILE).
       - name: Run Scrum Master
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/scrum-master/scrum-master.ts
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JQL: ${{ inputs.jql }}
-          AGENT_CONFIG_FILE: config/workflows/ai-teammate/ai-teammate.config
-          SM_RULES_FILE: config/workflows/scrum-master/scrum-master.config
+          RULES_FILE: config/workflows/scrum-master/scrum-master.config
           GLOBAL_LIMIT: ${{ inputs.limit }}
           REQUIRED_JIRA_STATUS: ${{ inputs.taken_status }}
           POST_READ_STATUS: ${{ inputs.status_to_move_to }}
           JIRA_PROJECT: ${{ inputs.jira_project }}
           TICKET_CONTEXT_DEPTH: ${{ inputs.ticket_context_depth }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
-          SM_SUMMARY_FILE: ${{ runner.temp }}/sm-summary.md
-
-      - name: Write job summary
-        if: always()
-        run: |
-          if [ -f "${{ runner.temp }}/sm-summary.md" ]; then
-            cat "${{ runner.temp }}/sm-summary.md" >> "$GITHUB_STEP_SUMMARY"
-          fi

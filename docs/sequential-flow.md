@@ -15,19 +15,21 @@ Legend:
   ..>       optional / parallel / triggered
 
 --------------------------------------------------------------------------------
-SCRUM MASTER — Rules Mode (scrum-master.config present, env JQL empty)
+SCRUM MASTER — rules from scrum-master.config only (JQL per rule in JSON)
 --------------------------------------------------------------------------------
 
   Human triggers [GH] .github/workflows/scrum-master.yml
     |
     v
-  npm run scrum-master
-    --> [TS:src/workflows/scrum-master/scrum-master-core.ts] runScrumMasterWithRulesOrSingleJql()
+  [GH] _reusable-scrum-master.yml → tsx .../scrum-master.ts
+    env RULES_FILE → path to JSON (default: config/workflows/scrum-master/scrum-master.config)
+    |
+    v
+  [TS:src/workflows/scrum-master/scrum-master-core.ts] runScrumMaster()
           |
-          |  env JQL empty → load rules file
           v
-          loadSmConfig()          [TS:src/workflows/scrum-master/load-sm-config.ts]
-          interpolateJql()        (per rule: {jiraProject} from env)
+          loadSmConfig(ctx.rulesFile)   [TS:src/workflows/scrum-master/load-sm-config.ts]
+          interpolateJql()              (per rule: {jiraProject} from env JIRA_PROJECT)
           |
           v
   FOR each rule in SmConfig.rules:
@@ -45,22 +47,13 @@ SCRUM MASTER — Rules Mode (scrum-master.config present, env JQL empty)
                   ticket_context_depth (default '1' via env TICKET_CONTEXT_DEPTH)
             |
             Octokit.rest.actions.createWorkflowDispatch({
-              workflow_id: rule.workflowFile,  ← "ai-teammate.yml" (scrum-master.config)
+              workflow_id: rule.workflowFile,  ← e.g. "ai-teammate.yml" from rule
+              ref: rule.workflowRef || ctx.ref (GITHUB_REF_NAME),
               inputs: { concurrency_key, config_file, encoded_config }
             })
             |
             transitionIssueToPostRead(key)    [jira-client.ts]
             addIssueLabel(key, rule.addLabel) [jira-client.ts]
-
---------------------------------------------------------------------------------
-SCRUM MASTER — Single-JQL Mode (env JQL non-empty, skips scrum-master.config)
---------------------------------------------------------------------------------
-
-  [TS:src/workflows/scrum-master/scrum-master-core.ts] runScrumMasterWithSingleJqlOnly()
-    jqlRequireStatus(legacyJql)     [lib/jira-status.ts]
-    searchIssues(...)               [jira/jira-client.ts]
-    buildEncodedConfig(key)         [scrum-master/build-encoded-config.ts]
-    Octokit...createWorkflowDispatch({ workflow_id: ctx.defaultWorkflowFile, ... })
 
 --------------------------------------------------------------------------------
 AI TEAMMATE — one run per dispatched issue
@@ -143,8 +136,8 @@ AI TEAMMATE — one run per dispatched issue
 CONFIG / SECRETS (reference)
 --------------------------------------------------------------------------------
 
-  SM rules file:      config/workflows/scrum-master/scrum-master.config  (SmRule[], SmConfig)
-                      workflowFile: "ai-teammate.yml"
+  SM rules (JSON):    env RULES_FILE or default config/workflows/scrum-master/scrum-master.config
+                      (SmRule[] per rule: jql, configFile, workflowFile, workflowRef, …)
   Agent JSON:         config/workflows/ai-teammate/ai-teammate.config
   BA (inline):        src/workflows/business-analyst/analyze-ticket.ts → GitHub Models (no separate BA workflow)
   Coding agent def:   .github/agents/sdlc.pipeline.agent.md  (SDLCClient)
