@@ -44,7 +44,7 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
     |       else read state + Codex output
     |       interpret BA JSON
     |       apply BA outcome (Jira comment/transition/labels; GitHub on incomplete)
-    |       if BA complete -> pipeline: start_developer_agent
+    |       if BA complete -> pipeline continues
     |             -> update GitHub issue body (BA + Jira template)
     |             -> workflow_dispatch developer-agent.yml (step specify)
     |       if incomplete -> e.g. Jira Blocked, close GitHub issue not_planned
@@ -63,7 +63,7 @@ PR merge flow (consumer pr-merged / Jira Done)  [optional, separate workflow]
 | **GitHub Issues** | Placeholder issue → comment → body update after BA; may close on incomplete BA. |
 | **GitHub Actions + tsx** | `create_github_issue_and_prepare_ba` and `finish` jobs run the TypeScript agent. |
 | **Codex** | Only in `ba_codex` (`openai/codex-action`). |
-| **Developer agent + Copilot** | After successful finish / `start_developer_agent` dispatches consumer `developer-agent.yml`. |
+| **Developer agent + Copilot** | Optional terminal `async_call` can dispatch consumer `developer-agent.yml`. |
 
 For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
 
@@ -71,7 +71,7 @@ For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
 
 ## Codex BA files under `async-invocation-handoff/<JIRA_KEY>/` (how each is used)
 
-These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `async-invocation-handoff/<KEY>/`, then the **prepare** job uploads that folder as artifact **`caller-handoff_input`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue description holds the Jira snapshot (from `create_github_issue`) and, after BA, the Copilot-facing body from `start_developer_agent`; BA progress is in **comments**. (Developer-agent may still use a separate `spec-output/<KEY>/issueContext.md` for spec-kit merge — that is unrelated to this async handoff tree.)
+These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `async-invocation-handoff/<KEY>/`, then the **prepare** job uploads that folder as artifact **`caller-handoff_input`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue description holds the Jira snapshot (from `create_github_issue`); BA progress is in **comments**. (Developer-agent may still use a separate `spec-output/<KEY>/issueContext.md` for spec-kit merge — that is unrelated to this async handoff tree.)
 
 **Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`, invoked from `check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip BA prepare, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so the resume run exits early without `ba-codex-state.json`.
 

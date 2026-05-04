@@ -163,7 +163,7 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
   await runPipelineFromStepId(
     r.issueKey,
     r.steps,
-    findFirstStepIdByRunner(r.steps, 'start_developer_agent'),
+    findFirstStepIdByRunner(r.steps, 'developer_agent_async'),
     deps,
     r.ctx,
     [...r.priorForSummary, r.inlineRecord],

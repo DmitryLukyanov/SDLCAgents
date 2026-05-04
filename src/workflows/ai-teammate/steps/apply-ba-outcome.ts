@@ -6,8 +6,7 @@
  * to recover githubIssueNumber and ticketCtx, then reads the Codex output artifact
  * and applies the BA result.
  *
- * Mutates ctx.githubIssueNumber and ctx.baOutcome so subsequent steps (e.g. start_developer_agent)
- * see the correct values.
+ * Mutates ctx.githubIssueNumber and ctx.baOutcome so subsequent steps see the correct values.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

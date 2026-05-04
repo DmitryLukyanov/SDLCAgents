@@ -7,10 +7,9 @@
  * Supported step runners:
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
  *   create_github_issue          — creates a GitHub issue (Jira snapshot body); stores issue number in context
- *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow (omit or set `"enabled": false` to skip dispatch only)
+ *   (developer agent dispatch is now typically done via a terminal async_call step)
  *
- * Jira context snapshot: `create_github_issue` appends a marked block to the issue body; `start_developer_agent`
- * read it back via `fetchJiraContextFromGithubIssue`.
+ * Jira context snapshot: `create_github_issue` appends a marked block to the issue body.
  *
  * Any step with `async_call` in config is handled generically: on the first run, the pipeline executes the step runner
  * to prepare artifacts, then the reusable workflow uploads artifacts and dispatches the `async_call` child.
@@ -38,7 +37,6 @@ import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
-import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
 import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
@@ -69,14 +67,10 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runApplyBaOutcome(ctx, step, deps);
     }
 
-    case 'start_developer_agent': {
-      return runStartDeveloperAgent(ctx, step as Parameters<typeof runStartDeveloperAgent>[1], deps);
-    }
-
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, apply_ba_outcome, start_developer_agent.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, apply_ba_outcome.`,
       );
   }
 }
