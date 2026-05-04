@@ -2,6 +2,10 @@
 # optional inline prompt materialization, `openai/codex-action@v1`, optional
 # commit+push of workspace changes, then upload artifact(s).
 #
+# After Codex, two extra single-file artifacts are always uploaded when the prompt was resolved:
+#   • codex_input_<upload_artifact_name> — the prompt file passed to codex-action
+#   • codex_output_<upload_artifact_name> — Codex output file (skipped if missing, e.g. hard failure before write)
+#
 # Optional `checkout_ref` + secret `COPILOT_PAT`: checkout a feature branch (e.g. workflow_dispatch
 # where GITHUB_REF is not the branch Codex should run on).
 #
@@ -210,6 +214,22 @@ jobs:
           model: ${{ steps.pick_model.outputs.codex_model }}
           output-file: ${{ inputs.output_file }}
           allow-bots: true
+
+      - name: Upload Codex input prompt artifact
+        if: always() && steps.resolve_prompt.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex_input_${{ inputs.upload_artifact_name }}
+          path: ${{ steps.resolve_prompt.outputs.prompt_path }}
+          if-no-files-found: error
+
+      - name: Upload Codex output artifact
+        if: always() && steps.resolve_prompt.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex_output_${{ inputs.upload_artifact_name }}
+          path: ${{ inputs.output_file }}
+          if-no-files-found: ignore
 
       - name: Commit and push workspace changes after Codex
         if: success() && inputs.commit_workspace_after_codex == true
