@@ -11,6 +11,11 @@
 # Usage in consumer repo:
 #   jobs:
 #     call:
+#       permissions:
+#         actions: write   # required — this reusable job uses actions: write (artifacts)
+#         contents: write
+#         issues: write
+#         pull-requests: write
 #       uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-ai-teammate.yml@master
 #       with:
 #         concurrency_key: ${{ inputs.concurrency_key }}

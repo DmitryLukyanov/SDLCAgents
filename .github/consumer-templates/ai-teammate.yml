@@ -30,6 +30,7 @@ on:
 jobs:
   call:
     permissions:
+      actions: write # required by _reusable-ai-teammate (artifact upload / nested workflow token)
       contents: write
       pull-requests: write
       issues: write
