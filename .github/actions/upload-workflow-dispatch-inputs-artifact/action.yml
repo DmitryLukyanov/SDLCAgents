@@ -1,0 +1,102 @@
+# Writes workflow_dispatch_inputs.json (expanded JSON) and uploads it as an artifact.
+# - config_file: reads the file from the workspace and stores { path, contents } (JSON) or { path, raw } if not JSON.
+# - caller_config: URL-decoded and stored as a nested JSON object (not a string).
+name: Upload workflow_dispatch inputs artifact
+description: >-
+  Snapshots workflow_dispatch inputs as readable JSON: embeds parsed agent config from
+  config_file path and decodes caller_config from URL-encoded JSON into nested objects.
+
+inputs:
+  concurrency_key:
+    description: Jira issue key or other concurrency grouping token
+    required: true
+  config_file:
+    description: Path to agent config in the repo (relative to workspace root)
+    required: true
+  caller_config:
+    description: URL-encoded JSON payload (decodeURIComponent + JSON.parse)
+    required: true
+  artifact_name:
+    description: Artifact name for actions/upload-artifact
+    required: true
+  checkout_repository:
+    description: >-
+      When true, runs actions/checkout@v4 before reading config_file. Set false if the job
+      already checked out the consumer repo.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout repository (for config_file)
+      if: ${{ inputs.checkout_repository == 'true' }}
+      uses: actions/checkout@v4
+
+    - name: Write workflow_dispatch inputs JSON
+      shell: bash
+      env:
+        CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+        CONFIG_FILE: ${{ inputs.config_file }}
+        CALLER_CONFIG: ${{ inputs.caller_config }}
+      run: |
+        set -euo pipefail
+        mkdir -p workflow-dispatch-inputs-artifact
+        node <<'NODE'
+        const fs = require('fs');
+
+        const concurrencyKey = (process.env.CONCURRENCY_KEY || '').trim();
+        const configPath = (process.env.CONFIG_FILE || '').trim();
+        const callerRaw = (process.env.CALLER_CONFIG || '').trim();
+
+        if (!concurrencyKey) {
+          console.error('::error::concurrency_key is empty');
+          process.exit(1);
+        }
+        if (!configPath) {
+          console.error('::error::config_file is empty');
+          process.exit(1);
+        }
+        if (!callerRaw) {
+          console.error('::error::caller_config is empty');
+          process.exit(1);
+        }
+
+        let callerDecoded;
+        try {
+          callerDecoded = JSON.parse(decodeURIComponent(callerRaw));
+        } catch (e) {
+          console.error('::error::caller_config must be URL-encoded JSON: ' + (e && e.message ? e.message : e));
+          process.exit(1);
+        }
+
+        const configFileOut = { path: configPath };
+        if (!fs.existsSync(configPath)) {
+          console.error(`::error::config_file not found: ${configPath}`);
+          process.exit(1);
+        }
+        const rawConfig = fs.readFileSync(configPath, 'utf8');
+        try {
+          configFileOut.contents = JSON.parse(rawConfig);
+        } catch {
+          configFileOut.raw = rawConfig;
+        }
+
+        const out = {
+          concurrency_key: concurrencyKey,
+          config_file: configFileOut,
+          caller_config: callerDecoded,
+        };
+
+        fs.writeFileSync(
+          'workflow-dispatch-inputs-artifact/workflow_dispatch_inputs.json',
+          JSON.stringify(out, null, 2) + '\n',
+        );
+        NODE
+
+    - name: Upload workflow_dispatch inputs
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: workflow-dispatch-inputs-artifact/
+        if-no-files-found: error
