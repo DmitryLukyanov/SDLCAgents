@@ -12,8 +12,8 @@ import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import {
   runPipelineFromRunner,
   writeAiTeammatePipelineSummary,
-  type StepRecord,
 } from './ai-teammate-pipeline.js';
+import type { StepRecord } from './runner-types.js';
 import { applyCodexBaOutcomeToJiraAndGithub } from './steps/apply-codex-ba-outcome-to-jira-github.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
 import {

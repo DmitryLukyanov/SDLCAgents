@@ -8,6 +8,52 @@ import type { JiraIssue } from '../../lib/jira/jira-types.js';
 import type { RelatedIssueSummary } from '../../lib/jira/jira-related.js';
 import type { BaOutcome } from '../business-analyst/ba-types.js';
 
+/** Record of a single pipeline step execution (persisted in ba-codex-state.json for resume). */
+export interface StepRecord {
+  runner: string;
+  status: 'continue' | 'stop';
+  reason?: string;
+  durationMs: number;
+  /** Set on resume: whether the step ran in this invocation or was replayed from a checkpoint. */
+  source?: 'prepare_checkpoint' | 'this_invocation';
+}
+
+/**
+ * What an async step runner's finish() returns to the pipeline.
+ * The pipeline fills in `durationMs` and `source`; the runner supplies `runner`, `status`, `reason`.
+ */
+export interface AsyncStepFinishResult {
+  /** Updated context (the runner may populate githubIssueNumber / baOutcome from checkpoint). */
+  ctx: RunnerContext;
+  inlineRecord: Pick<StepRecord, 'runner' | 'status' | 'reason'>;
+  stepOutcome: StepOutcome;
+}
+
+/**
+ * Interface every async-capable step runner must implement.
+ * Register implementations in `async-step-registry.ts` keyed by runner name.
+ *
+ *   prepare — called on the FIRST run when the pipeline encounters this step.
+ *             Must write all handoff artifacts before the workflow uploads them.
+ *   finish  — called on the RESUME run after the async child completes.
+ *             Reads artifacts from disk and applies the outcome.
+ */
+export interface AsyncStepRunnerDef {
+  prepare(
+    issueKey: string,
+    ctx: RunnerContext,
+    step: PipelineStep,
+    deps: AiTeammateDeps,
+    records: StepRecord[],
+  ): Promise<void>;
+  finish(
+    issueKey: string,
+    ctx: RunnerContext,
+    step: PipelineStep,
+    deps: AiTeammateDeps,
+  ): Promise<AsyncStepFinishResult>;
+}
+
 /** Used by `assign_copilot` to set issue body, assignees, and Copilot agent instructions. */
 export interface GithubCopilotIssueUpdate {
   body: string;
