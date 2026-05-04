@@ -97,7 +97,7 @@ export async function loadAiTeammatePipelineFromEnv(): Promise<LoadedAiTeammateP
     issueKey,
     steps: (steps ?? []) as PipelineStep[],
     agentLabelParams,
-    ctxInit: { owner, repo, ref, callerConfig: callerConfigEncoded, configFile: abs },
+    ctxInit: { owner, repo, ref, callerConfig: callerConfigEncoded, configFile: abs, agentLabelParams },
     configFileAbs: abs,
     runner,
   };

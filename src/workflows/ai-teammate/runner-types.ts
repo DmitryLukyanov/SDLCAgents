@@ -18,42 +18,6 @@ export interface StepRecord {
   source?: 'prepare_checkpoint' | 'this_invocation';
 }
 
-/**
- * What an async step runner's finish() returns to the pipeline.
- * The pipeline fills in `durationMs` and `source`; the runner supplies `runner`, `status`, `reason`.
- */
-export interface AsyncStepFinishResult {
-  /** Updated context (the runner may populate githubIssueNumber / baOutcome from checkpoint). */
-  ctx: RunnerContext;
-  inlineRecord: Pick<StepRecord, 'runner' | 'status' | 'reason'>;
-  stepOutcome: StepOutcome;
-}
-
-/**
- * Interface every async-capable step runner must implement.
- * Register implementations in `async-step-registry.ts` keyed by runner name.
- *
- *   prepare — called on the FIRST run when the pipeline encounters this step.
- *             Must write all handoff artifacts before the workflow uploads them.
- *   finish  — called on the RESUME run after the async child completes.
- *             Reads artifacts from disk and applies the outcome.
- */
-export interface AsyncStepRunnerDef {
-  prepare(
-    issueKey: string,
-    ctx: RunnerContext,
-    step: PipelineStep,
-    deps: AiTeammateDeps,
-    records: StepRecord[],
-  ): Promise<void>;
-  finish(
-    issueKey: string,
-    ctx: RunnerContext,
-    step: PipelineStep,
-    deps: AiTeammateDeps,
-  ): Promise<AsyncStepFinishResult>;
-}
-
 /** Used by `assign_copilot` to set issue body, assignees, and Copilot agent instructions. */
 export interface GithubCopilotIssueUpdate {
   body: string;
@@ -100,6 +64,8 @@ export interface RunnerContext {
   /** URL-encoded JSON from workflow `caller_config` / env `CALLER_CONFIG`. */
   callerConfig: string;
   configFile: string;
+  /** From agent config `params.skipIfLabel` / `params.addLabel`. */
+  agentLabelParams?: AgentLabelParams;
   /** Written by create_github_issue; read by subsequent steps. */
   githubIssueNumber?: number;
   /** Set after BA (Codex) analysis; read by `start_developer_agent`. */
