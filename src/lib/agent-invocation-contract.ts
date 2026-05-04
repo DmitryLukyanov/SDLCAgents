@@ -394,3 +394,16 @@ export function assertBaCodexPrepareContract(contract: AgentInvocationContract):
     );
   }
 }
+
+/**
+ * For non-BA async steps: validate the step declares a `contract` and return it.
+ *
+ * The contract keys are intentionally **open** — consumers decide which keys
+ * they require at runtime.
+ */
+export function assertGenericAsyncStepContract(step: { contract?: unknown; runner?: string }): AgentInvocationContract {
+  if (!step.contract) {
+    throw new Error(`[${step.runner ?? 'async_step'}] Missing required step.contract for async handoff`);
+  }
+  return step.contract as AgentInvocationContract;
+}

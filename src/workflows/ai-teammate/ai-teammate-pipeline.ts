@@ -40,6 +40,7 @@ import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
+import { prepareStartDeveloperAgentArtifacts } from './steps/start-developer-agent-async.js';
 import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
@@ -64,6 +65,15 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return { status: 'continue' };
     }
 
+    case 'start_developer_agent_async': {
+      await prepareStartDeveloperAgentArtifacts(
+        ctx,
+        step as unknown as Parameters<typeof prepareStartDeveloperAgentArtifacts>[1],
+        deps,
+      );
+      return { status: 'continue' };
+    }
+
     case 'apply_ba_outcome': {
       return runApplyBaOutcome(ctx, step, deps);
     }
@@ -75,7 +85,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, prepare_ba_prompt, apply_ba_outcome, start_developer_agent. Steps with async_call are handled generically by the pipeline loop.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, ba_async, apply_ba_outcome, start_developer_agent, start_developer_agent_async. Steps with async_call are handled generically by the pipeline loop.`,
       );
   }
 }

@@ -32,11 +32,23 @@ interface StartDeveloperAgentStep {
   workflowFile?: string;
 }
 
-export async function runStartDeveloperAgent(
+/**
+ * Callback-free async equivalent of start_developer_agent.
+ *
+ * This is an agent-agnostic pattern: "prepare" writes all inputs to an
+ * invocation handoff workspace and the pipeline (or caller) performs the actual
+ * dispatch to a child job. The child job can later resume and run
+ * `start_developer_agent` (sync) or other steps.
+ */
+export async function prepareStartDeveloperAgentAsync(
   ctx: RunnerContext,
   step: StartDeveloperAgentStep,
   deps: AiTeammateDeps,
-): Promise<StepOutcome> {
+): Promise<{
+  issueBody: string;
+  workflowFile: string;
+  dispatchInputs: { issue_number: string; issue_key: string; step: string };
+}> {
   const { issueKey, owner, repo, ref } = ctx;
 
   if (!ctx.githubIssueNumber) {
@@ -49,8 +61,6 @@ export async function runStartDeveloperAgent(
   }
 
   const result = ctx.baOutcome.result;
-
-  // Global directive for pipeline step inputs is owned by developer-agent / config/spec-kit (not AI Teammate).
 
   // ── Read Jira context from GitHub issue body (set in create_github_issue) ──
   let jiraContext = '';
@@ -67,9 +77,6 @@ export async function runStartDeveloperAgent(
   const templatePath = resolve(process.cwd(), TEMPLATE_PATH);
   const template = await readFile(templatePath, 'utf8');
 
-  // JSON-escape values that will be embedded inside a JSON string literal in the template.
-  // BA analysis results may contain newlines, quotes, and other control characters that
-  // would produce invalid JSON if interpolated as-is.
   const issueBody = fillTemplate(template, {
     ISSUE_KEY: issueKey,
     DIRECTIVE_PART: toJsonSafe(''),
@@ -81,21 +88,36 @@ export async function runStartDeveloperAgent(
     IMPLEMENT_INPUT: toJsonSafe(result.implementInput || TBD),
   });
 
+  const workflowFile = step.workflowFile ?? 'developer-agent.yml';
+
+  return {
+    issueBody,
+    workflowFile,
+    dispatchInputs: {
+      issue_number: String(ctx.githubIssueNumber),
+      issue_key: issueKey,
+      step: 'specify',
+      // `ref` is carried separately by the caller.
+    },
+  };
+}
+
+export async function runStartDeveloperAgent(
+  ctx: RunnerContext,
+  step: StartDeveloperAgentStep,
+  deps: AiTeammateDeps,
+): Promise<StepOutcome> {
+  const { owner, repo, ref } = ctx;
+  const prepared = await prepareStartDeveloperAgentAsync(ctx, step, deps);
+
   // ── Update GitHub issue body ─────────────────────────────────────
   console.log(`\n── Updating GitHub issue #${ctx.githubIssueNumber} ──`);
-  await deps.updateGithubIssueBody(owner, repo, ctx.githubIssueNumber, issueBody);
+  await deps.updateGithubIssueBody(owner, repo, ctx.githubIssueNumber!, prepared.issueBody);
   console.log(`   ✅ Issue body updated`);
 
   // ── Dispatch developer agent workflow ────────────────────────────
-  const workflowFile = step.workflowFile ?? 'developer-agent.yml';
-  console.log(`\n── Dispatching developer agent (${workflowFile}, step=specify) ──`);
-
-  await deps.dispatchDeveloperAgent(owner, repo, workflowFile, ref, {
-    issue_number: String(ctx.githubIssueNumber),
-    issue_key: issueKey,
-    step: 'specify',
-  });
-
+  console.log(`\n── Dispatching developer agent (${prepared.workflowFile}, step=specify) ──`);
+  await deps.dispatchDeveloperAgent(owner, repo, prepared.workflowFile, ref, prepared.dispatchInputs);
   console.log(`   ✅ Developer agent dispatched — spec-kit pipeline starting with "specify"`);
   return { status: 'continue' };
 }
