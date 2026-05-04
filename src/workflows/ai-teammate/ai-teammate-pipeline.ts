@@ -58,12 +58,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runCreateGithubIssue(ctx, deps);
     }
 
-    case 'prepare_ba_prompt': {
-      const skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
-      if (skipBa) {
-        console.log(`   ⏭ Skipped — BA segment gated (${skipBa})`);
-        return { status: 'continue' };
-      }
+    case 'ba_async': {
       await prepareCodexBaArtifacts(ctx, ctx.agentLabelParams ?? {}, deps);
       return { status: 'continue' };
     }
@@ -412,9 +407,14 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
             'Add async_call.workflowFile or set enabled: false.',
         );
       }
-      // Input artifacts were written by the preceding prepare step.
-      // Signal the YAML workflow to upload them and dispatch the async child.
-      records.push({ runner: step.runner, status: 'continue', durationMs: Date.now() - t0 });
+      // Run the step to prepare input artifacts, then signal handoff.
+      const prepOutcome = await runPipelineStep(ctx, step as PipelineStep, deps);
+      records.push({ runner: step.runner, status: prepOutcome.status, durationMs: Date.now() - t0 });
+      if (prepOutcome.status === 'stop') {
+        console.log(`\n🛑 Pipeline halted at ${step.runner}: ${prepOutcome.reason}`);
+        await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+        return;
+      }
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
       return;
