@@ -92,7 +92,7 @@ pipeline.
 | `{{TASKS_INPUT}}` | BA-generated tasks-step instruction |
 | `{{IMPLEMENT_INPUT}}` | BA-generated implement-step instruction |
 
-**Set by:** `steps/assign-copilot.ts` → `deps.updateGithubIssue`
+**Set by:** `steps/start-developer-agent.ts` → `deps.updateGithubIssueBody`
 
 ---
 
@@ -138,7 +138,7 @@ label conventions.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `steps/assign-copilot.ts` → `deps.updateGithubIssue`
+**Set by:** `steps/start-developer-agent.ts`
 
 **Example output:**
 ```

@@ -18,13 +18,6 @@ export interface StepRecord {
   source?: 'prepare_checkpoint' | 'this_invocation';
 }
 
-/** Used by `assign_copilot` to set issue body, assignees, and Copilot agent instructions. */
-export interface GithubCopilotIssueUpdate {
-  body: string;
-  assignees: string[];
-  agentInstructions: string;
-}
-
 export interface AiTeammateDeps {
   getIssue: (key: string, fields: string[]) => Promise<JiraIssue>;
   addIssueComment: (key: string, comment: string) => Promise<void>;
@@ -36,13 +29,6 @@ export interface AiTeammateDeps {
   createGithubIssue: (owner: string, repo: string, issueKey: string) => Promise<number>;
   /** Update the GitHub issue body (no Copilot assignment). */
   updateGithubIssueBody: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;
-  /** Update issue for Copilot Coding Agent (body, assignees, agent instructions). */
-  updateGithubIssue: (
-    owner: string,
-    repo: string,
-    issueNumber: number,
-    payload: GithubCopilotIssueUpdate,
-  ) => Promise<void>;
   /** Dispatch the developer agent workflow in the consumer repo. */
   dispatchDeveloperAgent: (
     owner: string,

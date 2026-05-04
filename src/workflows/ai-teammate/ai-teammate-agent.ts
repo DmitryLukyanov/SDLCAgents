@@ -91,16 +91,6 @@ export function buildAiTeammateDeps(): AiTeammateDeps {
         body,
       });
     },
-    updateGithubIssue: async (owner, repo, issueNumber, payload) => {
-      await octokitRest.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
-        owner,
-        repo,
-        issue_number: issueNumber,
-        body: payload.body,
-        assignees: payload.assignees,
-        agent_instructions: payload.agentInstructions,
-      });
-    },
     dispatchDeveloperAgent: async (owner, repo, workflowFile, ref, inputs) => {
       await octokitRest.rest.actions.createWorkflowDispatch({
         owner,

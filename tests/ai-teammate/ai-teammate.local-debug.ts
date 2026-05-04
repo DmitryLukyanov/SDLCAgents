@@ -92,12 +92,6 @@ const mockDeps: AiTeammateDeps = {
     console.log(`[mock] updateGithubIssueBody(${owner}/${repo}#${issueNumber}): "${body.slice(0, 60)}..."`);
   },
 
-  updateGithubIssue: async (owner, repo, issueNumber, payload) => {
-    console.log(
-      `[mock] updateGithubIssue(${owner}/${repo}#${issueNumber}): "${payload.body.slice(0, 60)}..." assignees=${payload.assignees.join(',')}`,
-    );
-  },
-
   dispatchDeveloperAgent: async (owner, repo, workflowFile, ref, inputs) => {
     console.log(
       `[mock] dispatchDeveloperAgent(${owner}/${repo}, ${workflowFile}@${ref}) issue=${inputs.issue_number} key=${inputs.issue_key} step=${inputs.step} branch=${inputs.branch_name ?? '(bootstrap)'}`,

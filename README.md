@@ -130,7 +130,7 @@ sequenceDiagram
     alt BA complete
         CX-->>AT: five-field JSON result
         AT->>J: optional ba_analyzed label
-        AT->>GH: assign_copilot — body + copilot-swe-agent[bot]
+        AT->>GH: start_developer_agent — update body + dispatch dev agent workflow
         GH-->>COP: agent session starts
         COP->>COP: step-controller → specify → PR comment
         Note over COP: user posts /proceed on the PR
