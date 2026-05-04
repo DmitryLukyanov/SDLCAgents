@@ -160,29 +160,11 @@ jobs:
           name: caller-handoff_codex_output
           path: async-invocation-handoff/${{ inputs.concurrency_key }}/
 
-      - name: Jira — check skip-if-label (params.skipIfLabel)
-        id: jira_ba_skip
-        run: |
-          set -euo pipefail
-          if [ "${{ steps.resume_ctx.outputs.is_resume }}" = "true" ]; then
-            echo "skip_reason=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/check-ba-skip-label-ci.ts
-        env:
-          CONFIG_FILE: ${{ inputs.config_file }}
-          CALLER_CONFIG: ${{ inputs.caller_config }}
-          AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-
       - name: AI Teammate — pipeline (config steps or resume finish)
         id: pipeline
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
         env:
           AI_TEAMMATE_MODE: pipeline_ci
-          AI_TEAMMATE_SKIP_BA_REASON: ${{ steps.jira_ba_skip.outputs.skip_reason }}
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -190,6 +172,14 @@ jobs:
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
           CALLER_CONFIG: ${{ inputs.caller_config }}
+
+      - name: Resolve async handoff directory
+        if: steps.pipeline.outputs.needs_async_handoff == 'true' || steps.resume_ctx.outputs.is_resume == 'true'
+        id: handoff_dir
+        run: |
+          set -euo pipefail
+          ROOT="async-invocation-handoff/${{ inputs.concurrency_key }}"
+          echo "dir=$ROOT" >> "$GITHUB_OUTPUT"
 
       - name: Verify invocation input artifacts (parent)
         if: steps.pipeline.outputs.needs_async_handoff == 'true'
@@ -204,7 +194,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: caller-handoff_input
-          path: async-invocation-handoff/${{ inputs.concurrency_key }}/
+          path: ${{ steps.handoff_dir.outputs.dir }}/
           if-no-files-found: error
 
       - name: Upload BA checkpoint (ba-codex-state.json)
@@ -212,7 +202,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-ba-codex-state
-          path: async-invocation-handoff/${{ inputs.concurrency_key }}/ba-codex-state.json
+          path: ${{ steps.handoff_dir.outputs.dir }}/ba-codex-state.json
           if-no-files-found: ignore
 
       - name: Dispatch async BA child (config async_call)
@@ -235,7 +225,7 @@ jobs:
           export GITHUB_RUN_ID="${{ github.run_id }}"
           export GITHUB_REF_NAME="${{ github.ref_name }}"
           export AI_TEAMMATE_CONCURRENCY_KEY="${{ inputs.concurrency_key }}"
-          export AI_TEAMMATE_SKIP_BA_REASON="${{ steps.jira_ba_skip.outputs.skip_reason }}"
+          export AI_TEAMMATE_SKIP_BA_REASON=""
           export AI_TEAMMATE_RUN_CODEX="true"
           export AI_TEAMMATE_ENTRY_WORKFLOW_FILE="${ENTRY_FILE}"
           .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/dispatch-pipeline-async-child-ci.ts

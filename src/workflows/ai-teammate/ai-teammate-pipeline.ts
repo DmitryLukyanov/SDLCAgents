@@ -26,6 +26,7 @@ import {
   isParentAsyncChildResumeCallerConfig,
   requireAsyncResumeTriggerStepId,
 } from '../../lib/caller-config.js';
+import { evaluateSkipIfLabelFromConfigFile } from '../../lib/agent-skip-if-label.js';
 import { assertManifestMatchesAsyncStepAndPrimaryOutputPresent } from '../../lib/invocation-handoff.js';
 import { normalizePipelineStepIds, type PipelineStepConfig } from '../../lib/pipeline-config.js';
 import {
@@ -310,9 +311,19 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
     }
   }
 
-  const skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
+  let skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
+  if (!skipBa && !resumeAfterAsyncChild) {
+    const { skipReason, skipIfLabel } = await evaluateSkipIfLabelFromConfigFile({
+      configFilePath: requireEnvNonEmpty('CONFIG_FILE'),
+      issueKey,
+    });
+    skipBa = skipReason;
+    if (skipReason && skipIfLabel) {
+      console.log(`[pipeline] Jira ${issueKey} has label "${skipIfLabel}" — gated segment will be skipped.`);
+    }
+  }
 
-  let ctx: RunnerContext = { issueKey, ...ctxInit };
+  let ctx: RunnerContext = { issueKey, ...ctxInit, skipBaReason: skipBa || undefined };
   const records: StepRecord[] = [];
 
   for (let i = resumeAfterAsyncChild ? 0 : loopStart; i < stepsNorm.length; i++) {
@@ -458,4 +469,3 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
 export async function runPipelineCi(deps: AiTeammateDeps): Promise<void> {
   await runPipelineFromConfigForCi(deps);
 }
-

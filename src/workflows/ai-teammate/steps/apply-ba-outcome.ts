@@ -23,7 +23,7 @@ export async function runApplyBaOutcome(
   _step: PipelineStep,
   deps: AiTeammateDeps,
 ): Promise<StepOutcome> {
-  const skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
+  const skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? ctx.skipBaReason ?? '';
   if (skipBa) {
     console.log(`   ⏭ Skipped — BA segment gated (${skipBa})`);
     return { status: 'continue' };
