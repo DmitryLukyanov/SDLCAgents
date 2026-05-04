@@ -198,19 +198,24 @@ export async function runPipelineThroughInclusive(
 }
 
 /**
- * Run steps from `startRunner` through the end of the list.
+ * Run steps from `startStepId` through the end of the list.
+ *
+ * Step ids are stable even when multiple steps share a runner.
  */
-export async function runPipelineFromRunner(
+export async function runPipelineFromStepId(
   issueKey: string,
   steps: PipelineStep[],
-  startRunner: string,
+  startStepId: string,
   deps: AiTeammateDeps,
   ctx: RunnerContext,
   priorRecords: StepRecord[],
 ): Promise<void> {
-  const startIdx = steps.findIndex(s => s.runner === startRunner);
+  const startIdx = findPipelineStepIndexById(normalizePipelineStepIds(steps as unknown as PipelineStepConfig[]), startStepId);
   if (startIdx < 0) {
-    throw new Error(`Pipeline step "${startRunner}" not found — cannot resume after Codex BA.`);
+    const ids = steps.map((s) => s.id).filter(Boolean).join(', ');
+    throw new Error(
+      `Pipeline step id "${startStepId}" not found — cannot resume. Known ids: ${ids || '(none)'}.`,
+    );
   }
 
   const records = [...priorRecords];
@@ -248,6 +253,26 @@ export async function runPipelineFromRunner(
 
   console.log(`\nPipeline finished tail step(s) for ${issueKey}.`);
   await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+}
+
+/** @deprecated Use {@link runPipelineFromStepId} instead (runner names are not stable). */
+export async function runPipelineFromRunner(
+  issueKey: string,
+  steps: PipelineStep[],
+  startRunner: string,
+  deps: AiTeammateDeps,
+  ctx: RunnerContext,
+  priorRecords: StepRecord[],
+): Promise<void> {
+  const startIdx = steps.findIndex(s => s.runner === startRunner);
+  if (startIdx < 0) {
+    throw new Error(`Pipeline step "${startRunner}" not found — cannot resume.`);
+  }
+  const id = steps[startIdx]?.id;
+  if (!id) {
+    throw new Error(`Pipeline step "${startRunner}" has no id — cannot resume by runner.`);
+  }
+  return runPipelineFromStepId(issueKey, steps, id, deps, ctx, priorRecords);
 }
 
 function setGithubActionsOutput(name: string, value: string): void {
