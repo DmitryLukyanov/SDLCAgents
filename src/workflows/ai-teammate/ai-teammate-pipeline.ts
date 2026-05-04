@@ -14,17 +14,29 @@
  *
  * `ba_codex_async` is handled in `runPipelineCi` (`AI_TEAMMATE_MODE=pipeline_ci`): prepares prompt + state,
  * then the reusable workflow uploads artifacts and dispatches the `async_call` child (Codex is not inline here).
+ * Parent **resume** after the child: `caller_config.params.async_child_run_id` + `async_trigger_step` — walk steps
+ * from the beginning, skip through the trigger step (checkpoint rows), complete the async step from handoff
+ * artifacts (see {@link ../../lib/invocation-handoff.js assertManifestMatchesAsyncStepAndPrimaryOutputPresent}), then run remaining steps.
  * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
-import { appendFileSync } from 'node:fs';
-import { decodeCallerConfig } from '../../lib/caller-config.js';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import {
+  decodeCallerConfig,
+  isParentAsyncChildResumeCallerConfig,
+  requireAsyncResumeTriggerStepId,
+} from '../../lib/caller-config.js';
+import { assertManifestMatchesAsyncStepAndPrimaryOutputPresent } from '../../lib/invocation-handoff.js';
 import { normalizePipelineStepIds, type PipelineStepConfig } from '../../lib/pipeline-config.js';
-import { getPipelineStartIndexFromCallerRoot, isStepEnabled } from '../../lib/pipeline-expected-step-helper.js';
+import {
+  findPipelineStepIndexById,
+  getPipelineStartIndexFromCallerRoot,
+  isStepEnabled,
+} from '../../lib/pipeline-expected-step-helper.js';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
-import { assertConcurrencyKeyMatchesIssue } from './ai-teammate-codex-ba-shared.js';
+import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
 
@@ -242,7 +254,7 @@ function requireEnvNonEmpty(name: string): string {
   return v;
 }
 
-async function runFreshPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
+async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
   setGithubActionsOutput('needs_async_handoff', 'false');
 
   const callerEncoded = requireEnvNonEmpty('CALLER_CONFIG');
@@ -255,17 +267,145 @@ async function runFreshPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<vo
   }
 
   const stepsNorm = normalizePipelineStepIds(steps as PipelineStepConfig[]);
-  const startIdx = getPipelineStartIndexFromCallerRoot(stepsNorm, root);
+  const resumeAfterAsyncChild = isParentAsyncChildResumeCallerConfig(root);
+  let loopStart = 0;
+  if (!resumeAfterAsyncChild) {
+    loopStart = getPipelineStartIndexFromCallerRoot(stepsNorm, root);
+  }
+
+  let triggerIdx = -1;
+  let checkpointPartial: StepRecord[] = [];
+  if (resumeAfterAsyncChild) {
+    const triggerId = requireAsyncResumeTriggerStepId(root);
+    triggerIdx = findPipelineStepIndexById(stepsNorm, triggerId);
+    if (triggerIdx < 0) {
+      const ids = stepsNorm.map(s => s.id).join(', ');
+      throw new Error(
+        `Pipeline async resume: no step with id "${triggerId}". Known ids: ${ids}`,
+      );
+    }
+    const statePath = codexBaPaths(issueKey).state;
+    if (!existsSync(statePath)) {
+      throw new Error(`Pipeline async resume: missing checkpoint ${statePath}`);
+    }
+    const raw = JSON.parse(readFileSync(statePath, 'utf8')) as { version?: number; partialRecords?: StepRecord[] };
+    if (raw.version !== STATE_VERSION) {
+      throw new Error(
+        `Pipeline async resume: unsupported ba-codex-state.json version: ${String(raw.version ?? '(missing)')}`,
+      );
+    }
+    checkpointPartial = Array.isArray(raw.partialRecords) ? raw.partialRecords : [];
+    if (checkpointPartial.length < triggerIdx) {
+      throw new Error(
+        `Pipeline async resume: ba-codex-state.json partialRecords length (${checkpointPartial.length}) ` +
+          `is less than the index of async_trigger_step "${triggerId}" (${triggerIdx}).`,
+      );
+    }
+  }
+
   const skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
 
-  const ctx: RunnerContext = { issueKey, ...ctxInit };
+  let ctx: RunnerContext = { issueKey, ...ctxInit };
   const records: StepRecord[] = [];
 
-  for (let i = startIdx; i < stepsNorm.length; i++) {
+  for (let i = resumeAfterAsyncChild ? 0 : loopStart; i < stepsNorm.length; i++) {
     const step = stepsNorm[i]! as PipelineStep;
     console.log(`\n── Step ${i + 1}/${stepsNorm.length}: ${step.runner} ──`);
 
+    if (resumeAfterAsyncChild && i < triggerIdx) {
+      const t0 = Date.now();
+      const fromCk = checkpointPartial[i];
+      if (fromCk && fromCk.runner === step.runner) {
+        records.push({
+          ...fromCk,
+          source: 'prepare_checkpoint',
+          durationMs: fromCk.durationMs ?? 0,
+        });
+      } else {
+        records.push({
+          runner: step.runner,
+          status: 'continue',
+          reason: fromCk
+            ? `skipped (async resume: checkpoint runner mismatch, expected "${step.runner}", got "${fromCk.runner}")`
+            : 'skipped (async resume: missing checkpoint row)',
+          durationMs: Date.now() - t0,
+          source: 'prepare_checkpoint',
+        });
+      }
+      console.log('   ⏭ Skipped — async parent resume (prior invocation)');
+      continue;
+    }
+
+    if (resumeAfterAsyncChild && i === triggerIdx) {
+      const triggerStep = step;
+      if (!triggerStep.async_call?.workflowFile?.trim()) {
+        throw new Error(
+          `Pipeline async resume: step id "${triggerStep.id}" (${triggerStep.runner}) has no async_call.workflowFile.`,
+        );
+      }
+      if (triggerStep.runner !== 'ba_codex_async') {
+        throw new Error(
+          `Pipeline async resume: step "${triggerStep.id}" uses runner "${triggerStep.runner}" — ` +
+            'only "ba_codex_async" has built-in resume handling today.',
+        );
+      }
+
+      assertManifestMatchesAsyncStepAndPrimaryOutputPresent({
+        cwd: process.cwd(),
+        issueKey,
+        triggerStep: triggerStep as PipelineStepConfig,
+        contextLabel: 'Pipeline async resume',
+      });
+
+      const t0 = Date.now();
+      if (!isStepEnabled(triggerStep)) {
+        console.log('   ⏭ Skipped — step.enabled is false in config');
+        records.push({
+          runner: triggerStep.runner,
+          status: 'continue',
+          reason: 'skipped (enabled: false)',
+          durationMs: Date.now() - t0,
+          source: 'this_invocation',
+        });
+        await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+        return;
+      }
+      if (skipBa) {
+        console.log(`   ⏭ Skipped — BA segment gated (${skipBa})`);
+        records.push({
+          runner: triggerStep.runner,
+          status: 'continue',
+          reason: `skipped (${skipBa})`,
+          durationMs: Date.now() - t0,
+          source: 'this_invocation',
+        });
+        await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+        return;
+      }
+
+      const { resumeBaCodexAsyncOutcomeOnly } = await import('./ai-teammate-codex-ba-finish.js');
+      const resumePack = await resumeBaCodexAsyncOutcomeOnly(deps);
+      ctx = resumePack.ctx;
+      records.push({
+        ...resumePack.inlineRecord,
+        durationMs: Date.now() - t0,
+        source: 'this_invocation',
+      });
+
+      if (resumePack.stepOutcome.status === 'stop') {
+        console.log(`\n🛑 Pipeline halted at ${triggerStep.runner}: ${resumePack.stepOutcome.reason}`);
+        await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+        return;
+      }
+      continue;
+    }
+
     if (step.runner === 'ba_codex_async') {
+      if (resumeAfterAsyncChild) {
+        throw new Error(
+          'Pipeline async resume: encountered ba_codex_async after async_trigger_step; only one async handoff boundary is supported per invocation.',
+        );
+      }
       const t0 = Date.now();
       if (!isStepEnabled(step)) {
         console.log('   ⏭ Skipped — step.enabled is false in config');
@@ -349,15 +489,8 @@ async function runFreshPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<vo
 
 /**
  * `_reusable-ai-teammate.yml` entry: `AI_TEAMMATE_MODE=pipeline_ci`.
- * Resume uses a dynamic import of finish to avoid a circular module graph with this file.
+ * Parent resume is driven by `caller_config.params.async_child_run_id` + `async_trigger_step` (see `runPipelineFromConfigForCi`).
  */
 export async function runPipelineCi(deps: AiTeammateDeps): Promise<void> {
-  const isResume = process.env.AI_TEAMMATE_IS_RESUME === 'true';
-  if (isResume) {
-    setGithubActionsOutput('needs_async_handoff', 'false');
-    const { runCodexBaFinish } = await import('./ai-teammate-codex-ba-finish.js');
-    await runCodexBaFinish(deps);
-    return;
-  }
-  await runFreshPipelineFromConfigForCi(deps);
+  await runPipelineFromConfigForCi(deps);
 }

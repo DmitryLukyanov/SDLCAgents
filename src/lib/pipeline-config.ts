@@ -9,7 +9,8 @@
  *   • `agent-skip-if-label.ts` — read agent config file → `params.skipIfLabel` → `getIssueLabelNames` → skip reason
  *   • `jira/jira-client.ts` — `getIssueLabelNames` (shared label read for agents)
  *   • `routing_helper.ts` — GitHub dispatch payload shape (no Octokit)
- *   • `agent-invocation-contract.ts` — optional `contract` on async steps (artifact + GitHub issue bindings)
+ *   • `agent-invocation-contract.ts` — optional `contract` on async steps (artifact bindings)
+ *   • `invocation-handoff.ts` — composed manifest/config/input checks (reusable across CI entrypoints)
  *   • `dispatch-parent-callback-workflow-ci.ts` — CI: merge resume fields + `dispatchGithubWorkflow(octokit, …)`
  */
 

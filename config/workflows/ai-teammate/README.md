@@ -30,7 +30,7 @@ The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON fi
 2. Point **Scrum Master** rules at that path (`configFile` in `scrum-master.config`).
 3. Ensure secrets **`COPILOT_PAT`**, **`OPENAI_API_KEY`**, and Jira secrets match what `_reusable-ai-teammate.yml` expects.
 4. Install the consumer workflow from **`.github/consumer-templates/ai-teammate.yml`** (or equivalent) calling the reusable workflow with `secrets: inherit`.
-5. If you use async Codex, keep **`.github/consumer-templates/business-analyst.yml`** in sync: it must declare **`invocation_prompt_file`**, **`invocation_jira_context_file`**, and **`invocation_output_file`** (parent dispatch always sends them; defaults match `DEFAULT_AGENT_INVOCATION_CONTRACT`).
+5. If you use async Codex, keep **`.github/consumer-templates/business-analyst.yml`** in sync with SDLCAgents: Codex paths come only from **`invocation-handoff-manifest.json`** in the prepare artifact (parent dispatch does not send per-file path inputs).
 
 ## Async invocation `contract` (artifact-only, agent-agnostic)
 
@@ -48,7 +48,7 @@ On the step that declares **`async_call`**, optional **`contract`** describes **
    - Internal **`ba-codex-state.json`** records `codexRelativeOutputPath` for the resolved primary output.
 2. **`verify-invocation-handoff-ci.ts`** (parent) — asserts **every** **`contract.inputParams`** file exists and is non-empty before upload.
 3. **Upload** — `actions/upload-artifact` sends the **entire** `async-invocation-handoff/<concurrency_key>/` directory, so **every** declared input artifact is included (plus internal JSON).
-4. **Consumer (`business-analyst.yml`)** — downloads the bundle into **`async-invocation-handoff/<key>/`**, verifies the **bound** inputs (`invocation_prompt_file`, `invocation_jira_context_file`), then **`_reusable-codex-run`** using **`invocation_output_file`** for the primary output path.
+4. **Consumer (`business-analyst.yml`)** — downloads the bundle into **`async-invocation-handoff/<key>/`**, reads **`invocation-handoff-manifest.json`** for relative paths, verifies input artifacts exist, then **`_reusable-codex-run`** using those paths for prompt and primary output.
 
 Types and parsing: `src/lib/agent-invocation-contract.ts`. Omit **`contract`** to use defaults (`invocation-prompt.md`, `invocation-jira-context.md`, `invocation-output.txt`).
 

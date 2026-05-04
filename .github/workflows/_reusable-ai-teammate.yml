@@ -6,7 +6,7 @@
 # `start_developer_agent`. Codex does **not** run inline in this workflow.
 #
 # Resume: early steps detect `caller_config.params.async_child_run_id`, download parent + child artifacts,
-# set `AI_TEAMMATE_IS_RESUME=true`; main step runs `codex_ba_finish` (apply BA + tail of pipeline).
+# main `pipeline_ci` step reads `caller_config.params.async_child_run_id` + `async_trigger_step` to resume the step loop (skip prior steps, complete async from artifacts, run tail).
 #
 # Usage in consumer repo:
 #   jobs:
@@ -182,7 +182,6 @@ jobs:
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/ai-teammate-agent.ts
         env:
           AI_TEAMMATE_MODE: pipeline_ci
-          AI_TEAMMATE_IS_RESUME: ${{ steps.resume_ctx.outputs.is_resume }}
           AI_TEAMMATE_SKIP_BA_REASON: ${{ steps.jira_ba_skip.outputs.skip_reason }}
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}

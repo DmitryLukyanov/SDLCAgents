@@ -15,7 +15,9 @@ import type { AgentLabelParams, AiTeammateDeps, PipelineStep, RunnerContext } fr
 import {
   assertBaCodexPrepareContract,
   handoffWorkspacePaths,
+  INVOCATION_HANDOFF_MANIFEST_FILENAME,
   loadAgentInvocationContractFromConfigFile,
+  writeInvocationHandoffManifestFile,
 } from '../../lib/agent-invocation-contract.js';
 import {
   GITHUB_ISSUE_PREP_VERSION,
@@ -180,8 +182,9 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
   };
 
   writeFileSync(p.state, JSON.stringify(state, null, 2) + '\n', 'utf8');
+  writeInvocationHandoffManifestFile(p.base, contract);
   console.log(
-    `[codex-ba-prepare-prompt] Wrote ${promptPath}, ${jiraContextPath}, ${p.state} (Codex output → ${codexRelativeOutputPath})`,
+    `[codex-ba-prepare-prompt] Wrote ${promptPath}, ${jiraContextPath}, ${p.state}, ${INVOCATION_HANDOFF_MANIFEST_FILENAME} (Codex output → ${codexRelativeOutputPath})`,
   );
 }
 

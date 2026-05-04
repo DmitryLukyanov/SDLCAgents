@@ -10,8 +10,9 @@ export interface CallerConfigParams {
   inputJql?: string;
   customParams?: Record<string, string | undefined>;
   /**
-   * When set, the **parent** entry workflow should treat this as a resume after an async segment:
-   * skip pipeline steps through this step id (inclusive), then continue (see `pipeline-expected-step-helper.getPipelineStartIndex`).
+   * Stable id of the pipeline step that owns the async handoff (`id` on that step).
+   * - With **`async_child_run_id`**: parent resume — full step loop replays from index 0; steps before this id are skipped from checkpoint; this step is completed from handoff artifacts (see AI Teammate `runPipelineFromConfigForCi`).
+   * - **Without** `async_child_run_id`: optional mid-entry only — first executed step index is after this id (`getPipelineStartIndexFromCallerRoot`).
    */
   async_trigger_step?: string;
   /** Parent workflow filename to `workflow_dispatch` after async work (e.g. `ai-teammate.yml`). */
@@ -50,9 +51,23 @@ export function extractIssueKeyFromCallerConfig(root: CallerConfigRoot): string 
   return m[1].toUpperCase();
 }
 
-/** True when `caller_config` requests the parent resume path (after an async child). */
-export function isPipelineResumeCallerConfig(root: CallerConfigRoot): boolean {
-  return Boolean(root.params?.async_trigger_step?.trim());
+/**
+ * True when the parent is resuming after an async child completed (`async_child_run_id` set on callback).
+ * Use with {@link requireAsyncResumeTriggerStepId} to locate the skipped async step in `params.steps`.
+ */
+export function isParentAsyncChildResumeCallerConfig(root: CallerConfigRoot): boolean {
+  return Boolean(root.params?.async_child_run_id?.toString().trim());
+}
+
+/** Require `caller_config.params.async_trigger_step` when resuming after an async child (inclusive skip boundary). */
+export function requireAsyncResumeTriggerStepId(root: CallerConfigRoot): string {
+  const id = root.params?.async_trigger_step?.toString().trim() ?? '';
+  if (!id) {
+    throw new Error(
+      'caller_config.params.async_trigger_step is required when async_child_run_id is set (parent resume after async child).',
+    );
+  }
+  return id;
 }
 
 /** URL-encode JSON for workflow `caller_config` / env `CALLER_CONFIG`. */

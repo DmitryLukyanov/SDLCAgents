@@ -10,10 +10,6 @@
  */
 import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import {
-  buildInvocationDispatchHints,
-  loadAgentInvocationContractFromConfigFile,
-} from '../../lib/agent-invocation-contract.js';
 import { Octokit } from '@octokit/rest';
 import { findFirstEnabledAsyncCallStepIndex, parseAgentPipelineSteps } from '../../lib/pipeline-config.js';
 import { buildParentRunFields, mergeCallerConfigForAsyncChildDispatch } from '../../lib/pipeline-callback-config.js';
@@ -105,18 +101,12 @@ async function main(): Promise<void> {
     ...parentFields,
   });
 
-  const invocationContract = loadAgentInvocationContractFromConfigFile(abs);
-  const invocationHints = buildInvocationDispatchHints(invocationContract);
-
   const inputs: Record<string, string> = {
     ...buildAiTeammateWorkflowDispatchInputsWithCaller({
       concurrencyKey,
       configFile,
       callerConfigEncoded: mergedCaller,
     }),
-    invocation_prompt_file: invocationHints.invocation_prompt_file,
-    invocation_output_file: invocationHints.invocation_output_file,
-    invocation_jira_context_file: invocationHints.invocation_jira_context_file,
   };
   if (ac.inputs) {
     for (const [k, v] of Object.entries(ac.inputs)) {

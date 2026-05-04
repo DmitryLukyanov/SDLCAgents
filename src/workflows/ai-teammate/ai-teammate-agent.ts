@@ -8,7 +8,7 @@
  *   GITHUB_TOKEN  — ${{ github.token }} at job level (github-actions[bot]) for issue comments (BA progress, etc.)
  *
  * Modes (`AI_TEAMMATE_MODE`, required):
- *   pipeline_ci                  — CI default: config `params.steps` + optional async BA handoff; or resume (`AI_TEAMMATE_IS_RESUME=true`)
+ *   pipeline_ci                  — CI default: config `params.steps` + optional async BA handoff; parent resume via `caller_config.params.async_child_run_id` + `async_trigger_step`
  *   codex_ba_create_github_issue — pipeline through `create_github_issue`; writes `ba-github-issue-prep.json`
  *   codex_ba_prepare_prompt      — read checkpoint; write BA Codex prompt + `ba-codex-state.json` (legacy split steps)
  *   codex_ba_prepare             — both phases in one process (local debug / compat)

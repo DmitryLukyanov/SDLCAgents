@@ -1,7 +1,8 @@
 /**
  * Codex BA — finish (no LLM here): read Codex output file, apply BA outcome, resume pipeline.
  *
- * Mode: `codex_ba_finish` / resume `pipeline_ci`. The BA LLM runs in the consumer async workflow (`business-analyst.yml` → `_reusable-codex-run.yml`).
+ * Mode: `codex_ba_finish` / parent resume after async (`pipeline_ci` + `caller_config.params.async_child_run_id`).
+ * The BA LLM runs in the consumer async workflow (`business-analyst.yml` → `_reusable-codex-run.yml`).
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
@@ -14,7 +15,7 @@ import {
   type StepRecord,
 } from './ai-teammate-pipeline.js';
 import { applyCodexBaOutcomeToJiraAndGithub } from './steps/apply-codex-ba-outcome-to-jira-github.js';
-import type { AiTeammateDeps, RunnerContext } from './runner-types.js';
+import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
 import {
   STATE_VERSION,
   assertConcurrencyKeyMatchesIssue,
@@ -22,18 +23,31 @@ import {
   type BaCodexStateFile,
 } from './ai-teammate-codex-ba-shared.js';
 
-export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
+export interface BaCodexAsyncResumeResult {
+  issueKey: string;
+  steps: PipelineStep[];
+  ctx: RunnerContext;
+  priorForSummary: StepRecord[];
+  inlineRecord: StepRecord;
+  stepOutcome: StepOutcome;
+}
+
+/**
+ * Read `ba-codex-state.json`, interpret Codex primary output, apply BA to Jira/GitHub.
+ * Does not run tail pipeline steps — {@link runPipelineCi} continues the unified step loop after this.
+ */
+export async function resumeBaCodexAsyncOutcomeOnly(deps: AiTeammateDeps): Promise<BaCodexAsyncResumeResult> {
   const { issueKey, steps, runner } = await loadAiTeammatePipelineFromEnv();
   assertConcurrencyKeyMatchesIssue(issueKey);
   if (runner !== 'pipeline') {
-    throw new Error('codex_ba_finish requires params.runner "pipeline"');
+    throw new Error('resumeBaCodexAsyncOutcomeOnly requires params.runner "pipeline"');
   }
 
   const p = codexBaPaths(issueKey);
 
   const skipReasonFromWorkflow = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
   if (skipReasonFromWorkflow) {
-    console.log(`[codex-ba-finish] BA skipped (workflow) — ${skipReasonFromWorkflow}`);
+    console.log(`[codex-ba-resume] BA skipped (workflow) — ${skipReasonFromWorkflow}`);
     const summaryPath = process.env.GITHUB_STEP_SUMMARY;
     if (summaryPath) {
       await appendFile(
@@ -41,11 +55,13 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
         `\n## Codex BA skipped\n\n**${issueKey}** — ${skipReasonFromWorkflow}\n`,
       );
     }
-    return;
+    throw new Error(
+      `[codex-ba-resume] Cannot apply BA outcome while AI_TEAMMATE_SKIP_BA_REASON is set (${skipReasonFromWorkflow})`,
+    );
   }
 
   if (!existsSync(p.state)) {
-    throw new Error(`[codex-ba-finish] Missing state file: ${p.state}`);
+    throw new Error(`[codex-ba-resume] Missing state file: ${p.state}`);
   }
 
   const rawState = JSON.parse(readFileSync(p.state, 'utf8')) as BaCodexStateFile & {
@@ -53,14 +69,14 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     baStep?: { skipIfLabel?: string; addLabel?: string };
   };
   if (rawState.version !== STATE_VERSION) {
-    throw new Error(`[codex-ba-finish] Unsupported ba-codex-state.json version: ${rawState.version}`);
+    throw new Error(`[codex-ba-resume] Unsupported ba-codex-state.json version: ${rawState.version}`);
   }
   const agentLabelParams =
     rawState.agentLabelParams ??
     rawState.baOptions ??
     (rawState.baStep ? { skipIfLabel: rawState.baStep.skipIfLabel, addLabel: rawState.baStep.addLabel } : undefined);
   if (!agentLabelParams) {
-    throw new Error('[codex-ba-finish] ba-codex-state.json must include agentLabelParams (or legacy baOptions / baStep)');
+    throw new Error('[codex-ba-resume] ba-codex-state.json must include agentLabelParams (or legacy baOptions / baStep)');
   }
   const state: BaCodexStateFile = {
     version: rawState.version,
@@ -76,7 +92,7 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
   try {
     codexOutput = readFileSync(outAbs, 'utf8');
   } catch {
-    console.warn(`[codex-ba-finish] Missing or unreadable Codex output: ${outAbs}`);
+    console.warn(`[codex-ba-resume] Missing or unreadable Codex output: ${outAbs}`);
   }
 
   const ctx: RunnerContext = {
@@ -84,7 +100,7 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     baOutcome: undefined,
   };
 
-  console.log('\n── BA: Interpreting Codex output ──');
+  console.log('\n── BA: Interpreting Codex output (async resume) ──');
   const outcome = interpretBaModelOutput(codexOutput, state.ticketCtx);
   ctx.baOutcome = outcome;
 
@@ -103,22 +119,47 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     source: 'this_invocation',
   };
 
-  if (stepOutcome.status === 'stop') {
+  return { issueKey, steps, ctx, priorForSummary, inlineRecord, stepOutcome };
+}
+
+export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
+  const { issueKey, runner } = await loadAiTeammatePipelineFromEnv();
+  assertConcurrencyKeyMatchesIssue(issueKey);
+  if (runner !== 'pipeline') {
+    throw new Error('codex_ba_finish requires params.runner "pipeline"');
+  }
+
+  const skipReasonFromWorkflow = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
+  if (skipReasonFromWorkflow) {
+    console.log(`[codex-ba-finish] BA skipped (workflow) — ${skipReasonFromWorkflow}`);
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+      await appendFile(
+        summaryPath,
+        `\n## Codex BA skipped\n\n**${issueKey}** — ${skipReasonFromWorkflow}\n`,
+      );
+    }
+    return;
+  }
+
+  const r = await resumeBaCodexAsyncOutcomeOnly(deps);
+
+  if (r.stepOutcome.status === 'stop') {
     await writeAiTeammatePipelineSummary(
-      issueKey,
-      `${ctx.owner}/${ctx.repo}`,
-      [...priorForSummary, inlineRecord],
-      ctx,
+      r.issueKey,
+      `${r.ctx.owner}/${r.ctx.repo}`,
+      [...r.priorForSummary, r.inlineRecord],
+      r.ctx,
     );
     return;
   }
 
   await runPipelineFromRunner(
-    issueKey,
-    steps,
+    r.issueKey,
+    r.steps,
     'start_developer_agent',
     deps,
-    ctx,
-    [...priorForSummary, inlineRecord],
+    r.ctx,
+    [...r.priorForSummary, r.inlineRecord],
   );
 }

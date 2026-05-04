@@ -5,11 +5,17 @@
  * **prepare** artifact. After restore on the parent resume job (prepare + post-Codex artifacts), the same
  * relative paths are used — `codexRelativeOutputPath` in state points at the primary output file inside that tree.
  *
+ * **Cross-workflow communication** for the async child must use files under that tree plus
+ * {@link INVOCATION_HANDOFF_MANIFEST_FILENAME} (written at prepare time). Do not pass duplicate path strings on
+ * `workflow_dispatch` for Codex inputs/outputs — read the manifest in the consumer workflow instead.
+ *
+ * For **composed** validation (manifest vs config, resume checks), use {@link ./invocation-handoff.js}.
+ *
  * `inputParams` / `outputParams` are **open maps** of logical names → {@link ArtifactHandoffRef}. Defaults match
  * the Codex BA profile (`prompt`, `jiraContext`, `resultState`). Optional `primaryOutputKey` picks which output
  * entry becomes `codexRelativeOutputPath` when more than one output exists.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   findFirstEnabledAsyncCallStepIndex,
@@ -19,6 +25,31 @@ import {
 
 /** Repo-relative directory for async parent/child handoff (not `spec-output`; developer-agent may still use that). */
 export const ASYNC_INVOCATION_HANDOFF_ROOT_DIR = 'async-invocation-handoff' as const;
+
+/**
+ * Written into the prepare-bundle artifact: **single source of truth** for which relative paths Codex uses.
+ * Child workflows must resolve `prompt_file` / `output_file` from this file (not duplicate path strings on dispatch).
+ */
+export const INVOCATION_HANDOFF_MANIFEST_FILENAME = 'invocation-handoff-manifest.json' as const;
+
+export const INVOCATION_HANDOFF_MANIFEST_VERSION = 1 as const;
+
+export interface InvocationHandoffManifestV1 {
+  version: typeof INVOCATION_HANDOFF_MANIFEST_VERSION;
+  /** Full contract snapshot (must match the async step in the parent agent config at prepare time). */
+  contract: AgentInvocationContract;
+  /** Relative paths under the issue handoff directory — derived from `contract` only. */
+  dispatchPathHints: {
+    invocation_prompt_file: string;
+    invocation_jira_context_file: string;
+    invocation_output_file: string;
+  };
+}
+
+/** Absolute path `async-invocation-handoff/<issueKey>/` under `cwd` (typically `process.cwd()`). */
+export function handoffIssueRootAbsolute(cwd: string, issueKey: string): string {
+  return join(cwd, ASYNC_INVOCATION_HANDOFF_ROOT_DIR, issueKey);
+}
 
 /** File inside `${ASYNC_INVOCATION_HANDOFF_ROOT_DIR}/<issueKey>/` included in the prepare-bundle artifact. */
 export type ArtifactHandoffRef = {
@@ -217,6 +248,64 @@ export function buildInvocationDispatchHints(contract: AgentInvocationContract):
   };
 }
 
+export function buildInvocationHandoffManifest(contract: AgentInvocationContract): InvocationHandoffManifestV1 {
+  const dispatchPathHints = buildInvocationDispatchHints(contract);
+  return {
+    version: INVOCATION_HANDOFF_MANIFEST_VERSION,
+    contract,
+    dispatchPathHints,
+  };
+}
+
+export function writeInvocationHandoffManifestFile(
+  handoffIssueRootAbs: string,
+  contract: AgentInvocationContract,
+): void {
+  const manifest = buildInvocationHandoffManifest(contract);
+  const dest = join(handoffIssueRootAbs, INVOCATION_HANDOFF_MANIFEST_FILENAME);
+  writeFileSync(dest, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+}
+
+export function readInvocationHandoffManifestFile(handoffIssueRootAbs: string): InvocationHandoffManifestV1 {
+  const p = join(handoffIssueRootAbs, INVOCATION_HANDOFF_MANIFEST_FILENAME);
+  if (!existsSync(p)) {
+    throw new Error(`Missing invocation handoff manifest: ${p}`);
+  }
+  const raw = JSON.parse(readFileSync(p, 'utf8')) as InvocationHandoffManifestV1;
+  if (raw.version !== INVOCATION_HANDOFF_MANIFEST_VERSION) {
+    throw new Error(`Unsupported ${INVOCATION_HANDOFF_MANIFEST_FILENAME} version: ${String(raw?.version)}`);
+  }
+  if (!raw.contract || typeof raw.contract !== 'object') {
+    throw new Error(`Invalid ${INVOCATION_HANDOFF_MANIFEST_FILENAME}: missing contract`);
+  }
+  const h = raw.dispatchPathHints;
+  if (!h || typeof h !== 'object') {
+    throw new Error(`Invalid ${INVOCATION_HANDOFF_MANIFEST_FILENAME}: missing dispatchPathHints`);
+  }
+  for (const k of ['invocation_prompt_file', 'invocation_jira_context_file', 'invocation_output_file'] as const) {
+    if (typeof h[k] !== 'string' || !h[k].trim()) {
+      throw new Error(`Invalid ${INVOCATION_HANDOFF_MANIFEST_FILENAME}: dispatchPathHints.${k}`);
+    }
+  }
+  return raw;
+}
+
+/** True when both contracts refer to the same artifact relative paths (and primary output key). */
+export function invocationContractsArtifactPathsEqual(a: AgentInvocationContract, b: AgentInvocationContract): boolean {
+  const inKeys = new Set([...Object.keys(a.inputParams), ...Object.keys(b.inputParams)]);
+  for (const k of inKeys) {
+    if (a.inputParams[k]?.relativePath !== b.inputParams[k]?.relativePath) return false;
+  }
+  const outKeys = new Set([...Object.keys(a.outputParams), ...Object.keys(b.outputParams)]);
+  for (const k of outKeys) {
+    if (a.outputParams[k]?.relativePath !== b.outputParams[k]?.relativePath) return false;
+  }
+  return (
+    resolvePrimaryOutputKey(a) === resolvePrimaryOutputKey(b) &&
+    (a.primaryOutputKey ?? '') === (b.primaryOutputKey ?? '')
+  );
+}
+
 export type HandoffWorkspacePaths = {
   base: string;
   /** Absolute paths for each `contract.inputParams` key. */
@@ -259,6 +348,34 @@ export function handoffWorkspacePaths(issueKey: string, contract: AgentInvocatio
       '/',
     ),
   };
+}
+
+/**
+ * After the async child run, the parent job restores the handoff tree; the primary `contract.outputParams`
+ * file must exist before runner-specific resume logic runs.
+ */
+export function assertAsyncHandoffPrimaryOutputPresent(issueKey: string, contract: AgentInvocationContract): void {
+  const p = handoffWorkspacePaths(issueKey, contract);
+  const primaryKey = resolvePrimaryOutputKey(contract);
+  const abs = p.outputPaths[primaryKey];
+  if (!abs) {
+    throw new Error(`[assertAsyncHandoffPrimaryOutputPresent] missing outputPaths.${primaryKey}`);
+  }
+  if (!existsSync(abs)) {
+    throw new Error(
+      `[assertAsyncHandoffPrimaryOutputPresent] expected primary async output artifact at ${abs} ` +
+        `(contract.outputParams.${primaryKey}.relativePath). Ensure the child workflow produced it and ` +
+        'the parent job downloaded the post-async artifact bundle.',
+    );
+  }
+  for (const [k, path] of Object.entries(p.outputPaths)) {
+    if (k === primaryKey) continue;
+    if (!existsSync(path)) {
+      console.warn(
+        `[assertAsyncHandoffPrimaryOutputPresent] non-primary output "${k}" missing at ${path} (ignored)`,
+      );
+    }
+  }
 }
 
 export function assertBaCodexPrepareContract(contract: AgentInvocationContract): void {
