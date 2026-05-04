@@ -20,7 +20,7 @@ import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { getIssue, addIssueComment, addIssueLabel, transitionIssueToStatusName } from '../../lib/jira/jira-client.js';
 import { fetchRelatedIssueSummaries } from '../../lib/jira/jira-related.js';
-import { prepareIssueContextWithLogging } from './spec-kit/pipeline.js';
+import { JIRA_CONTEXT_GITHUB_COMMENT_MARKER } from './jira-github-comment.js';
 import {
   runCodexBaCreateGithubIssuePhase,
   runCodexBaPrepare,
@@ -50,7 +50,23 @@ export function buildAiTeammateDeps(): AiTeammateDeps {
     addJiraIssueLabel: addIssueLabel,
     transitionIssueToStatusName,
     fetchRelatedIssueSummaries,
-    prepareSpecKitWorkspace: prepareIssueContextWithLogging,
+    fetchJiraContextFromGithubIssue: async (owner, repo, issueNumber) => {
+      const comments = await octokitRest.paginate(octokitRest.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number: issueNumber,
+        per_page: 100,
+      });
+      let latest = '';
+      for (const c of comments) {
+        const body = typeof c.body === 'string' ? c.body : '';
+        if (body.includes(JIRA_CONTEXT_GITHUB_COMMENT_MARKER)) {
+          const idx = body.indexOf(JIRA_CONTEXT_GITHUB_COMMENT_MARKER);
+          latest = body.slice(idx + JIRA_CONTEXT_GITHUB_COMMENT_MARKER.length).replace(/^\s*\n/, '').trim();
+        }
+      }
+      return latest;
+    },
     createGithubIssue: async (owner, repo, issueKey) => {
       await octokitRest.rest.issues.createLabel({
         owner, repo,

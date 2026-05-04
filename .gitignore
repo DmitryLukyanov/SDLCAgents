@@ -1,3 +1,6 @@
 node_modules/
 .env.local
 .claude/
+
+# AI Teammate / Codex BA local artifacts (cwd-relative, e.g. npm run ai-teammate:debug)
+spec-output/

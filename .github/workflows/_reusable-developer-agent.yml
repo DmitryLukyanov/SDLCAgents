@@ -13,6 +13,9 @@
 #   COPILOT_PAT     — PAT for checkout, setup, push
 #   OPENAI_API_KEY  — passed through to `_reusable-codex-run.yml`
 #
+# Optional secrets (consumer repo): when `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` are set,
+# developer-agent-setup writes `spec-output/<ISSUE_KEY>/issueContext.md` (Jira + merged spec-kit directives).
+#
 # Consumer usage: `.github/consumer-templates/developer-agent.yml` (`mode=speckit` | `mode=fix`)
 name: "[Reusable] Developer Agent"
 
@@ -158,6 +161,10 @@ jobs:
           PR_NUMBER: ${{ inputs.speckit_pr_number }}
           INPUT_PROMPT: ${{ inputs.prompt }}
           DEVELOPER_AGENT_MODEL: ${{ vars.DEVELOPER_AGENT_MODEL }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          TICKET_CONTEXT_DEPTH: ${{ vars.TICKET_CONTEXT_DEPTH }}
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-setup.ts
 
       - name: Materialize prompt into input_prompt.md

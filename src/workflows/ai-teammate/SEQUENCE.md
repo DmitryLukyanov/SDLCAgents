@@ -20,7 +20,7 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
     |
     |-- TS: codex_ba_create_github_issue
     |       Jira validate / read context
-    |       spec-output/<KEY>/ issueContext.md + constitution.md (typical)
+    |       GitHub: Jira snapshot comment on tracking issue (create_github_issue)
     |       GitHub: create Issue (placeholder title/body, jira:KEY label)
     |       write ba-github-issue-prep.json
     |

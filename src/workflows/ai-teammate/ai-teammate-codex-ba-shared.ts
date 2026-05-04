@@ -15,7 +15,7 @@ export interface BaGithubIssuePrepFile {
   partialRecords: StepRecord[];
   runnerCtx: Pick<
     RunnerContext,
-    'issueKey' | 'owner' | 'repo' | 'ref' | 'callerConfig' | 'configFile' | 'githubIssueNumber' | 'specKitContextFile'
+    'issueKey' | 'owner' | 'repo' | 'ref' | 'callerConfig' | 'configFile' | 'githubIssueNumber'
   >;
 }
 
@@ -25,7 +25,7 @@ export interface BaCodexStateFile {
   agentLabelParams: AgentLabelParams;
   runnerCtx: Pick<
     RunnerContext,
-    'issueKey' | 'owner' | 'repo' | 'ref' | 'callerConfig' | 'configFile' | 'githubIssueNumber' | 'specKitContextFile'
+    'issueKey' | 'owner' | 'repo' | 'ref' | 'callerConfig' | 'configFile' | 'githubIssueNumber'
   >;
   /** Path relative to repository root for Codex `output-file` */
   codexRelativeOutputPath: string;

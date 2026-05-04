@@ -41,12 +41,11 @@
 │  │   workflow_dispatch   │    │                                                          │  │
 │  │                       │    │   Runs TypeScript pipeline (ai-teammate-agent.ts):       │  │
 │  │   Scans Jira for      │    │   1. ensure_jira_fields_expected — validate description  │  │
-│  │   tickets, dispatches │    │   2. print_jira_context_to_stdout — spec-kit workspace   │  │
-│  │   ai-teammate.yml     │    │   3. create_github_issue — placeholder issue             │  │
-│  │   per ticket          │    │   4. params.skipIfLabel / Codex BA — GPT-4o analysis inline              │  │
-│  │                       │    │      complete → continue                                 │  │
+│  │   tickets, dispatches │    │   2. create_github_issue — placeholder + Jira snapshot comment │  │
+│  │   ai-teammate.yml     │    │   3. params.skipIfLabel / Codex BA — GPT-4o analysis inline              │  │
+│  │   per ticket          │    │      complete → continue                                 │  │
 │  │                       │    │      incomplete → block Jira, close issue, stop          │  │
-│  │                       │    │   5. assign_copilot — fill template, assign Copilot      │  │
+│  │                       │    │   4. assign_copilot — fill template, assign Copilot      │  │
 │  └──────────────────────┘    └──────────────────────────────┬───────────────────────────┘  │
 │                                                              │ Copilot assigned             │
 │                                                              ▼                              │
@@ -100,23 +99,13 @@
 │                               │                                                          │
 │                               ▼                                                          │
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
-│  │  Step: print_jira_context_to_stdout                                               │  │
-│  │  src/workflows/ai-teammate/steps/print-jira-context-to-stdout.ts                  │  │
-│  │                                                                                   │  │
-│  │  prepareSpecKitWorkspace() → prepareIssueContext() → spec-output/{key}/            │  │
-│  │    issueContext.md (Jira + directives) + constitution.md (from config/spec-kit)    │  │
-│  │  ctx.specKitContextFile ← spec-output/{key}/issueContext.md                       │  │
-│  │  runPrintJiraContextToStdout() — logs Jira fields + related tickets to stdout     │  │
-│  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
-│                               │                                                          │
-│                               ▼                                                          │
-│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
 │  │  Step: create_github_issue                                                        │  │
 │  │  src/workflows/ai-teammate/steps/create-github-issue.ts                           │  │
 │  │                                                                                   │  │
 │  │  ensure label "jira:{KEY}" exists                                                 │  │
 │  │  octokit.rest.issues.create → "⏳ BA analysis in progress..."                     │  │
 │  │  ctx.githubIssueNumber ← new issue number                                         │  │
+│  │  buildMinimalJiraGithubCommentMarkdown + comment (jira-github-comment.ts)         │  │
 │  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
 │                               │                                                          │
 │                               ▼                                                          │
@@ -140,8 +129,7 @@
 │  │  Step: assign_copilot                                                             │  │
 │  │  src/workflows/ai-teammate/steps/assign-copilot.ts                                │  │
 │  │                                                                                   │  │
-│  │  read config/spec-kit/defaults.json → global directive                            │  │
-│  │  read ctx.specKitContextFile (issueContext.md) → {{JIRA_CONTEXT}}                │  │
+│  │  fetchJiraContextFromGithubIssue → {{JIRA_CONTEXT}} (Jira-only comment)          │  │
 │  │  fill src/workflows/ai-teammate/templates/github-issue-with-copilot.md            │  │
 │  │  updateGithubIssue(issueNumber, {                                                 │  │
 │  │    body: filledTemplate,                                                          │  │
@@ -228,9 +216,8 @@
 │  - Fetched Jira ticket; verified description is non-empty                             │
 │  - (No description → transition to "In Review" + comment → stop)                     │
 │                                                                                       │
-│  Step: print_jira_context_to_stdout                                                   │
-│  - prepareIssueContext → spec-output/{KEY}/issueContext.md + constitution.md         │
-│  - Logged Jira ticket fields and related tickets to stdout                            │
+│  Optional: developer-agent setup may write spec-output/{KEY}/issueContext.md          │
+│  when Jira secrets are configured (spec-kit-context/issue-context.ts).               │
 │                                                                                       │
 │  Step: create_github_issue                                                            │
 │  - Created GitHub issue placeholder "{KEY}: Copilot Coding Agent Task"               │
@@ -245,7 +232,7 @@
 │                          closed GitHub issue as not planned → stop                    │
 │                                                                                       │
 │  Step: assign_copilot  (only reached if BA complete)                                  │
-│  - Filled github-issue-with-copilot.md template with BA results + spec-kit context   │
+│  - Filled github-issue-with-copilot.md template with BA results + Jira snapshot      │
 │  - PATCHed GitHub issue: full prompt body + assigned copilot-swe-agent[bot]          │
 └────────────────────────────┬──────────────────────────────────────────────────────────┘
                              │ Copilot assigned
@@ -295,9 +282,7 @@ sequenceDiagram
             AT->>J: transition to onEmpty.status + comment<br/>(default In Review in repo config)
             AT--xAT: stop pipeline
         else description present
-            Note over AT,GH: print_jira_context_to_stdout → spec-output/{KEY}/…
-            AT->>AT: prepareSpecKitWorkspace + log context
-            AT->>GH: create_github_issue (placeholder: BA in progress…)
+            AT->>GH: create_github_issue (placeholder: BA in progress… + Jira snapshot comment)
             rect rgb(220, 255, 220)
                 Note over AT,LLM: params.skipIfLabel / Codex BA (skipIfLabel ba_analyzed → stop if already labeled)
                 AT->>J: getIssue + related issues

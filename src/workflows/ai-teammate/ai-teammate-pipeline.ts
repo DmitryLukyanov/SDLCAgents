@@ -6,21 +6,21 @@
  *
  * Supported step runners:
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
- *   print_jira_context_to_stdout — logs Jira ticket details + prepares spec-kit workspace
  *   create_github_issue          — creates a GitHub issue placeholder; stores issue number in context
  *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow (omit or set `"enabled": false` to skip dispatch only)
+ *
+ * Jira context snapshot: `create_github_issue` posts a marked GitHub comment; `start_developer_agent` / `assign_copilot`
+ * read it back via `fetchJiraContextFromGithubIssue`.
  *
  * `ba_codex_async` is handled in `runPipelineCi` (`AI_TEAMMATE_MODE=pipeline_ci`): prepares prompt + state,
  * then the reusable workflow uploads artifacts and dispatches the `async_call` child (Codex is not inline here).
  * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
 import { appendFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { decodeCallerConfig } from '../../lib/caller-config.js';
 import { normalizePipelineStepIds, type PipelineStepConfig } from '../../lib/pipeline-config.js';
 import { getPipelineStartIndexFromCallerRoot, isStepEnabled } from '../../lib/pipeline-expected-step-helper.js';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
-import { runPrintJiraContextToStdout } from './steps/print-jira-context-to-stdout.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
@@ -30,29 +30,10 @@ import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome } from '.
 
 const AI_TEAMMATE_JOB_SUMMARY_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'job-summary-pipeline.md');
 
-/** spec-kit config as it appears on a print_jira_context_to_stdout pipeline step. */
-interface SpecKitStepConfig {
-  enabled?: boolean;
-  outputDir?: string;
-}
-
 export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, deps: AiTeammateDeps): Promise<StepOutcome> {
   switch (step.runner) {
     case 'ensure_jira_fields_expected': {
       return runEnsureJiraFieldsExpected(ctx, step as unknown as Parameters<typeof runEnsureJiraFieldsExpected>[1], deps);
-    }
-
-    case 'print_jira_context_to_stdout': {
-      const sk = step.specKit as SpecKitStepConfig | undefined;
-      if (sk?.enabled !== false) {
-        await deps.prepareSpecKitWorkspace({
-          issueKey: ctx.issueKey,
-          ...(sk?.outputDir ? { outputDir: sk.outputDir } : {}),
-        });
-        ctx.specKitContextFile = join(process.cwd(), 'spec-output', ctx.issueKey, 'issueContext.md');
-      }
-      await runPrintJiraContextToStdout(deps);
-      return { status: 'continue' };
     }
 
     case 'create_github_issue': {
@@ -66,7 +47,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, print_jira_context_to_stdout, create_github_issue, start_developer_agent (ba_codex_async is orchestrated by runPipelineCi).`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, start_developer_agent (ba_codex_async is orchestrated in runPipelineCi).`,
       );
   }
 }
@@ -145,7 +126,7 @@ export async function runPipelineThroughInclusive(
   issueKey: string,
   steps: PipelineStep[],
   deps: AiTeammateDeps,
-  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>,
+  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'baOutcome'>,
   lastInclusiveRunner: string,
 ): Promise<{ ctx: RunnerContext; records: StepRecord[] }> {
   const ctx: RunnerContext = { issueKey, ...ctxInit };

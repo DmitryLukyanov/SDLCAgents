@@ -74,8 +74,9 @@ const mockDeps: AiTeammateDeps = {
     ];
   },
 
-  prepareSpecKitWorkspace: async (opts) => {
-    console.log(`[mock] prepareSpecKitWorkspace(${opts.issueKey}) — skipped in debug`);
+  fetchJiraContextFromGithubIssue: async (owner, repo, issueNumber) => {
+    console.log(`[mock] fetchJiraContextFromGithubIssue(${owner}/${repo}#${issueNumber})`);
+    return '# Mock Jira context\n\n(from GitHub comment in local debug)';
   },
 
   addJiraIssueLabel: async (key, label) => {

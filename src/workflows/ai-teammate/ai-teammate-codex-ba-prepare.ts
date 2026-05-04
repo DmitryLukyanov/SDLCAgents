@@ -27,7 +27,7 @@ async function requireCodexBaPipelineContext(): Promise<{
   issueKey: string;
   steps: PipelineStep[];
   agentLabelParams: AgentLabelParams;
-  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>;
+  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'baOutcome'>;
 }> {
   const { issueKey, steps, ctxInit, runner, agentLabelParams } = await loadAiTeammatePipelineFromEnv();
   assertConcurrencyKeyMatchesIssue(issueKey);
@@ -57,7 +57,6 @@ export function writeBaGithubIssuePrepCheckpoint(
       callerConfig: ctx.callerConfig,
       configFile: ctx.configFile,
       githubIssueNumber: ctx.githubIssueNumber,
-      specKitContextFile: ctx.specKitContextFile,
     },
   };
 
@@ -157,7 +156,6 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
       callerConfig: ctx.callerConfig,
       configFile: ctx.configFile,
       githubIssueNumber: ctx.githubIssueNumber,
-      specKitContextFile: ctx.specKitContextFile,
     },
     codexRelativeOutputPath,
     partialRecords: records,

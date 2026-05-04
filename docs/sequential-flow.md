@@ -72,16 +72,6 @@ AI TEAMMATE — one run per dispatched issue
           extractIssueKeyFromCallerConfig(root) [src/lib/caller-config.ts]
           runPipeline(issueKey, steps, deps)     [ai-teammate-pipeline.ts]
             (steps from config/workflows/ai-teammate/ai-teammate.config)
-            For print_jira_context_to_stdout step (typical):
-              deps.prepareSpecKitWorkspace(opts)  [ai-teammate-agent wires →
-                                                      prepareIssueContextWithLogging in spec-kit/pipeline.ts]
-                → prepareIssueContext() in spec-kit/issue-context.ts
-                  issueContext.md + constitution.md → spec-output/{key}/
-              runPrintJiraContextToStdout(deps)   [steps/print-jira-context-to-stdout.ts]
-                getIssue(issueKey, fields)        [jira-client.ts]
-                statusAllowsRead(required status) [jira-status.ts] — exits if mismatch
-                fetchRelatedIssueSummaries(...)   [jira-related.ts] if TICKET_CONTEXT_DEPTH >= 1
-                (logs ticket body/comments; no Jira transition here)
     |
     v
   Step: create_github_issue
@@ -90,6 +80,10 @@ AI TEAMMATE — one run per dispatched issue
             ensure label "jira:{KEY}" exists (create if absent)
             octokit.rest.issues.create → placeholder "⏳ BA analysis in progress..."
           ctx.githubIssueNumber ← new issue number
+          buildMinimalJiraGithubCommentMarkdown() [jira-github-comment.ts]
+            getIssue(issueKey, …) [jira-client.ts] + statusAllowsRead [jira-status.ts]
+            fetchRelatedIssueSummaries(...) [jira-related.ts] if TICKET_CONTEXT_DEPTH >= 1
+          deps.addGithubIssueComment → marker `<!-- sdlc-agents:jira-context -->` + Jira-only markdown
     |
     v
   Step: Codex BA (params.skipIfLabel / addLabel)
@@ -120,10 +114,9 @@ AI TEAMMATE — one run per dispatched issue
     v
   Step: assign_copilot
     --> [TS:src/workflows/ai-teammate/steps/assign-copilot.ts] runAssignCopilot()
-          read config/spec-kit/defaults.json → global directive
-          read ctx.specKitContextFile (issueContext.md) → {{JIRA_CONTEXT}}
+          deps.fetchJiraContextFromGithubIssue → {{JIRA_CONTEXT}} (Jira-only snapshot comment)
           fill template: src/workflows/ai-teammate/templates/github-issue-with-copilot.md
-            {{ISSUE_KEY}}, {{DIRECTIVE_PART}}, {{SPECIFY_INPUT}}, {{CLARIFY_INPUT}},
+            {{ISSUE_KEY}}, {{DIRECTIVE_PART}} (empty), {{SPECIFY_INPUT}}, {{CLARIFY_INPUT}},
             {{PLAN_INPUT}}, {{TASKS_INPUT}}, {{IMPLEMENT_INPUT}}
           deps.updateGithubIssue(owner, repo, issueNumber, {
             body: filledTemplate,

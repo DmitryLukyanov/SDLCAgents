@@ -24,6 +24,7 @@ import { Octokit } from '@octokit/rest';
 
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
+import { tryWriteSpecKitIssueContextFile } from './spec-kit-context/issue-context.js';
 
 /* ------------------------------------------------------------------ */
 /*  Mode                                                               */
@@ -249,6 +250,14 @@ async function runSpeckitSetup(): Promise<void> {
     featureDir = saved.featureDir ?? dirname(statePath);
     console.log(`[dev-agent-setup] Continuing on PR #${prNumber} (branch: ${branchName})`);
   }
+
+  const depthRaw = parseInt(process.env['TICKET_CONTEXT_DEPTH'] ?? '1', 10);
+  const ticketContextDepth = !Number.isNaN(depthRaw) && depthRaw >= 0 ? depthRaw : 1;
+  await tryWriteSpecKitIssueContextFile({
+    issueKey,
+    cwd: process.cwd(),
+    ticketContextDepth,
+  });
 
   const { data: issue } = await octokit.rest.issues.get({ owner, repo, issue_number: issueNumber });
   const config = extractPipelineConfig(issue.body ?? '');

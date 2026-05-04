@@ -14,7 +14,6 @@ import type { AiTeammateDeps, RunnerContext, StepOutcome } from '../runner-types
 import { fillTemplate } from '../../../lib/template-utils.js';
 
 const TEMPLATE_PATH = '.sdlc-agents/src/workflows/ai-teammate/templates/github-issue.md';
-const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
 const TBD = '{TBD}';
 
 /**
@@ -51,25 +50,17 @@ export async function runStartDeveloperAgent(
 
   const result = ctx.baOutcome.result;
 
-  // ── Read global directive ────────────────────────────────────────
-  let directivePart = '';
-  try {
-    const defaultsRaw = await readFile(resolve(process.cwd(), DEFAULTS_PATH), 'utf8');
-    const defaults = JSON.parse(defaultsRaw) as { globalDirective?: string };
-    const directive = defaults.globalDirective?.trim();
-    if (directive) directivePart = `${directive} — `;
-  } catch {
-    // non-fatal — directive is optional
-  }
+  // Global directive for pipeline step inputs is owned by developer-agent / config/spec-kit (not AI Teammate).
 
-  // ── Read Jira context from issueContext.md ──────────────────────
+  // ── Read Jira context from GitHub issue comment (posted in create_github_issue) ──
   let jiraContext = '';
-  if (ctx.specKitContextFile) {
-    try {
-      jiraContext = await readFile(ctx.specKitContextFile, 'utf8');
-    } catch (e) {
-      console.warn('   ⚠️ Could not read issueContext.md (non-fatal):', e);
-    }
+  try {
+    jiraContext = await deps.fetchJiraContextFromGithubIssue(owner, repo, ctx.githubIssueNumber);
+  } catch (e) {
+    console.warn('   ⚠️ Could not read Jira context comment (non-fatal):', e);
+  }
+  if (!jiraContext.trim()) {
+    console.warn('   ⚠️ No Jira snapshot comment found — issue body may omit full Jira markdown');
   }
 
   // ── Fill issue body template ─────────────────────────────────────
@@ -81,7 +72,7 @@ export async function runStartDeveloperAgent(
   // would produce invalid JSON if interpolated as-is.
   const issueBody = fillTemplate(template, {
     ISSUE_KEY: issueKey,
-    DIRECTIVE_PART: toJsonSafe(directivePart),
+    DIRECTIVE_PART: toJsonSafe(''),
     JIRA_CONTEXT: jiraContext,
     SPECIFY_INPUT: toJsonSafe(result.specifyInput || TBD),
     CLARIFY_INPUT: toJsonSafe(result.clarifyInput || TBD),

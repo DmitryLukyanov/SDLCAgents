@@ -27,7 +27,7 @@ export interface LoadedAiTeammatePipeline {
   steps: PipelineStep[];
   /** From `params.skipIfLabel` / `params.addLabel`. */
   agentLabelParams: AgentLabelParams;
-  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'specKitContextFile' | 'baOutcome'>;
+  ctxInit: Omit<RunnerContext, 'issueKey' | 'githubIssueNumber' | 'baOutcome'>;
   configFileAbs: string;
   runner: string;
 }

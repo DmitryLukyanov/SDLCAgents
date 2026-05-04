@@ -60,6 +60,7 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: write
+      actions: write
       pull-requests: write
       issues: write
     steps:
@@ -82,6 +83,15 @@ jobs:
 
       - name: Checkout consumer repo
         uses: actions/checkout@v4
+
+      - name: Upload input configuration artifact
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/upload-workflow-dispatch-inputs-artifact@master
+        with:
+          concurrency_key: ${{ inputs.concurrency_key }}
+          config_file: ${{ inputs.config_file }}
+          caller_config: ${{ inputs.caller_config }}
+          artifact_name: ai-teammate-${{ inputs.concurrency_key }}-input-configuration
+          checkout_repository: 'false'
 
       - name: Checkout SDLCAgents (scripts)
         uses: actions/checkout@v4

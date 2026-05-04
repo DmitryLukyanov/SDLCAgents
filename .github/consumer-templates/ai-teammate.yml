@@ -2,7 +2,7 @@
 # Triggered by Scrum Master via workflow_dispatch.
 # Delegates all logic to the shared SDLCAgents reusable workflow.
 #
-# Parallel job uploads ai-teammate-<key>-workflow-dispatch-inputs (expanded JSON: embedded config + decoded caller_config).
+# Input-configuration artifact: uploaded inside the shared reusable workflow as ai-teammate-<key>-input-configuration.
 name: AI Teammate
 run-name: "${{ inputs.concurrency_key }} · AI Teammate"
 
@@ -28,20 +28,6 @@ on:
         type: string
 
 jobs:
-  workflow_dispatch_inputs_artifact:
-    name: Snapshot workflow_dispatch inputs
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
-    steps:
-      - uses: DmitryLukyanov/SDLCAgents/.github/actions/upload-workflow-dispatch-inputs-artifact@master
-        with:
-          concurrency_key: ${{ inputs.concurrency_key }}
-          config_file: ${{ inputs.config_file }}
-          caller_config: ${{ inputs.caller_config }}
-          artifact_name: ai-teammate-${{ inputs.concurrency_key }}-workflow-dispatch-inputs
-
   call:
     permissions:
       contents: write

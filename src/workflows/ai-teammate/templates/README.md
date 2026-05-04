@@ -24,29 +24,24 @@ The Jira issue key that triggered the workflow.
 
 ### `{{DIRECTIVE_PART}}`
 
-An optional global directive prepended to every spec-kit step input so
-that project-wide rules are always included in the Copilot prompt.
+Reserved for prepending text to every pipeline step input in the GitHub issue
+JSON block. AI Teammate always fills this with an **empty string**; use
+`config/spec-kit/defaults.json` and developer-agent setup if you need a
+merged `issueContext.md` on the branch.
 
-- **Format:** `<directive text> — ` (note the trailing ` — ` separator) when
-  a directive is configured, or an **empty string** when none is set.
-- **Source:** `globalDirective` field in `config/spec-kit/defaults.json` in
-  the consumer repository. If the file is missing or the field is absent the
-  value is silently set to `""`.
-- **Used in:** `github-issue-with-copilot.md`
+- **Used in:** `github-issue-with-copilot.md`, `github-issue.md`
 
 ---
 
 ### `{{JIRA_CONTEXT}}`
 
-The full contents of the `issueContext.md` file produced by the spec-kit
-pipeline's context-preparation step. Contains the Jira ticket summary,
-description, acceptance criteria, and any related-issue summaries.
+Jira-only snapshot markdown (summary, description, related issues) from the
+GitHub issue comment posted in `create_github_issue`.
 
 - **Format:** Markdown prose (multi-line).
-- **Source:** `ctx.specKitContextFile` — the absolute path written by
-  `prepareSpecKitWorkspace` (`src/workflows/ai-teammate/spec-kit/pipeline.ts`).
-  If the file cannot be read the value falls back to `""`.
-- **Used in:** `github-issue-with-copilot.md`
+- **Source:** `fetchJiraContextFromGithubIssue` — reads the GitHub issue comment that begins with the marker
+  `<!-- sdlc-agents:jira-context -->`. If none is found, the value is empty.
+- **Used in:** `github-issue-with-copilot.md`, `github-issue.md`
 
 ---
 
@@ -126,7 +121,7 @@ observers know the agent is running.
 ### `ba-complete.md`
 
 **Purpose:** GitHub issue comment posted when BA analysis succeeds and all
-5 spec-kit fields have been extracted.
+five BA pipeline fields have been extracted.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 

@@ -12,7 +12,6 @@ import { fillTemplate, loadTemplate } from '../../../lib/template-utils.js';
 
 const TEMPLATE_PATH = '.sdlc-agents/src/workflows/ai-teammate/templates/github-issue-with-copilot.md';
 const AGENT_INSTRUCTIONS_TEMPLATE = loadTemplate(import.meta.url, '..', 'prompts', 'copilot-agent-instructions.md');
-const DEFAULTS_PATH = 'config/spec-kit/defaults.json';
 const TBD = '{TBD}';
 
 export async function runAssignCopilot(
@@ -30,25 +29,11 @@ export async function runAssignCopilot(
 
   const result = ctx.baOutcome.result;
 
-  // ── Read global directive ────────────────────────────────────────
-  let directivePart = '';
-  try {
-    const defaultsRaw = await readFile(resolve(process.cwd(), DEFAULTS_PATH), 'utf8');
-    const defaults = JSON.parse(defaultsRaw) as { globalDirective?: string };
-    const directive = defaults.globalDirective?.trim();
-    if (directive) directivePart = `${directive} — `;
-  } catch {
-    // non-fatal — directive is optional
-  }
-
-  // ── Read Jira context from issueContext.md ──────────────────────
   let jiraContext = '';
-  if (ctx.specKitContextFile) {
-    try {
-      jiraContext = await readFile(ctx.specKitContextFile, 'utf8');
-    } catch (e) {
-      console.warn('   ⚠️ Could not read issueContext.md (non-fatal):', e);
-    }
+  try {
+    jiraContext = await deps.fetchJiraContextFromGithubIssue(owner, repo, ctx.githubIssueNumber);
+  } catch (e) {
+    console.warn('   ⚠️ Could not read Jira context comment (non-fatal):', e);
   }
 
   // ── Read template ────────────────────────────────────────────────
@@ -58,7 +43,7 @@ export async function runAssignCopilot(
   // ── Fill template ────────────────────────────────────────────────
   const prompt = fillTemplate(template, {
     ISSUE_KEY: issueKey,
-    DIRECTIVE_PART: directivePart,
+    DIRECTIVE_PART: '',
     JIRA_CONTEXT: jiraContext,
     SPECIFY_INPUT: result.specifyInput || TBD,
     CLARIFY_INPUT: result.clarifyInput || TBD,

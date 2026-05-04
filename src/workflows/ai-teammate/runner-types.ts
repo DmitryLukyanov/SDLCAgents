@@ -6,7 +6,6 @@
  */
 import type { JiraIssue } from '../../lib/jira/jira-types.js';
 import type { RelatedIssueSummary } from '../../lib/jira/jira-related.js';
-import type { IssueContextPrepOptions } from './spec-kit/pipeline.js';
 import type { BaOutcome } from '../business-analyst/ba-types.js';
 
 /** Used by `assign_copilot` to set issue body, assignees, and Copilot agent instructions. */
@@ -22,7 +21,8 @@ export interface AiTeammateDeps {
   addJiraIssueLabel: (key: string, label: string) => Promise<void>;
   transitionIssueToStatusName: (key: string, status: string) => Promise<void>;
   fetchRelatedIssueSummaries: (key: string, depth: number) => Promise<RelatedIssueSummary[]>;
-  prepareSpecKitWorkspace: (opts: IssueContextPrepOptions) => Promise<void>;
+  /** Reads the Jira snapshot from the GitHub issue comment marked with `JIRA_CONTEXT_GITHUB_COMMENT_MARKER`. */
+  fetchJiraContextFromGithubIssue: (owner: string, repo: string, issueNumber: number) => Promise<string>;
   createGithubIssue: (owner: string, repo: string, issueKey: string) => Promise<number>;
   /** Update the GitHub issue body (no Copilot assignment). */
   updateGithubIssueBody: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;
@@ -56,8 +56,6 @@ export interface RunnerContext {
   configFile: string;
   /** Written by create_github_issue; read by subsequent steps. */
   githubIssueNumber?: number;
-  /** Written by print_jira_context_to_stdout after spec-kit prep; read by assign_copilot. */
-  specKitContextFile?: string;
   /** Set after BA (Codex) analysis; read by `start_developer_agent`. */
   baOutcome?: BaOutcome;
 }

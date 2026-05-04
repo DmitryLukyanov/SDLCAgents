@@ -193,11 +193,10 @@ flowchart TD
 
     subgraph AT [AI Teammate — reusable workflow + agent]
         A1[ensure_jira_fields_expected]
-        A2[print_jira_context_to_stdout\n+ spec-output issueContext.md]
-        A3[create_github_issue]
-        A4[Codex BA — openai/codex-action\n(params.skipIfLabel / addLabel)]
-        A5[start_developer_agent]
-        A1 --> A2 --> A3 --> A4 --> A5
+        A2[create_github_issue\n+ Jira snapshot comment]
+        A3[Codex BA — async / openai/codex-action\n(params.skipIfLabel / addLabel)]
+        A4[start_developer_agent]
+        A1 --> A2 --> A3 --> A4
     end
 
     SM3 --> A1
