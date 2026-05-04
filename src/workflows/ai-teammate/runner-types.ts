@@ -70,6 +70,8 @@ export interface RunnerContext {
   githubIssueNumber?: number;
   /** Set after BA (Codex) analysis; read by `start_developer_agent`. */
   baOutcome?: BaOutcome;
+  /** Prior step records from pipeline execution (used by ba_async prepare for checkpoint). */
+  priorStepRecords?: StepRecord[];
 }
 
 /**

@@ -59,7 +59,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     }
 
     case 'ba_async': {
-      await prepareCodexBaArtifacts(ctx, ctx.agentLabelParams ?? {}, deps);
+      await prepareCodexBaArtifacts(ctx, ctx.agentLabelParams ?? {}, deps, ctx.priorStepRecords);
       return { status: 'continue' };
     }
 
@@ -408,6 +408,7 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         );
       }
       // Run the step to prepare input artifacts, then signal handoff.
+      ctx.priorStepRecords = records;
       const prepOutcome = await runPipelineStep(ctx, step as PipelineStep, deps);
       records.push({ runner: step.runner, status: prepOutcome.status, durationMs: Date.now() - t0 });
       if (prepOutcome.status === 'stop') {
@@ -457,3 +458,4 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
 export async function runPipelineCi(deps: AiTeammateDeps): Promise<void> {
   await runPipelineFromConfigForCi(deps);
 }
+

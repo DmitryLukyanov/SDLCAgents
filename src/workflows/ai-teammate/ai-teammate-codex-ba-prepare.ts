@@ -95,6 +95,7 @@ export async function prepareCodexBaArtifacts(
   ctx: RunnerContext,
   agentLabelParams: AgentLabelParams,
   deps: AiTeammateDeps,
+  partialRecords?: StepRecord[],
 ): Promise<void> {
   const contract = loadAgentInvocationContractFromConfigFile(ctx.configFile);
   assertBaCodexPrepareContract(contract);
@@ -155,6 +156,7 @@ export async function prepareCodexBaArtifacts(
       githubIssueNumber: ctx.githubIssueNumber,
     },
     codexRelativeOutputPath: p.codexRelativeOutputPath,
+    ...(partialRecords && { partialRecords }),
   };
 
   writeFileSync(p.state, JSON.stringify(state, null, 2) + '\n', 'utf8');
