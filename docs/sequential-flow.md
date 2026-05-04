@@ -112,18 +112,8 @@ AI TEAMMATE — one run per dispatched issue
             return { status: 'stop', reason: "BA incomplete" }
     |
     v
-  Step: assign_copilot
-    --> [TS:src/workflows/ai-teammate/steps/assign-copilot.ts] runAssignCopilot()
-          deps.fetchJiraContextFromGithubIssue → {{JIRA_CONTEXT}} (Jira-only snapshot comment)
-          fill template: src/workflows/ai-teammate/templates/github-issue-with-copilot.md
-            {{ISSUE_KEY}}, {{DIRECTIVE_PART}} (empty), {{SPECIFY_INPUT}}, {{CLARIFY_INPUT}},
-            {{PLAN_INPUT}}, {{TASKS_INPUT}}, {{IMPLEMENT_INPUT}}
-          deps.updateGithubIssue(owner, repo, issueNumber, {
-            body: filledTemplate,
-            assignees: ['copilot-swe-agent[bot]'],
-            agentInstructions: "add label jira:{KEY} to PR..."
-          })
-          → Copilot picks up, runs sdlc.pipeline.agent.md, opens PR
+  (Removed) Step: assign_copilot
+    This step is no longer used by the pipeline.
 
 --------------------------------------------------------------------------------
 CONFIG / SECRETS (reference)

@@ -45,7 +45,7 @@
 │  │   ai-teammate.yml     │    │   3. params.skipIfLabel / Codex BA — GPT-4o analysis inline              │  │
 │  │   per ticket          │    │      complete → continue                                 │  │
 │  │                       │    │      incomplete → block Jira, close issue, stop          │  │
-│  │                       │    │   4. assign_copilot — fill template, assign Copilot      │  │
+│  │                       │    │   4. start_developer_agent — update issue + dispatch workflow │  │
 │  └──────────────────────┘    └──────────────────────────────┬───────────────────────────┘  │
 │                                                              │ Copilot assigned             │
 │                                                              ▼                              │
@@ -126,16 +126,12 @@
 │                               │ BA complete                                              │
 │                               ▼                                                          │
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
-│  │  Step: assign_copilot                                                             │  │
-│  │  src/workflows/ai-teammate/steps/assign-copilot.ts                                │  │
+│  │  Step: start_developer_agent                                                      │  │
+│  │  src/workflows/ai-teammate/steps/start-developer-agent.ts                         │  │
 │  │                                                                                   │  │
-│  │  fetchJiraContextFromGithubIssue → {{JIRA_CONTEXT}} (Jira-only comment)          │  │
-│  │  fill src/workflows/ai-teammate/templates/github-issue-with-copilot.md            │  │
-│  │  updateGithubIssue(issueNumber, {                                                 │  │
-│  │    body: filledTemplate,                                                          │  │
-│  │    assignees: ['copilot-swe-agent[bot]'],                                         │  │
-│  │    agentInstructions: "add label jira:{KEY} to PR..."                             │  │
-│  │  }) → Copilot runs sdlc.pipeline.agent.md, opens PR                               │  │
+│  │  updateGithubIssueBody(issueNumber, body)                                         │  │
+│  │  dispatchDeveloperAgent(workflowFile, ref, inputs)                                │  │
+│  │    → developer agent workflow opens a PR                                          │  │
 │  └───────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                          │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
@@ -231,7 +227,7 @@
 │                          updated Jira status: In Progress → Blocked                   │
 │                          closed GitHub issue as not planned → stop                    │
 │                                                                                       │
-│  Step: assign_copilot  (only reached if BA complete)                                  │
+│  Step: start_developer_agent  (only reached if BA complete)                           │
 │  - Filled github-issue-with-copilot.md template with BA results + Jira snapshot      │
 │  - PATCHed GitHub issue: full prompt body + assigned copilot-swe-agent[bot]          │
 └────────────────────────────┬──────────────────────────────────────────────────────────┘
@@ -292,9 +288,9 @@ sequenceDiagram
                     LLM-->>AT: complete outcome
                     AT->>J: add label ba_analyzed (from config)
                     AT->>GH: optional comment: BA complete
-                    Note over AT,GH: assign_copilot — github-issue-with-copilot.md + assign copilot-swe-agent[bot]
-                    AT->>GH: Update issue body + assignee → Copilot session starts
-                    COP->>GH: Read issue, spec-kit / implement
+                    Note over AT,GH: start_developer_agent — update issue + dispatch workflow
+                    AT->>GH: Update issue body
+                    AT->>GH: Dispatch developer agent workflow
                     COP->>PR: Open PR (e.g. label jira:KEY)
                     Note over PR: PR ready → human review / approve / merge
                 else BA incomplete
