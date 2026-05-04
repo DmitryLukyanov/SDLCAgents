@@ -233,10 +233,11 @@ jobs:
           export AI_TEAMMATE_ENTRY_WORKFLOW_FILE="${ENTRY_FILE}"
           .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/dispatch-pipeline-async-child-ci.ts
 
-      - name: Upload Spec Kit artifacts
+      # Optional dump of `spec-output/<key>/` (Codex BA handoff, local debug) — not spec-kit step output.
+      - name: Upload spec-output (optional)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: spec-kit-${{ inputs.concurrency_key }}
+          name: ai-teammate-${{ inputs.concurrency_key }}-spec-output
           path: spec-output/
           if-no-files-found: ignore
