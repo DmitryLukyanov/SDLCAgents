@@ -9,7 +9,8 @@ import { resolve } from 'node:path';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { getBaAnalysisSystemPrompt, buildBaTicketPrompt } from '../business-analyst/analyze-ticket.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
-import { runPipelineThroughInclusive, type StepRecord } from './ai-teammate-pipeline.js';
+import { runPipelineThroughInclusive } from './ai-teammate-pipeline.js';
+import type { StepRecord } from './runner-types.js';
 import { collectCodexBaTicketContextFromJira } from './steps/collect-codex-ba-ticket-context-from-jira.js';
 import type { AgentLabelParams, AiTeammateDeps, PipelineStep, RunnerContext } from './runner-types.js';
 import {

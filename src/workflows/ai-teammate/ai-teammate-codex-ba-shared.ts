@@ -9,8 +9,7 @@ import {
   loadAgentInvocationContractFromConfigFile,
 } from '../../lib/agent-invocation-contract.js';
 import type { TicketContext } from '../business-analyst/ba-types.js';
-import type { AgentLabelParams, RunnerContext } from './runner-types.js';
-import type { StepRecord } from './ai-teammate-pipeline.js';
+import type { AgentLabelParams, RunnerContext, StepRecord } from './runner-types.js';
 
 export const STATE_VERSION = 1 as const;
 export const GITHUB_ISSUE_PREP_VERSION = 1 as const;

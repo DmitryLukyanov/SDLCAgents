@@ -12,11 +12,12 @@
  * Jira context snapshot: `create_github_issue` appends a marked block to the issue body; `start_developer_agent` / `assign_copilot`
  * read it back via `fetchJiraContextFromGithubIssue`.
  *
- * `ba_codex_async` is handled in `runPipelineCi` (`AI_TEAMMATE_MODE=pipeline_ci`): prepares prompt + state,
- * then the reusable workflow uploads artifacts and dispatches the `async_call` child (Codex is not inline here).
+ * Any step with `async_call` in config is handled generically: the pipeline calls `asyncStepRegistry[step.runner].prepare()`
+ * on the first run, then the reusable workflow uploads artifacts and dispatches the `async_call` child.
  * Parent **resume** after the child: `caller_config.params.async_child_run_id` + `async_trigger_step` — walk steps
- * from the beginning, skip through the trigger step (checkpoint rows), complete the async step from handoff
- * artifacts (see {@link ../../lib/invocation-handoff.js assertManifestMatchesAsyncStepAndPrimaryOutputPresent}), then run remaining steps.
+ * from the beginning, skip through the trigger step (checkpoint rows), call `asyncStepRegistry[step.runner].finish()`
+ * (see {@link ../../lib/invocation-handoff.js assertManifestMatchesAsyncStepAndPrimaryOutputPresent}), then run remaining steps.
+ * New async runners: add an `AsyncStepRunnerDef` to `async-step-registry.ts` — no pipeline code changes needed.
  * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
@@ -38,7 +39,10 @@ import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
 import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
-import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome } from './runner-types.js';
+import type { AiTeammateDeps, AsyncStepFinishResult, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
+
+// StepRecord is defined in runner-types.ts; re-exported here for backward compat.
+export type { StepRecord } from './runner-types.js';
 
 const AI_TEAMMATE_JOB_SUMMARY_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'job-summary-pipeline.md');
 
@@ -64,14 +68,6 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
   }
 }
 
-export interface StepRecord {
-  runner: string;
-  status: 'continue' | 'stop';
-  reason?: string;
-  durationMs: number;
-  /** Set on resume: rows from `ba-codex-state.json` were executed in the prepare run, not repeated in this job. */
-  source?: 'prepare_checkpoint' | 'this_invocation';
-}
 
 export async function writeAiTeammatePipelineSummary(
   issueKey: string,
@@ -343,10 +339,13 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
           `Pipeline async resume: step id "${triggerStep.id}" (${triggerStep.runner}) has no async_call.workflowFile.`,
         );
       }
-      if (triggerStep.runner !== 'ba_codex_async') {
+
+      const { asyncStepRegistry } = await import('./async-step-registry.js');
+      const asyncRunner = asyncStepRegistry[triggerStep.runner];
+      if (!asyncRunner) {
         throw new Error(
-          `Pipeline async resume: step "${triggerStep.id}" uses runner "${triggerStep.runner}" — ` +
-            'only "ba_codex_async" has built-in resume handling today.',
+          `Pipeline async resume: no async step runner registered for "${triggerStep.runner}". ` +
+            `Register it in async-step-registry.ts.`,
         );
       }
 
@@ -383,27 +382,26 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         return;
       }
 
-      const { resumeBaCodexAsyncOutcomeOnly } = await import('./ai-teammate-codex-ba-finish.js');
-      const resumePack = await resumeBaCodexAsyncOutcomeOnly(deps);
-      ctx = resumePack.ctx;
+      const finishResult: AsyncStepFinishResult = await asyncRunner.finish(issueKey, ctx, triggerStep as PipelineStep, deps);
+      ctx = finishResult.ctx;
       records.push({
-        ...resumePack.inlineRecord,
+        ...finishResult.inlineRecord,
         durationMs: Date.now() - t0,
         source: 'this_invocation',
       });
 
-      if (resumePack.stepOutcome.status === 'stop') {
-        console.log(`\n🛑 Pipeline halted at ${triggerStep.runner}: ${resumePack.stepOutcome.reason}`);
+      if (finishResult.stepOutcome.status === 'stop') {
+        console.log(`\n🛑 Pipeline halted at ${triggerStep.runner}: ${finishResult.stepOutcome.reason}`);
         await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
         return;
       }
       continue;
     }
 
-    if (step.runner === 'ba_codex_async') {
+    if (step.async_call) {
       if (resumeAfterAsyncChild) {
         throw new Error(
-          'Pipeline async resume: encountered ba_codex_async after async_trigger_step; only one async handoff boundary is supported per invocation.',
+          'Pipeline async resume: encountered an async step after async_trigger_step; only one async handoff boundary is supported per invocation.',
         );
       }
       const t0 = Date.now();
@@ -427,18 +425,21 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         });
         continue;
       }
-      const wf = step.async_call?.workflowFile?.trim();
+      const wf = step.async_call.workflowFile?.trim();
       if (!wf) {
         throw new Error(
-          'ba_codex_async is enabled but has no async_call.workflowFile. ' +
-            'Inline Codex was removed from AI Teammate — add async_call (e.g. business-analyst.yml) or set enabled: false.',
+          `Step "${step.runner}" (id "${step.id}") has async_call but no async_call.workflowFile. ` +
+            'Add async_call.workflowFile or set enabled: false.',
         );
       }
-      const { runCodexBaPreparePromptPhase, writeBaGithubIssuePrepCheckpoint } = await import(
-        './ai-teammate-codex-ba-prepare.js',
-      );
-      writeBaGithubIssuePrepCheckpoint(issueKey, ctx, records);
-      await runCodexBaPreparePromptPhase(deps);
+      const { asyncStepRegistry } = await import('./async-step-registry.js');
+      const asyncRunner = asyncStepRegistry[step.runner];
+      if (!asyncRunner) {
+        throw new Error(
+          `No async step runner registered for "${step.runner}". Register it in async-step-registry.ts.`,
+        );
+      }
+      await asyncRunner.prepare(issueKey, ctx, step as PipelineStep, deps, records);
       records.push({ runner: step.runner, status: 'continue', durationMs: Date.now() - t0 });
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
