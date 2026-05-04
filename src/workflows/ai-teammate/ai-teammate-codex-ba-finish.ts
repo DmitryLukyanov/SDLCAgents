@@ -106,7 +106,7 @@ export async function resumeBaCodexAsyncOutcomeOnly(deps: AiTeammateDeps): Promi
 
   const stepOutcome = await applyCodexBaOutcomeToJiraAndGithub(ctx, agentLabelParams, deps, outcome);
 
-  const priorForSummary: StepRecord[] = state.partialRecords.map(r => ({
+  const priorForSummary: StepRecord[] = (state.partialRecords ?? []).map(r => ({
     ...r,
     source: 'prepare_checkpoint',
   }));

@@ -34,7 +34,8 @@ export interface BaCodexStateFile {
   >;
   /** Path relative to repository root for Codex `output-file` */
   codexRelativeOutputPath: string;
-  partialRecords: StepRecord[];
+  /** Legacy: partial step records from the prepare run (used only for pipeline summary display). */
+  partialRecords?: StepRecord[];
 }
 
 /**

@@ -36,10 +36,12 @@ import {
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
+import { runPrepareBaPrompt } from './steps/prepare-ba-prompt.js';
+import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
 import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
-import type { AiTeammateDeps, AsyncStepFinishResult, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
+import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
 
 // StepRecord is defined in runner-types.ts; re-exported here for backward compat.
 export type { StepRecord } from './runner-types.js';
@@ -54,6 +56,14 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
 
     case 'create_github_issue': {
       return runCreateGithubIssue(ctx, deps);
+    }
+
+    case 'prepare_ba_prompt': {
+      return runPrepareBaPrompt(ctx, step, deps);
+    }
+
+    case 'apply_ba_outcome': {
+      return runApplyBaOutcome(ctx, step, deps);
     }
 
     case 'start_developer_agent': {
@@ -340,15 +350,7 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         );
       }
 
-      const { asyncStepRegistry } = await import('./async-step-registry.js');
-      const asyncRunner = asyncStepRegistry[triggerStep.runner];
-      if (!asyncRunner) {
-        throw new Error(
-          `Pipeline async resume: no async step runner registered for "${triggerStep.runner}". ` +
-            `Register it in async-step-registry.ts.`,
-        );
-      }
-
+      // Verify the async child uploaded its output artifacts before we continue.
       assertManifestMatchesAsyncStepAndPrimaryOutputPresent({
         cwd: process.cwd(),
         issueKey,
@@ -369,39 +371,22 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
         return;
       }
-      if (skipBa) {
-        console.log(`   ⏭ Skipped — BA segment gated (${skipBa})`);
-        records.push({
-          runner: triggerStep.runner,
-          status: 'continue',
-          reason: `skipped (${skipBa})`,
-          durationMs: Date.now() - t0,
-          source: 'this_invocation',
-        });
-        await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
-        return;
-      }
 
-      const finishResult: AsyncStepFinishResult = await asyncRunner.finish(issueKey, ctx, triggerStep as PipelineStep, deps);
-      ctx = finishResult.ctx;
+      // Output artifacts are on disk (downloaded by the YAML step before this script ran).
+      // The next sync step (apply_ba_outcome) will read them.
       records.push({
-        ...finishResult.inlineRecord,
+        runner: triggerStep.runner,
+        status: 'continue',
         durationMs: Date.now() - t0,
         source: 'this_invocation',
       });
-
-      if (finishResult.stepOutcome.status === 'stop') {
-        console.log(`\n🛑 Pipeline halted at ${triggerStep.runner}: ${finishResult.stepOutcome.reason}`);
-        await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
-        return;
-      }
       continue;
     }
 
     if (step.async_call) {
       if (resumeAfterAsyncChild) {
         throw new Error(
-          'Pipeline async resume: encountered an async step after async_trigger_step; only one async handoff boundary is supported per invocation.',
+          'Pipeline: encountered a second async step after the resume boundary; only one async handoff per invocation is supported.',
         );
       }
       const t0 = Date.now();
@@ -415,47 +400,18 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         });
         continue;
       }
-      if (skipBa) {
-        console.log(`   ⏭ Skipped — BA segment gated (${skipBa})`);
-        records.push({
-          runner: step.runner,
-          status: 'continue',
-          reason: `skipped (${skipBa})`,
-          durationMs: Date.now() - t0,
-        });
-        continue;
-      }
-      const wf = step.async_call.workflowFile?.trim();
-      if (!wf) {
+      if (!step.async_call.workflowFile?.trim()) {
         throw new Error(
           `Step "${step.runner}" (id "${step.id}") has async_call but no async_call.workflowFile. ` +
             'Add async_call.workflowFile or set enabled: false.',
         );
       }
-      const { asyncStepRegistry } = await import('./async-step-registry.js');
-      const asyncRunner = asyncStepRegistry[step.runner];
-      if (!asyncRunner) {
-        throw new Error(
-          `No async step runner registered for "${step.runner}". Register it in async-step-registry.ts.`,
-        );
-      }
-      await asyncRunner.prepare(issueKey, ctx, step as PipelineStep, deps, records);
+      // Input artifacts were written by the preceding prepare step.
+      // Signal the YAML workflow to upload them and dispatch the async child.
       records.push({ runner: step.runner, status: 'continue', durationMs: Date.now() - t0 });
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
       return;
-    }
-
-    if (step.runner === 'start_developer_agent' && skipBa) {
-      const t0 = Date.now();
-      console.log('   ⏭ Skipped start_developer_agent — BA segment skipped (skipIfLabel)');
-      records.push({
-        runner: step.runner,
-        status: 'continue',
-        reason: 'skipped (BA gated)',
-        durationMs: Date.now() - t0,
-      });
-      continue;
     }
 
     const stepEnabled = isStepEnabled(step);
