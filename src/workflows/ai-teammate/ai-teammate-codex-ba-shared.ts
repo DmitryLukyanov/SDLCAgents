@@ -14,7 +14,7 @@ import type { AgentLabelParams, RunnerContext, StepRecord } from './runner-types
 export const STATE_VERSION = 1 as const;
 export const GITHUB_ISSUE_PREP_VERSION = 1 as const;
 
-/** Written after `create_github_issue`; read by `codex_ba_prepare_prompt`. */
+/** Written after `create_github_issue`; used for async BA handoff. */
 export interface BaGithubIssuePrepFile {
   version: typeof GITHUB_ISSUE_PREP_VERSION;
   partialRecords: StepRecord[];

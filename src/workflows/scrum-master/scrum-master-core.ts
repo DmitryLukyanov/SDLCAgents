@@ -4,9 +4,9 @@
 import { appendFile } from 'node:fs/promises';
 import type { JiraSearchResponse } from '../../lib/jira/jira-types.js';
 import {
-  getPostReadTargetStatus,
-  getRequiredIssueStatus,
-  jqlRequireStatus,
+  getPostReadTargetStatusWithOverride,
+  getRequiredIssueStatusWithOverride,
+  jqlRequireStatusWithOverride,
 } from '../../lib/jira-status.js';
 import {
   dispatchEntryWorkflowForMappedIssue,
@@ -129,27 +129,18 @@ async function processRule(
     return 0;
   }
 
-  const prevRequired = process.env.REQUIRED_JIRA_STATUS;
-  const prevPost = process.env.POST_READ_STATUS;
-  const overrideRequired = Boolean(rule.requiredJiraStatus?.trim());
-  const overridePost = Boolean(rule.postReadStatus?.trim());
+  const requiredOverride = rule.requiredJiraStatus?.trim();
+  const postOverride = rule.postReadStatus?.trim();
 
   let dispatched = 0;
   try {
-    if (overrideRequired) {
-      process.env.REQUIRED_JIRA_STATUS = rule.requiredJiraStatus!.trim();
-    }
-    if (overridePost) {
-      process.env.POST_READ_STATUS = rule.postReadStatus!.trim();
-    }
-
     const ruleLabel = rule.description || `Rule #${ruleIndex + 1}`;
     const { workflowId: workflowFile, ref: ruleRef } = resolveEntryWorkflowDispatchTarget(ctx, rule);
     const limit = Math.min(50, rule.limit ?? ctx.globalLimit);
 
     const baseJql = interpolateJql(rule.jql);
-    const effectiveJql = jqlRequireStatus(baseJql);
-    const requiredStatus = getRequiredIssueStatus();
+    const effectiveJql = jqlRequireStatusWithOverride(baseJql, requiredOverride);
+    const requiredStatus = getRequiredIssueStatusWithOverride(requiredOverride);
 
     console.log(`\n══ ${ruleLabel} ══`);
     console.log(`   workflow: ${workflowFile} @ ${ruleRef}`);
@@ -192,7 +183,7 @@ async function processRule(
         records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'dispatched', repo: `${ctx.owner}/${ctx.repo}` });
         try {
           await deps.transitionIssueToPostRead(key);
-          console.log(`   Jira status → ${getPostReadTargetStatus()}: ${key}`);
+          console.log(`   Jira status → ${getPostReadTargetStatusWithOverride(postOverride)}: ${key}`);
         } catch (e) {
           console.warn(`   ⚠️ Jira status update failed for ${key}:`, e);
         }
@@ -211,14 +202,7 @@ async function processRule(
     }
     return dispatched;
   } finally {
-    if (overrideRequired) {
-      if (prevRequired === undefined) delete process.env.REQUIRED_JIRA_STATUS;
-      else process.env.REQUIRED_JIRA_STATUS = prevRequired;
-    }
-    if (overridePost) {
-      if (prevPost === undefined) delete process.env.POST_READ_STATUS;
-      else process.env.POST_READ_STATUS = prevPost;
-    }
+    // no per-rule global state to restore
   }
 }
 

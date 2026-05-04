@@ -1,7 +1,7 @@
 /**
  * Codex BA — finish (no LLM here): read Codex output file, apply BA outcome, resume pipeline.
  *
- * Mode: `codex_ba_finish` / parent resume after async (`pipeline_ci` + `caller_config.params.async_child_run_id`).
+ * Parent resume after async (`pipeline_ci` + `caller_config.params.async_child_run_id`).
  * The BA LLM runs in the consumer async workflow (`business-analyst.yml` → `_reusable-codex-run.yml`).
  */
 import { readFileSync, existsSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { interpretBaModelOutput } from '../business-analyst/analyze-ticket.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import {
-  runPipelineFromRunner,
+  runPipelineFromStepId,
   writeAiTeammatePipelineSummary,
 } from './ai-teammate-pipeline.js';
 import type { StepRecord } from './runner-types.js';
@@ -22,6 +22,12 @@ import {
   codexBaPaths,
   type BaCodexStateFile,
 } from './ai-teammate-codex-ba-shared.js';
+
+function findFirstStepIdByRunner(steps: PipelineStep[], runner: string): string {
+  const idx = steps.findIndex((s) => s.runner === runner);
+  if (idx < 0) throw new Error(`No pipeline step with runner "${runner}".`);
+  return steps[idx]!.id ?? `${runner}#${idx}`;
+}
 
 export interface BaCodexAsyncResumeResult {
   issueKey: string;
@@ -126,7 +132,7 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
   const { issueKey, runner } = await loadAiTeammatePipelineFromEnv();
   assertConcurrencyKeyMatchesIssue(issueKey);
   if (runner !== 'pipeline') {
-    throw new Error('codex_ba_finish requires params.runner "pipeline"');
+    throw new Error('Codex BA resume requires params.runner "pipeline"');
   }
 
   const skipReasonFromWorkflow = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
@@ -154,10 +160,10 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     return;
   }
 
-  await runPipelineFromRunner(
+  await runPipelineFromStepId(
     r.issueKey,
     r.steps,
-    'start_developer_agent',
+    findFirstStepIdByRunner(r.steps, 'start_developer_agent'),
     deps,
     r.ctx,
     [...r.priorForSummary, r.inlineRecord],

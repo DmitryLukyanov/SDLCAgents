@@ -41,7 +41,6 @@ function requireEnv(name: string): string {
 async function main(): Promise<void> {
   const configFile = requireEnv('CONFIG_FILE');
   const callerConfigEncoded = requireEnv('CALLER_CONFIG');
-  const skipReason = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
   const runCodex = requireEnv('AI_TEAMMATE_RUN_CODEX') === 'true';
   const concurrencyKey = requireEnv('AI_TEAMMATE_CONCURRENCY_KEY');
   const entryWorkflow = process.env.AI_TEAMMATE_ENTRY_WORKFLOW_FILE?.trim() || 'ai-teammate.yml';
@@ -51,7 +50,7 @@ async function main(): Promise<void> {
   const steps = parseAgentPipelineSteps(raw, configFile);
   const asyncIdx = findFirstEnabledAsyncCallStepIndex(steps);
 
-  if (!runCodex || skipReason || asyncIdx < 0) {
+  if (!runCodex || asyncIdx < 0) {
     setOutput('dispatched', 'false');
     let reason = '';
     if (asyncIdx < 0) {
@@ -59,9 +58,6 @@ async function main(): Promise<void> {
       console.log('[dispatch-pipeline-async-child] No enabled step with async_call — not dispatching async child.');
     } else if (!runCodex) {
       reason = 'Codex BA is disabled for this run (`AI_TEAMMATE_RUN_CODEX` is not `true`).';
-      console.log('[dispatch-pipeline-async-child] BA skipped or disabled — not dispatching async child.');
-    } else {
-      reason = `BA segment skipped (workflow): \`${skipReason}\`.`;
       console.log('[dispatch-pipeline-async-child] BA skipped or disabled — not dispatching async child.');
     }
     appendJobSummary(

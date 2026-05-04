@@ -8,11 +8,7 @@
  *   GITHUB_TOKEN  — ${{ github.token }} at job level (github-actions[bot]) for issue comments (BA progress, etc.)
  *
  * Modes (`AI_TEAMMATE_MODE`, required):
- *   pipeline_ci                  — CI default: config `params.steps` + optional async BA handoff; parent resume via `caller_config.params.async_child_run_id` + `async_trigger_step`
- *   codex_ba_create_github_issue — pipeline through `create_github_issue`; writes `ba-github-issue-prep.json`
- *   codex_ba_prepare_prompt      — read checkpoint; write BA Codex prompt + `ba-codex-state.json` (legacy split steps)
- *   codex_ba_prepare             — both phases in one process (local debug / compat)
- *   codex_ba_finish              — read Codex output + finish pipeline (legacy / resume debugging)
+ *   pipeline_ci — CI default: config `params.steps` + optional async handoff; parent resume via `caller_config.params.async_child_run_id` + `async_trigger_step`
  *
  * Optional (CI): `AI_TEAMMATE_SKIP_BA_REASON` — when non-empty (from job output `skip_reason`), BA segment is skipped.
  */
@@ -24,12 +20,6 @@ import {
   extractJiraSnapshotMarkdownAfterMarker,
   JIRA_CONTEXT_GITHUB_COMMENT_MARKER,
 } from './jira-github-comment.js';
-import {
-  runCodexBaCreateGithubIssuePhase,
-  runCodexBaPrepare,
-  runCodexBaPreparePromptPhase,
-  runCodexBaFinish,
-} from './ai-teammate-codex-ba.js';
 import { runPipelineCi } from './ai-teammate-pipeline.js';
 import type { AiTeammateDeps } from './runner-types.js';
 
@@ -147,24 +137,12 @@ async function main(): Promise<void> {
     await runPipelineCi(deps);
     return;
   }
-  if (mode === 'codex_ba_create_github_issue') {
-    await runCodexBaCreateGithubIssuePhase(deps);
-    return;
-  }
-  if (mode === 'codex_ba_prepare_prompt') {
-    await runCodexBaPreparePromptPhase(deps);
-    return;
-  }
-  if (mode === 'codex_ba_prepare') {
-    await runCodexBaPrepare(deps);
-    return;
-  }
-  if (mode === 'codex_ba_finish') {
-    await runCodexBaFinish(deps);
-    return;
-  }
+
+  // Legacy split-step modes were removed in favor of the config-driven pipeline.
+  // For local debugging, use `AI_TEAMMATE_MODE=pipeline_ci` with an appropriate `CALLER_CONFIG`.
+  // (The reusable workflow already sets `AI_TEAMMATE_MODE=pipeline_ci`.)
   throw new Error(
-    `AI_TEAMMATE_MODE must be "pipeline_ci", "codex_ba_create_github_issue", "codex_ba_prepare_prompt", "codex_ba_prepare", or "codex_ba_finish" (got "${mode || '(empty)'}").`,
+    `AI_TEAMMATE_MODE must be "pipeline_ci" (got "${mode || '(empty)'}").`,
   );
 }
 

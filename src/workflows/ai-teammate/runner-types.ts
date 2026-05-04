@@ -66,6 +66,8 @@ export interface RunnerContext {
   configFile: string;
   /** From agent config `params.skipIfLabel` / `params.addLabel`. */
   agentLabelParams?: AgentLabelParams;
+  /** When non-empty, BA segment is gated/skipped (derived from skipIfLabel evaluation). */
+  skipBaReason?: string;
   /** Written by create_github_issue; read by subsequent steps. */
   githubIssueNumber?: number;
   /** Set after BA (Codex) analysis; read by `start_developer_agent`. */
@@ -100,4 +102,3 @@ export interface AgentLabelParams {
   skipIfLabel?: string;
   addLabel?: string;
 }
-

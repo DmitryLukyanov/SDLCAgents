@@ -103,7 +103,7 @@ observers know the agent is running.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `ai-teammate-codex-ba-prepare.ts` (`codex_ba_prepare_prompt` after `codex_ba_create_github_issue`, before the Codex job; re-exported from `ai-teammate-codex-ba.ts`)
+**Set by:** `ai-teammate-codex-ba-prepare.ts` (pipeline async handoff, before the Codex job; re-exported from `ai-teammate-codex-ba.ts`)
 
 ---
 
@@ -114,7 +114,7 @@ five BA pipeline fields have been extracted.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `steps/apply-codex-ba-outcome-to-jira-github.ts` (`codex_ba_finish`, after Codex output is interpreted)
+**Set by:** `steps/apply-codex-ba-outcome-to-jira-github.ts` (pipeline resume, after Codex output is interpreted)
 
 ---
 
@@ -126,7 +126,7 @@ issue is closed.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `steps/apply-codex-ba-outcome-to-jira-github.ts` (`codex_ba_finish`, after Codex output is interpreted)
+**Set by:** `steps/apply-codex-ba-outcome-to-jira-github.ts` (pipeline resume, after Codex output is interpreted)
 
 ---
 

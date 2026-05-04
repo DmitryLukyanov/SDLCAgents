@@ -18,15 +18,11 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
     |
     |-- TS: check-ba-skip-label-ci -> lib/agent-skip-if-label (Jira vs skipIfLabel) -> output skip_reason (empty = run BA; non-empty = skip)
     |
-    |-- TS: codex_ba_create_github_issue
-    |       Jira validate / read context
+    |-- TS: pipeline_ci (config-driven)
+    |       Runs Jira validate / read context
     |       GitHub: Jira snapshot in issue body (create_github_issue)
     |       GitHub: create Issue (title + Jira snapshot body, jira:KEY label)
-    |       write ba-github-issue-prep.json
-    |
-    |-- if skip_reason empty: TS codex_ba_prepare_prompt (else skipped — no skip file; reason stays in job output)
-    |       read prep JSON, Jira read for BA context
-    |       GitHub comment "BA analysis started" + invocation-prompt.md + invocation-jira-context.md + ba-codex-state.json
+    |       If skip_reason empty: prepares BA invocation artifacts (prompt/context/state)
     |
     |-- shell ba_flags: if skip_reason non-empty -> run_codex=false else true
     |-- upload artifacts (async-invocation-handoff/<KEY>/ …)
@@ -43,7 +39,7 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
 +-------------------------------------------------------------------+
     |
     |-- download prepare (+ post-codex if Codex ran)
-    |-- TS: codex_ba_finish (env AI_TEAMMATE_SKIP_BA_REASON = job output skip_reason)
+    |-- TS: pipeline_ci (resume) (env AI_TEAMMATE_SKIP_BA_REASON = job output skip_reason)
     |       if skip_reason non-empty -> summary, stop (no state / no Codex apply)
     |       else read state + Codex output
     |       interpret BA JSON
@@ -77,19 +73,18 @@ For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
 
 These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `async-invocation-handoff/<KEY>/`, then the **prepare** job uploads that folder as artifact **`caller-handoff_input`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue description holds the Jira snapshot (from `create_github_issue`) and, after BA, the Copilot-facing body from `start_developer_agent`; BA progress is in **comments**. (Developer-agent may still use a separate `spec-output/<KEY>/issueContext.md` for spec-kit merge — that is unrelated to this async handoff tree.)
 
-**Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`, invoked from `check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt`, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so **`codex_ba_finish`** exits early without `ba-codex-state.json`.
+**Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`, invoked from `check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip BA prepare, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so the resume run exits early without `ba-codex-state.json`.
 
 | File / output | Written by | Read by | Purpose |
 |---------------|------------|---------|---------|
-| **`skip_reason`** (job output) | `jira_ba_skip` step | `ba_flags`, `if:` on `codex_ba_prepare_prompt`, finish env `AI_TEAMMATE_SKIP_BA_REASON` | Single string: empty = BA allowed; non-empty = skip BA/Codex/finish BA apply (reason text for logs / step summary). |
-| **`ba-github-issue-prep.json`** | `codex_ba_create_github_issue` (prepare job) | `codex_ba_prepare_prompt` (prepare job), **only if** `skip_reason` is empty | Checkpoint after pipeline through `create_github_issue`: runner context + partial step records so the **second** `tsx` step does not re-run Jira/issue creation. |
-| **`invocation-prompt.md`** (contract default) | `codex_ba_prepare_prompt` | `ba_codex` job (`openai/codex-action` **prompt-file**) | Full LLM prompt (paths overridable via async step **`contract`**). |
-| **`invocation-jira-context.md`** (contract default) | `codex_ba_prepare_prompt` | Any tool that needs ticket prose from the handoff bundle | Ticket / Jira context snapshot as a **file artifact** (artifact-only contract). |
-| **`ba-codex-state.json`** | `codex_ba_prepare_prompt` | `codex_ba_finish` (finish job) | Checkpoint: `codexRelativeOutputPath` for **`invocation-output.txt`** (default), `agentLabelParams`, runner context, etc. |
-| **`invocation-output.txt`** (contract default) | `ba_codex` (Codex **output-file**) | `codex_ba_finish` (post-codex artifact) | Raw model reply; finish **parses** it. |
+| **`skip_reason`** (job output) | `jira_ba_skip` step | `ba_flags`, finish env `AI_TEAMMATE_SKIP_BA_REASON` | Single string: empty = BA allowed; non-empty = skip BA/Codex/finish BA apply (reason text for logs / step summary). |
+| **`invocation-prompt.md`** (contract default) | pipeline async handoff | `ba_codex` job (`openai/codex-action` **prompt-file**) | Full LLM prompt (paths overridable via async step **`contract`**). |
+| **`invocation-jira-context.md`** (contract default) | pipeline async handoff | Any tool that needs ticket prose from the handoff bundle | Ticket / Jira context snapshot as a **file artifact** (artifact-only contract). |
+| **`ba-codex-state.json`** | pipeline async handoff | pipeline resume | Checkpoint: `codexRelativeOutputPath` for **`invocation-output.txt`** (default), `agentLabelParams`, runner context, etc. |
+| **`invocation-output.txt`** (contract default) | `ba_codex` (Codex **output-file**) | pipeline resume | Raw model reply; resume **parses** it. |
 
 **Artifact chain (short):**
 
 1. **Prepare** uploads `async-invocation-handoff/<KEY>/` (prep JSON; plus all **contract** input artifacts + state **when** `skip_reason` was empty). Parent runs **`verify-invocation-handoff-ci.ts`** before upload.
 2. **`ba_codex`** downloads that artifact, verifies input files, runs Codex, writes **`invocation-output.txt`** (default), uploads **`caller-handoff_codex_output`** artifact.
-3. **Finish** downloads **prepare** artifact again, then **post-codex** overlay when Codex succeeded, passes **`skip_reason`** into **`codex_ba_finish`**; TS reads **state** + **output** when BA ran, or exits early when **`AI_TEAMMATE_SKIP_BA_REASON`** is set.
+3. **Finish** downloads **prepare** artifact again, then **post-codex** overlay when Codex succeeded, passes **`skip_reason`** into the resume run; TS reads **state** + **output** when BA ran, or exits early when **`AI_TEAMMATE_SKIP_BA_REASON`** is set.

@@ -7,12 +7,12 @@
  * Edit ISSUE_KEY or mock data below to experiment.
  */
 import { buildAiTeammateCallerConfigEncoded } from '../../src/lib/routing_helper.js';
-import { runCodexBaPrepare } from '../../src/workflows/ai-teammate/ai-teammate-codex-ba.js';
+import { runPipelineCi } from '../../src/workflows/ai-teammate/ai-teammate-pipeline.js';
 import type { AiTeammateDeps } from '../../src/workflows/ai-teammate/runner-types.js';
 
 const ISSUE_KEY = process.env.DEBUG_ISSUE_KEY?.trim() ?? 'SDLCSPAC-1';
 
-process.env.AI_TEAMMATE_MODE = 'codex_ba_prepare';
+process.env.AI_TEAMMATE_MODE = 'pipeline_ci';
 process.env.CONFIG_FILE          ??= 'config/workflows/ai-teammate/ai-teammate.config';
 process.env.REQUIRED_JIRA_STATUS ??= 'To Do';
 process.env.POST_READ_STATUS     ??= 'In Progress';
@@ -113,6 +113,8 @@ const mockDeps: AiTeammateDeps = {
   },
 };
 
+await runPipelineCi(mockDeps);
+
 console.log(`=== AI Teammate local debug (codex_ba_prepare) · issue: ${ISSUE_KEY} ===\n`);
-await runCodexBaPrepare(mockDeps);
+await runPipelineCi(mockDeps);
 console.log('\n=== Done ===');
