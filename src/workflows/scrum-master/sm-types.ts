@@ -2,6 +2,16 @@
 
 export interface SmRule {
   description?: string;
+  /**
+   * Jira status filter for this rule’s JQL (default: env `REQUIRED_JIRA_STATUS` or "To Do").
+   * When set, overrides env for the duration of this rule only.
+   */
+  requiredJiraStatus?: string;
+  /**
+   * Jira status after dispatch for issues matched by this rule (default: env `POST_READ_STATUS` or "In Progress").
+   * When set, overrides env for the duration of this rule only.
+   */
+  postReadStatus?: string;
   /** JQL; optional placeholders: {jiraProject} from env JIRA_PROJECT */
   jql: string;
   /** Path to agent JSON in repo (passed as workflow config_file input). */

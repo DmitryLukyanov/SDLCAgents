@@ -41,7 +41,8 @@ export function buildGithubWorkflowDispatchPayload(params: {
 
 /**
  * URL-encoded JSON `{ params: { inputJql, customParams? } }` for workflow input `caller_config` / env `CALLER_CONFIG`.
- * Reads optional env: `REQUIRED_JIRA_STATUS`, `POST_READ_STATUS`, `TICKET_CONTEXT_DEPTH` (same semantics as Scrum Master).
+ * Reads optional env: `REQUIRED_JIRA_STATUS`, `POST_READ_STATUS`, `TICKET_CONTEXT_DEPTH`
+ * (Scrum Master sets these from each rule’s `requiredJiraStatus` / `postReadStatus` while that rule runs.)
  */
 export function buildAiTeammateCallerConfigEncoded(ticketKey: string): string {
   const customParams: Record<string, string> = {};

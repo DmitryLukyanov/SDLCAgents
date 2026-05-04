@@ -128,75 +128,98 @@ async function processRule(
     console.log(`\n══ Rule #${ruleIndex + 1} (disabled) ══`);
     return 0;
   }
+
+  const prevRequired = process.env.REQUIRED_JIRA_STATUS;
+  const prevPost = process.env.POST_READ_STATUS;
+  const overrideRequired = Boolean(rule.requiredJiraStatus?.trim());
+  const overridePost = Boolean(rule.postReadStatus?.trim());
+
   let dispatched = 0;
-
-  const ruleLabel = rule.description || `Rule #${ruleIndex + 1}`;
-  const { workflowId: workflowFile, ref: ruleRef } = resolveEntryWorkflowDispatchTarget(ctx, rule);
-  const limit = Math.min(50, rule.limit ?? ctx.globalLimit);
-
-  const baseJql = interpolateJql(rule.jql);
-  const effectiveJql = jqlRequireStatus(baseJql);
-  const requiredStatus = getRequiredIssueStatus();
-
-  console.log(`\n══ ${ruleLabel} ══`);
-  console.log(`   workflow: ${workflowFile} @ ${ruleRef}`);
-  console.log(`   config: ${rule.configFile}`);
-  console.log(`   status filter: "${requiredStatus}" → ${effectiveJql}`);
-
-  const needLabels = Boolean(rule.skipIfLabel);
-  const searchFields = needLabels ? (['key', 'labels'] as const) : (['key'] as const);
-
-  const data = await deps.searchIssues(effectiveJql, limit, [...searchFields]);
-  let issues = data.issues || [];
-  console.log(
-    `   matched ${data.total ?? issues.length} issue(s); processing up to ${limit}, got ${issues.length}.`,
-  );
-
-  if (rule.skipIfLabel) {
-    const before = issues.length;
-    const skipped = issues.filter((t) => hasLabel(t, rule.skipIfLabel!));
-    issues = issues.filter((t) => !hasLabel(t, rule.skipIfLabel!));
-    for (const t of skipped) {
-      records.push({ key: t.key, rule: ruleLabel, workflow: workflowFile, status: 'skipped', reason: `label "${rule.skipIfLabel}"`, repo: `${ctx.owner}/${ctx.repo}` });
+  try {
+    if (overrideRequired) {
+      process.env.REQUIRED_JIRA_STATUS = rule.requiredJiraStatus!.trim();
     }
-    if (before !== issues.length) {
-      console.log(`   skipIfLabel "${rule.skipIfLabel}": ${before - issues.length} skipped`);
+    if (overridePost) {
+      process.env.POST_READ_STATUS = rule.postReadStatus!.trim();
     }
-  }
 
-  if (issues.length === 0) {
-    console.log('   Nothing to dispatch.');
-    return 0;
-  }
+    const ruleLabel = rule.description || `Rule #${ruleIndex + 1}`;
+    const { workflowId: workflowFile, ref: ruleRef } = resolveEntryWorkflowDispatchTarget(ctx, rule);
+    const limit = Math.min(50, rule.limit ?? ctx.globalLimit);
 
-  for (const issue of issues) {
-    const key = issue.key;
-    console.log(`   Dispatching ${workflowFile} for ${key}...`);
-    try {
-      await dispatchEntryWorkflowForMappedIssue(deps, ctx, rule, key);
-      console.log(`   ok: ${key}`);
-      dispatched++;
-      records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'dispatched', repo: `${ctx.owner}/${ctx.repo}` });
+    const baseJql = interpolateJql(rule.jql);
+    const effectiveJql = jqlRequireStatus(baseJql);
+    const requiredStatus = getRequiredIssueStatus();
+
+    console.log(`\n══ ${ruleLabel} ══`);
+    console.log(`   workflow: ${workflowFile} @ ${ruleRef}`);
+    console.log(`   config: ${rule.configFile}`);
+    console.log(`   status filter: "${requiredStatus}" → ${effectiveJql}`);
+
+    const needLabels = Boolean(rule.skipIfLabel);
+    const searchFields = needLabels ? (['key', 'labels'] as const) : (['key'] as const);
+
+    const data = await deps.searchIssues(effectiveJql, limit, [...searchFields]);
+    let issues = data.issues || [];
+    console.log(
+      `   matched ${data.total ?? issues.length} issue(s); processing up to ${limit}, got ${issues.length}.`,
+    );
+
+    if (rule.skipIfLabel) {
+      const before = issues.length;
+      const skipped = issues.filter((t) => hasLabel(t, rule.skipIfLabel!));
+      issues = issues.filter((t) => !hasLabel(t, rule.skipIfLabel!));
+      for (const t of skipped) {
+        records.push({ key: t.key, rule: ruleLabel, workflow: workflowFile, status: 'skipped', reason: `label "${rule.skipIfLabel}"`, repo: `${ctx.owner}/${ctx.repo}` });
+      }
+      if (before !== issues.length) {
+        console.log(`   skipIfLabel "${rule.skipIfLabel}": ${before - issues.length} skipped`);
+      }
+    }
+
+    if (issues.length === 0) {
+      console.log('   Nothing to dispatch.');
+      return 0;
+    }
+
+    for (const issue of issues) {
+      const key = issue.key;
+      console.log(`   Dispatching ${workflowFile} for ${key}...`);
       try {
-        await deps.transitionIssueToPostRead(key);
-        console.log(`   Jira status → ${getPostReadTargetStatus()}: ${key}`);
-      } catch (e) {
-        console.warn(`   ⚠️ Jira status update failed for ${key}:`, e);
-      }
-      if (rule.addLabel) {
+        await dispatchEntryWorkflowForMappedIssue(deps, ctx, rule, key);
+        console.log(`   ok: ${key}`);
+        dispatched++;
+        records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'dispatched', repo: `${ctx.owner}/${ctx.repo}` });
         try {
-          await deps.addIssueLabel(key, rule.addLabel);
-          console.log(`   label +${rule.addLabel}`);
+          await deps.transitionIssueToPostRead(key);
+          console.log(`   Jira status → ${getPostReadTargetStatus()}: ${key}`);
         } catch (e) {
-          console.warn(`   ⚠️ addLabel failed for ${key}:`, e);
+          console.warn(`   ⚠️ Jira status update failed for ${key}:`, e);
         }
+        if (rule.addLabel) {
+          try {
+            await deps.addIssueLabel(key, rule.addLabel);
+            console.log(`   label +${rule.addLabel}`);
+          } catch (e) {
+            console.warn(`   ⚠️ addLabel failed for ${key}:`, e);
+          }
+        }
+      } catch (e) {
+        console.warn(`   ⚠️ dispatch failed for ${key}:`, e);
+        records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'failed', reason: String(e instanceof Error ? e.message : e), repo: `${ctx.owner}/${ctx.repo}` });
       }
-    } catch (e) {
-      console.warn(`   ⚠️ dispatch failed for ${key}:`, e);
-      records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'failed', reason: String(e instanceof Error ? e.message : e), repo: `${ctx.owner}/${ctx.repo}` });
+    }
+    return dispatched;
+  } finally {
+    if (overrideRequired) {
+      if (prevRequired === undefined) delete process.env.REQUIRED_JIRA_STATUS;
+      else process.env.REQUIRED_JIRA_STATUS = prevRequired;
+    }
+    if (overridePost) {
+      if (prevPost === undefined) delete process.env.POST_READ_STATUS;
+      else process.env.POST_READ_STATUS = prevPost;
     }
   }
-  return dispatched;
 }
 
 /**
@@ -208,9 +231,7 @@ export async function runScrumMaster(ctx: ScrumMasterContext, deps: ScrumMasterD
 
   const cfg = await loadSmConfig(ctx.rulesFile);
   console.log(`Rules file: ${ctx.rulesFile} (${cfg.rules.length} rule(s))`);
-  console.log(
-    `Global limit: ${ctx.globalLimit} · taken status: ${getRequiredIssueStatus()} → ${getPostReadTargetStatus()}`,
-  );
+  console.log(`Global limit: ${ctx.globalLimit} · Jira statuses: per-rule fields or env defaults`);
 
   for (let i = 0; i < cfg.rules.length; i++) {
     const rule = cfg.rules[i];
