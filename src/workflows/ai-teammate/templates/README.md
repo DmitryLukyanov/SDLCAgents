@@ -17,8 +17,8 @@ The Jira issue key that triggered the workflow.
 - **Format:** `<PROJECT>-<NUMBER>` — e.g. `PROJ-123`
 - **Source:** `RunnerContext.issueKey` (set from the `JIRA_ISSUE_KEY`
   environment variable when the workflow starts)
-- **Used in:** all templates below except `github-issue-with-copilot.md`
-  placeholders that have their own dedicated entries
+- **Used in:** issue title and comment templates below; `github-issue-with-copilot.md`
+  uses the dedicated placeholder table in its own section
 
 ---
 
@@ -35,8 +35,8 @@ merged `issueContext.md` on the branch.
 
 ### `{{JIRA_CONTEXT}}`
 
-Jira-only snapshot markdown (summary, description, related issues) from the
-GitHub issue comment posted in `create_github_issue`.
+Jira-only snapshot markdown (summary, description, related issues) written to the
+GitHub issue **body** in `create_github_issue`.
 
 - **Format:** Markdown prose (multi-line).
 - **Source:** `fetchJiraContextFromGithubIssue` — reads the GitHub issue **body** after the marker
@@ -60,17 +60,6 @@ runs.
 ---
 
 ## Templates
-
-### `github-issue-placeholder.md`
-
-**Purpose:** Initial body set on the GitHub issue immediately after it is
-created, before BA analysis finishes. Signals that work is in progress.
-
-**Placeholders:** `{{ISSUE_KEY}}`
-
-**Set by:** `ai-teammate-agent.ts` → `deps.createGithubIssue`
-
----
 
 ### `github-issue-title.md`
 

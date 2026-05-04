@@ -1,1 +1,0 @@
-⏳ **BA analysis in progress** for `{{ISSUE_KEY}}`. This issue will be updated with the full specification and assigned to Copilot once analysis completes.

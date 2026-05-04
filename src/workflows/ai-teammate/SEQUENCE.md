@@ -21,7 +21,7 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
     |-- TS: codex_ba_create_github_issue
     |       Jira validate / read context
     |       GitHub: Jira snapshot in issue body (create_github_issue)
-    |       GitHub: create Issue (placeholder title/body, jira:KEY label)
+    |       GitHub: create Issue (title + Jira snapshot body, jira:KEY label)
     |       write ba-github-issue-prep.json
     |
     |-- if skip_reason empty: TS codex_ba_prepare_prompt (else skipped — no skip file; reason stays in job output)
@@ -75,7 +75,7 @@ For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
 
 ## Codex BA files under `async-invocation-handoff/<JIRA_KEY>/` (how each is used)
 
-These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `async-invocation-handoff/<KEY>/`, then the **prepare** job uploads that folder as artifact **`ai-teammate-ba-<KEY>-prepare`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue holds the human-facing placeholder, comments, and (after BA) the filled body from `start_developer_agent`. (Developer-agent may still use a separate `spec-output/<KEY>/issueContext.md` for spec-kit merge — that is unrelated to this async handoff tree.)
+These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `async-invocation-handoff/<KEY>/`, then the **prepare** job uploads that folder as artifact **`ai-teammate-ba-<KEY>-prepare`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue description holds the Jira snapshot (from `create_github_issue`) and, after BA, the Copilot-facing body from `start_developer_agent`; BA progress is in **comments**. (Developer-agent may still use a separate `spec-output/<KEY>/issueContext.md` for spec-kit merge — that is unrelated to this async handoff tree.)
 
 **Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`, invoked from `check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt`, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so **`codex_ba_finish`** exits early without `ba-codex-state.json`.
 

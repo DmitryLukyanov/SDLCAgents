@@ -78,12 +78,12 @@ AI TEAMMATE — one run per dispatched issue
     --> [TS:src/workflows/ai-teammate/steps/create-github-issue.ts] runCreateGithubIssue()
           deps.createGithubIssue(owner, repo, issueKey)
             ensure label "jira:{KEY}" exists (create if absent)
-            octokit.rest.issues.create → placeholder "⏳ BA analysis in progress..."
+            octokit.rest.issues.create → empty body
           ctx.githubIssueNumber ← new issue number
           buildMinimalJiraGithubCommentMarkdown() [jira-github-comment.ts]
             getIssue(issueKey, …) [jira-client.ts] + statusAllowsRead [jira-status.ts]
             fetchRelatedIssueSummaries(...) [jira-related.ts] if TICKET_CONTEXT_DEPTH >= 1
-          deps.addGithubIssueComment → marker `<!-- sdlc-agents:jira-context -->` + Jira-only markdown
+          deps.updateGithubIssueBody → marker `<!-- sdlc-agents:jira-context -->` + Jira-only markdown
     |
     v
   Step: Codex BA (params.skipIfLabel / addLabel)

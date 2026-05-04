@@ -6,7 +6,7 @@
  *
  * Supported step runners:
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
- *   create_github_issue          — creates a GitHub issue placeholder; stores issue number in context
+ *   create_github_issue          — creates a GitHub issue (Jira snapshot body); stores issue number in context
  *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow (omit or set `"enabled": false` to skip dispatch only)
  *
  * Jira context snapshot: `create_github_issue` appends a marked block to the issue body; `start_developer_agent` / `assign_copilot`

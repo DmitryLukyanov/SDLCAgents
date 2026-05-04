@@ -103,9 +103,9 @@
 │  │  src/workflows/ai-teammate/steps/create-github-issue.ts                           │  │
 │  │                                                                                   │  │
 │  │  ensure label "jira:{KEY}" exists                                                 │  │
-│  │  octokit.rest.issues.create → "⏳ BA analysis in progress..."                     │  │
+│  │  octokit.rest.issues.create → empty body (title + jira:KEY label)                  │  │
 │  │  ctx.githubIssueNumber ← new issue number                                         │  │
-│  │  buildMinimalJiraGithubCommentMarkdown + comment (jira-github-comment.ts)         │  │
+│  │  issues.update → marker + Jira snapshot markdown (jira-github-comment.ts)        │  │
 │  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
 │                               │                                                          │
 │                               ▼                                                          │
@@ -220,8 +220,8 @@
 │  when Jira secrets are configured (spec-kit-context/issue-context.ts).               │
 │                                                                                       │
 │  Step: create_github_issue                                                            │
-│  - Created GitHub issue placeholder "{KEY}: Copilot Coding Agent Task"               │
-│    (label: jira:{KEY}, body: "⏳ BA analysis in progress...")                         │
+│  - Created GitHub issue "{KEY}: Copilot Coding Agent Task"                            │
+│    (label: jira:{KEY}; body: Jira snapshot after marker — no BA-in-progress line)    │
 │                                                                                       │
 │  Step: params.skipIfLabel / Codex BA                                                                  │
 │  - Read Jira ticket: summary, description, comments, related tickets                  │
@@ -282,7 +282,7 @@ sequenceDiagram
             AT->>J: transition to onEmpty.status + comment<br/>(default In Review in repo config)
             AT--xAT: stop pipeline
         else description present
-            AT->>GH: create_github_issue (placeholder: BA in progress… + Jira snapshot comment)
+            AT->>GH: create_github_issue (Jira snapshot in body; BA progress via comments)
             rect rgb(220, 255, 220)
                 Note over AT,LLM: params.skipIfLabel / Codex BA (skipIfLabel ba_analyzed → stop if already labeled)
                 AT->>J: getIssue + related issues

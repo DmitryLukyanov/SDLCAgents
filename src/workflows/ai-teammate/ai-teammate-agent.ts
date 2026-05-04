@@ -33,7 +33,6 @@ import {
 import { runPipelineCi } from './ai-teammate-pipeline.js';
 import type { AiTeammateDeps } from './runner-types.js';
 
-const PLACEHOLDER_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'github-issue-placeholder.md');
 const ISSUE_TITLE_TEMPLATE  = loadTemplate(import.meta.url, 'templates', 'github-issue-title.md');
 
 function requireEnv(name: string): string {
@@ -89,7 +88,7 @@ export function buildAiTeammateDeps(): AiTeammateDeps {
         owner,
         repo,
         title: fillTemplate(ISSUE_TITLE_TEMPLATE, { ISSUE_KEY: issueKey }),
-        body: fillTemplate(PLACEHOLDER_TEMPLATE, { ISSUE_KEY: issueKey }),
+        body: '',
         labels: [`jira:${issueKey}`],
       });
       return response.data.number;
