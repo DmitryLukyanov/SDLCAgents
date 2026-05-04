@@ -52,15 +52,15 @@ export async function runStartDeveloperAgent(
 
   // Global directive for pipeline step inputs is owned by developer-agent / config/spec-kit (not AI Teammate).
 
-  // ── Read Jira context from GitHub issue comment (posted in create_github_issue) ──
+  // ── Read Jira context from GitHub issue body (set in create_github_issue) ──
   let jiraContext = '';
   try {
     jiraContext = await deps.fetchJiraContextFromGithubIssue(owner, repo, ctx.githubIssueNumber);
   } catch (e) {
-    console.warn('   ⚠️ Could not read Jira context comment (non-fatal):', e);
+    console.warn('   ⚠️ Could not read Jira snapshot from GitHub issue (non-fatal):', e);
   }
   if (!jiraContext.trim()) {
-    console.warn('   ⚠️ No Jira snapshot comment found — issue body may omit full Jira markdown');
+    console.warn('   ⚠️ No Jira snapshot in issue body (or legacy comment) — template may omit full Jira markdown');
   }
 
   // ── Fill issue body template ─────────────────────────────────────

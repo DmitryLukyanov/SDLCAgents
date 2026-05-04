@@ -76,7 +76,7 @@ const mockDeps: AiTeammateDeps = {
 
   fetchJiraContextFromGithubIssue: async (owner, repo, issueNumber) => {
     console.log(`[mock] fetchJiraContextFromGithubIssue(${owner}/${repo}#${issueNumber})`);
-    return '# Mock Jira context\n\n(from GitHub comment in local debug)';
+    return '# Mock Jira context\n\n(from GitHub issue body in local debug)';
   },
 
   addJiraIssueLabel: async (key, label) => {

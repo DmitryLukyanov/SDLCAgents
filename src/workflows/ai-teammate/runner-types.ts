@@ -21,7 +21,7 @@ export interface AiTeammateDeps {
   addJiraIssueLabel: (key: string, label: string) => Promise<void>;
   transitionIssueToStatusName: (key: string, status: string) => Promise<void>;
   fetchRelatedIssueSummaries: (key: string, depth: number) => Promise<RelatedIssueSummary[]>;
-  /** Reads the Jira snapshot from the GitHub issue comment marked with `JIRA_CONTEXT_GITHUB_COMMENT_MARKER`. */
+  /** Reads the Jira snapshot from the GitHub issue body (or last legacy comment) after `JIRA_CONTEXT_GITHUB_COMMENT_MARKER`. */
   fetchJiraContextFromGithubIssue: (owner: string, repo: string, issueNumber: number) => Promise<string>;
   createGithubIssue: (owner: string, repo: string, issueKey: string) => Promise<number>;
   /** Update the GitHub issue body (no Copilot assignment). */

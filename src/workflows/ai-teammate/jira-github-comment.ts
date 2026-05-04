@@ -1,5 +1,5 @@
 /**
- * Jira-only markdown for the GitHub issue comment snapshot (no spec-kit defaults or Jira JSON blocks).
+ * Jira-only markdown for the GitHub issue body snapshot (no spec-kit defaults or Jira JSON blocks).
  */
 import { getIssue as jiraGetIssue } from '../../lib/jira/jira-client.js';
 import type { JiraIssue } from '../../lib/jira/jira-types.js';
@@ -14,8 +14,21 @@ import {
   type RelatedIssueSummary,
 } from '../../lib/jira/jira-related.js';
 
-/** First line of the Jira snapshot comment; used to find the comment when updating the issue body later. */
+/**
+ * Marks the start of the Jira snapshot block in the GitHub issue **body** (or legacy issue comments).
+ * Downstream steps strip everything before this marker when reading `{{JIRA_CONTEXT}}`.
+ */
 export const JIRA_CONTEXT_GITHUB_COMMENT_MARKER = '<!-- sdlc-agents:jira-context -->' as const;
+
+/** Extract markdown after the Jira snapshot marker, or empty string if the marker is absent. */
+export function extractJiraSnapshotMarkdownAfterMarker(text: string): string {
+  if (!text.includes(JIRA_CONTEXT_GITHUB_COMMENT_MARKER)) return '';
+  const idx = text.indexOf(JIRA_CONTEXT_GITHUB_COMMENT_MARKER);
+  return text
+    .slice(idx + JIRA_CONTEXT_GITHUB_COMMENT_MARKER.length)
+    .replace(/^\s*\n/, '')
+    .trim();
+}
 
 function formatRelated(items: RelatedIssueSummary[]): string {
   if (items.length === 0) return '(none)';

@@ -5,7 +5,7 @@
  *   CONFIG_FILE   — workflow input `config_file` → agent JSON path in consumer repo
  *   CALLER_CONFIG — workflow input `caller_config` → URL-encoded JSON { params: { inputJql, customParams? } }
  *   COPILOT_PAT   — PAT for GitHub REST except issue comments (create issue, dispatch, …)
- *   GITHUB_TOKEN  — ${{ github.token }} at job level (github-actions[bot]) for createComment only
+ *   GITHUB_TOKEN  — ${{ github.token }} at job level (github-actions[bot]) for issue comments (BA progress, etc.)
  *
  * Modes (`AI_TEAMMATE_MODE`, required):
  *   pipeline_ci                  — CI default: config `params.steps` + optional async BA handoff; or resume (`AI_TEAMMATE_IS_RESUME=true`)
@@ -20,7 +20,10 @@ import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { getIssue, addIssueComment, addIssueLabel, transitionIssueToStatusName } from '../../lib/jira/jira-client.js';
 import { fetchRelatedIssueSummaries } from '../../lib/jira/jira-related.js';
-import { JIRA_CONTEXT_GITHUB_COMMENT_MARKER } from './jira-github-comment.js';
+import {
+  extractJiraSnapshotMarkdownAfterMarker,
+  JIRA_CONTEXT_GITHUB_COMMENT_MARKER,
+} from './jira-github-comment.js';
 import {
   runCodexBaCreateGithubIssuePhase,
   runCodexBaPrepare,
@@ -51,6 +54,14 @@ export function buildAiTeammateDeps(): AiTeammateDeps {
     transitionIssueToStatusName,
     fetchRelatedIssueSummaries,
     fetchJiraContextFromGithubIssue: async (owner, repo, issueNumber) => {
+      const { data: issue } = await octokitRest.rest.issues.get({
+        owner,
+        repo,
+        issue_number: issueNumber,
+      });
+      const fromBody = extractJiraSnapshotMarkdownAfterMarker(issue.body ?? '');
+      if (fromBody) return fromBody;
+
       const comments = await octokitRest.paginate(octokitRest.rest.issues.listComments, {
         owner,
         repo,
@@ -61,8 +72,7 @@ export function buildAiTeammateDeps(): AiTeammateDeps {
       for (const c of comments) {
         const body = typeof c.body === 'string' ? c.body : '';
         if (body.includes(JIRA_CONTEXT_GITHUB_COMMENT_MARKER)) {
-          const idx = body.indexOf(JIRA_CONTEXT_GITHUB_COMMENT_MARKER);
-          latest = body.slice(idx + JIRA_CONTEXT_GITHUB_COMMENT_MARKER.length).replace(/^\s*\n/, '').trim();
+          latest = extractJiraSnapshotMarkdownAfterMarker(body);
         }
       }
       return latest;

@@ -33,7 +33,7 @@ export async function runAssignCopilot(
   try {
     jiraContext = await deps.fetchJiraContextFromGithubIssue(owner, repo, ctx.githubIssueNumber);
   } catch (e) {
-    console.warn('   ⚠️ Could not read Jira context comment (non-fatal):', e);
+    console.warn('   ⚠️ Could not read Jira snapshot from GitHub issue (non-fatal):', e);
   }
 
   // ── Read template ────────────────────────────────────────────────

@@ -39,8 +39,8 @@ Jira-only snapshot markdown (summary, description, related issues) from the
 GitHub issue comment posted in `create_github_issue`.
 
 - **Format:** Markdown prose (multi-line).
-- **Source:** `fetchJiraContextFromGithubIssue` — reads the GitHub issue comment that begins with the marker
-  `<!-- sdlc-agents:jira-context -->`. If none is found, the value is empty.
+- **Source:** `fetchJiraContextFromGithubIssue` — reads the GitHub issue **body** after the marker
+  `<!-- sdlc-agents:jira-context -->` (set in `create_github_issue`), or the last matching **legacy comment** if the body has no marker. If none is found, the value is empty.
 - **Used in:** `github-issue-with-copilot.md`, `github-issue.md`
 
 ---

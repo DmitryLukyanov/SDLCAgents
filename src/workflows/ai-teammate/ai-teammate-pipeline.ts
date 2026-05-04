@@ -9,7 +9,7 @@
  *   create_github_issue          — creates a GitHub issue placeholder; stores issue number in context
  *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow (omit or set `"enabled": false` to skip dispatch only)
  *
- * Jira context snapshot: `create_github_issue` posts a marked GitHub comment; `start_developer_agent` / `assign_copilot`
+ * Jira context snapshot: `create_github_issue` appends a marked block to the issue body; `start_developer_agent` / `assign_copilot`
  * read it back via `fetchJiraContextFromGithubIssue`.
  *
  * `ba_codex_async` is handled in `runPipelineCi` (`AI_TEAMMATE_MODE=pipeline_ci`): prepares prompt + state,
