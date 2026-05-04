@@ -6,6 +6,7 @@
  *      GITHUB_REF_NAME, AI_TEAMMATE_CONCURRENCY_KEY, AI_TEAMMATE_SKIP_BA_REASON (empty = run BA),
  *      AI_TEAMMATE_RUN_CODEX (`true` / `false`), AI_TEAMMATE_ENTRY_WORKFLOW_FILE (callback target YAML name; CI sets from
  *      `github.workflow_ref` basename in `_reusable-ai-teammate.yml`).
+ *      GITHUB_STEP_SUMMARY (optional): appends a markdown section for async handoff (dispatched or skipped).
  */
 import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -22,6 +23,13 @@ function setOutput(name: string, value: string): void {
   const out = process.env.GITHUB_OUTPUT;
   if (out) appendFileSync(out, `${name}=${value}\n`, 'utf8');
   console.log(`[dispatch-pipeline-async-child] ${name}=${value}`);
+}
+
+/** GitHub Actions job summary (`GITHUB_STEP_SUMMARY`); no-op when unset (local runs). */
+function appendJobSummary(markdown: string): void {
+  const path = process.env.GITHUB_STEP_SUMMARY?.trim();
+  if (!path) return;
+  appendFileSync(path, `${markdown}\n\n`, 'utf8');
 }
 
 function requireEnv(name: string): string {
@@ -45,11 +53,29 @@ async function main(): Promise<void> {
 
   if (!runCodex || skipReason || asyncIdx < 0) {
     setOutput('dispatched', 'false');
+    let reason = '';
     if (asyncIdx < 0) {
+      reason = 'No enabled step with `async_call` in the agent config.';
       console.log('[dispatch-pipeline-async-child] No enabled step with async_call — not dispatching async child.');
-    } else if (!runCodex || skipReason) {
+    } else if (!runCodex) {
+      reason = 'Codex BA is disabled for this run (`AI_TEAMMATE_RUN_CODEX` is not `true`).';
+      console.log('[dispatch-pipeline-async-child] BA skipped or disabled — not dispatching async child.');
+    } else {
+      reason = `BA segment skipped (workflow): \`${skipReason}\`.`;
       console.log('[dispatch-pipeline-async-child] BA skipped or disabled — not dispatching async child.');
     }
+    appendJobSummary(
+      [
+        '### AI Teammate — async handoff',
+        '',
+        'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
+        '',
+        `- **Concurrency key:** \`${concurrencyKey}\``,
+        `- **Reason:** ${reason}`,
+        '',
+        `_Config file:_ \`${configFile}\``,
+      ].join('\n'),
+    );
     return;
   }
 
@@ -101,6 +127,24 @@ async function main(): Promise<void> {
 
   console.log(`[dispatch-pipeline-async-child] Dispatched ${workflowFile}@${ref} for ${concurrencyKey}.`);
   setOutput('dispatched', 'true');
+
+  const parentRunUrl = `${requireEnv('GITHUB_SERVER_URL')}/${repoFull}/actions/runs/${requireEnv('GITHUB_RUN_ID')}`;
+  appendJobSummary(
+    [
+      '### AI Teammate — async handoff',
+      '',
+      `Dispatched child workflow **\`${workflowFile}\`** on ref **\`${ref}\`** (this parent run will resume after the child completes).`,
+      '',
+      '| Detail | Value |',
+      '| --- | --- |',
+      `| Concurrency key | \`${concurrencyKey}\` |`,
+      `| Pipeline step (\`async_trigger_step\`) | \`${stepId}\` |`,
+      `| Child workflow file | \`${workflowFile}\` |`,
+      `| Child dispatch ref | \`${ref}\` |`,
+      `| Resume callback (entry workflow) | \`${entryWorkflow}\` |`,
+      `| This parent run | [Open in Actions](${parentRunUrl}) |`,
+    ].join('\n'),
+  );
 }
 
 main().catch((err: unknown) => {
