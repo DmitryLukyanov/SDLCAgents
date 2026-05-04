@@ -12,12 +12,11 @@
  * Jira context snapshot: `create_github_issue` appends a marked block to the issue body; `start_developer_agent`
  * read it back via `fetchJiraContextFromGithubIssue`.
  *
- * Any step with `async_call` in config is handled generically: the pipeline calls `asyncStepRegistry[step.runner].prepare()`
- * on the first run, then the reusable workflow uploads artifacts and dispatches the `async_call` child.
+ * Any step with `async_call` in config is handled generically: on the first run, the pipeline executes the step runner
+ * to prepare artifacts, then the reusable workflow uploads artifacts and dispatches the `async_call` child.
  * Parent **resume** after the child: `caller_config.params.async_child_run_id` + `async_trigger_step` — walk steps
- * from the beginning, skip through the trigger step (checkpoint rows), call `asyncStepRegistry[step.runner].finish()`
+ * from the beginning, skip through the trigger step (checkpoint rows), verify child outputs exist
  * (see {@link ../../lib/invocation-handoff.js assertManifestMatchesAsyncStepAndPrimaryOutputPresent}), then run remaining steps.
- * New async runners: add an `AsyncStepRunnerDef` to `async-step-registry.ts` — no pipeline code changes needed.
  * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
@@ -59,7 +58,9 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runCreateGithubIssue(ctx, deps);
     }
 
-    case 'ba_async': {
+    // The async boundary is driven by config (`step.async_call.workflowFile`).
+    // The step runner itself is only responsible for preparing the invocation artifacts.
+    case 'async_operation': {
       await prepareCodexBaArtifacts(ctx, ctx.agentLabelParams ?? {}, deps, ctx.priorStepRecords);
       return { status: 'continue' };
     }
@@ -75,7 +76,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, prepare_ba_prompt, apply_ba_outcome, start_developer_agent. Steps with async_call are handled generically by the pipeline loop.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, apply_ba_outcome, start_developer_agent.`,
       );
   }
 }
