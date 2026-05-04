@@ -105,11 +105,15 @@ async function main(): Promise<void> {
   });
 
   const stepId = handoff.triggerStep?.trim() || (step.id ?? `${step.runner}#${asyncIdx}`);
-  const mergedCaller = mergeCallerConfigForAsyncChildDispatch(callerConfigEncoded, {
-    callback: entryWorkflow,
-    async_trigger_step: stepId,
-    ...parentFields,
-  });
+
+  const terminal = ac.terminal === true;
+  const mergedCaller = terminal
+    ? callerConfigEncoded
+    : mergeCallerConfigForAsyncChildDispatch(callerConfigEncoded, {
+        callback: entryWorkflow,
+        async_trigger_step: stepId,
+        ...parentFields,
+      });
 
   const inputs: Record<string, string> = {
     ...buildAiTeammateWorkflowDispatchInputsWithCaller({

@@ -22,7 +22,7 @@ The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON fi
   1. **`ensure_jira_fields_expected`** (optional but recommended) — block empty descriptions.
   2. **`create_github_issue`** — creates the GitHub issue and sets the body to the **Jira context snapshot** only (marker `<!-- sdlc-agents:jira-context -->`). BA progress uses **comments**, not the description. Later steps read the snapshot from the issue body (or legacy comments) via the API.
   3. Optional step with **`async_call`** (e.g. **`ba_codex_async`**) — when **`enabled`: true**, Codex runs only in the separate consumer workflow named by **`async_call.workflowFile`** (see consumer-templates `business-analyst.yml`). AI Teammate does not run Codex inline.
-  4. **`start_developer_agent`** — issue body from BA template + `workflow_dispatch` of the developer agent. Set **`"enabled": false`** on this step to skip it entirely (no issue-body rewrite from `github-issue.md`, no developer-agent dispatch). Default is enabled when the field is omitted.
+  4. **`developer_agent_async`** (example) — optional *async_call* boundary that dispatches `developer-agent.yml`. This is intended for a terminal handoff (no parent resume).
 
 ## Consumer setup
 
