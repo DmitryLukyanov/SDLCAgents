@@ -37,12 +37,12 @@ import {
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
+import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
 import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
-import { asyncStepRegistry } from './async-step-registry.js';
 
 // StepRecord is defined in runner-types.ts; re-exported here for backward compat.
 export type { StepRecord } from './runner-types.js';
@@ -59,6 +59,11 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runCreateGithubIssue(ctx, deps);
     }
 
+    case 'ba_async': {
+      await prepareCodexBaArtifacts(ctx, ctx.agentLabelParams ?? {}, deps, ctx.priorStepRecords);
+      return { status: 'continue' };
+    }
+
     case 'apply_ba_outcome': {
       return runApplyBaOutcome(ctx, step, deps);
     }
@@ -67,25 +72,11 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runStartDeveloperAgent(ctx, step as Parameters<typeof runStartDeveloperAgent>[1], deps);
     }
 
-    default: {
-      // Async prepare steps are implementation-agnostic and live in `asyncStepRegistry`.
-      // The only contract is: the step runner name + `async_call.workflowFile` in config.
-      if (step.async_call) {
-        const runner = asyncStepRegistry[step.runner];
-        if (!runner) {
-          throw new Error(
-            `Unknown async pipeline step runner: "${step.runner}". ` +
-              `Define it in async-step-registry.ts so the pipeline can prepare artifacts generically.`,
-          );
-        }
-        await runner.prepare({ ctx, step, deps });
-        return { status: 'continue' };
-      }
+    default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, apply_ba_outcome, start_developer_agent. Steps with async_call are handled via async-step-registry.ts.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, prepare_ba_prompt, apply_ba_outcome, start_developer_agent. Steps with async_call are handled generically by the pipeline loop.`,
       );
-    }
   }
 }
 
@@ -419,11 +410,7 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
       }
 
       // Output artifacts are on disk (downloaded by the YAML step before this script ran).
-      // Allow the runner to optionally perform a finish phase (e.g., parse output and write state).
-      const asyncRunner = asyncStepRegistry[triggerStep.runner];
-      if (asyncRunner?.finish) {
-        await asyncRunner.finish({ ctx, step: triggerStep as PipelineStep, deps });
-      }
+      // The next sync step (apply_ba_outcome) will read them.
       records.push({
         runner: triggerStep.runner,
         status: 'continue',
