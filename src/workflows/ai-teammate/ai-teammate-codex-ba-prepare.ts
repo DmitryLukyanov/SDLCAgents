@@ -5,7 +5,7 @@
  * Skip-by-label is handled in CI (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`; entry: `check-ba-skip-label-ci.ts`) before `codex_ba_prepare_prompt`.
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { getBaAnalysisSystemPrompt, buildBaTicketPrompt } from '../business-analyst/analyze-ticket.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
@@ -13,10 +13,15 @@ import { runPipelineThroughInclusive, type StepRecord } from './ai-teammate-pipe
 import { collectCodexBaTicketContextFromJira } from './steps/collect-codex-ba-ticket-context-from-jira.js';
 import type { AgentLabelParams, AiTeammateDeps, PipelineStep, RunnerContext } from './runner-types.js';
 import {
+  assertBaCodexPrepareContract,
+  handoffWorkspacePaths,
+  loadAgentInvocationContractFromConfigFile,
+} from '../../lib/agent-invocation-contract.js';
+import {
   GITHUB_ISSUE_PREP_VERSION,
   STATE_VERSION,
   assertConcurrencyKeyMatchesIssue,
-  codexBaPaths,
+  loadHandoffPathsFromConfig,
   type BaCodexStateFile,
   type BaGithubIssuePrepFile,
 } from './ai-teammate-codex-ba-shared.js';
@@ -43,7 +48,7 @@ export function writeBaGithubIssuePrepCheckpoint(
   ctx: RunnerContext,
   records: StepRecord[],
 ): void {
-  const p = codexBaPaths(issueKey);
+  const p = loadHandoffPathsFromConfig(issueKey);
   mkdirSync(p.base, { recursive: true });
 
   const prep: BaGithubIssuePrepFile = {
@@ -82,7 +87,11 @@ export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Pr
 /** After `codex_ba_create_github_issue`; writes BA Codex prompt + `ba-codex-state.json`. */
 export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promise<void> {
   const { issueKey, steps, agentLabelParams } = await requireCodexBaPipelineContext();
-  const p = codexBaPaths(issueKey);
+  const configFile = process.env.CONFIG_FILE?.trim();
+  if (!configFile) throw new Error('CONFIG_FILE is required for codex_ba_prepare_prompt');
+  const contract = loadAgentInvocationContractFromConfigFile(resolve(process.cwd(), configFile));
+  assertBaCodexPrepareContract(contract);
+  const p = handoffWorkspacePaths(issueKey, contract);
 
   if (!existsSync(p.githubIssuePrep)) {
     throw new Error(
@@ -140,9 +149,18 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
       'Each value must be a string or null. Follow every rule from the system instructions above.',
   ].join('\n');
 
-  writeFileSync(p.prompt, promptBody + '\n', 'utf8');
+  const promptPath = p.inputPaths['prompt'];
+  const jiraContextPath = p.inputPaths['jiraContext'];
+  if (!promptPath || !jiraContextPath) {
+    throw new Error('[codex_ba_prepare_prompt] contract must define inputParams.prompt and inputParams.jiraContext');
+  }
 
-  const codexRelativeOutputPath = join('spec-output', issueKey, 'ba-codex-output.txt').replace(/\\/g, '/');
+  writeFileSync(promptPath, promptBody + '\n', 'utf8');
+
+  const jiraHandoffBody = ['# Ticket context (invocation handoff artifact)', '', ticketBlock, ''].join('\n');
+  writeFileSync(jiraContextPath, jiraHandoffBody + '\n', 'utf8');
+
+  const codexRelativeOutputPath = p.codexRelativeOutputPath;
 
   const state: BaCodexStateFile = {
     version: STATE_VERSION,
@@ -162,7 +180,9 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
   };
 
   writeFileSync(p.state, JSON.stringify(state, null, 2) + '\n', 'utf8');
-  console.log(`[codex-ba-prepare-prompt] Wrote ${p.prompt} and ${p.state} (Codex output → ${codexRelativeOutputPath})`);
+  console.log(
+    `[codex-ba-prepare-prompt] Wrote ${promptPath}, ${jiraContextPath}, ${p.state} (Codex output → ${codexRelativeOutputPath})`,
+  );
 }
 
 /** Runs GitHub-issue phase then BA prompt phase (same as two dedicated workflow steps). */

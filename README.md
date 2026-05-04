@@ -106,9 +106,9 @@ Implementation lives in `src/workflows/ai-teammate/` (text flow: `SEQUENCE.md`; 
 |-------|--------------------------|-----------|------|
 | **0** | _(workflow step)_ | **`lib/agent-skip-if-label.ts`** (`evaluateSkipIfLabel`), entry **`check-ba-skip-label-ci.ts`** → step output **`skip_reason`**: **empty** = run BA; **non-empty** = skip `codex_ba_prepare_prompt` + Codex (no skip file; job output → finish via **`AI_TEAMMATE_SKIP_BA_REASON`**). | **No** |
 | **1a. GitHub issue** | `codex_ba_create_github_issue` — `tsx …/ai-teammate-agent.ts` | Runs the TypeScript pipeline **through and including** `create_github_issue` (Jira validation/context, spec-kit prep, **GitHub Issue** placeholder + `jira:KEY` — **not a PR**). Writes **`ba-github-issue-prep.json`**. | **No** |
-| **1b. BA prompt** | `codex_ba_prepare_prompt` — same entrypoint _(skipped when `skip_reason` is non-empty)_ | Reads prep JSON; collects BA ticket context; optional “BA started” GitHub comment; writes **`ba-codex-prompt.md`** + **`ba-codex-state.json`**. | **No** |
+| **1b. BA prompt** | `codex_ba_prepare_prompt` — same entrypoint _(skipped when `skip_reason` is non-empty)_ | Reads prep JSON; collects BA ticket context; optional “BA started” GitHub comment; writes **`invocation-prompt.md`**, **`invocation-jira-context.md`**, **`ba-codex-state.json`** (paths from async **`contract`**). | **No** |
 | **1 (local)** | `codex_ba_prepare` | Runs **1a** then **1b** in one process (debug / compat). | **No** |
-| **2. Codex BA** | separate workflow job — `openai/codex-action@v1` | Reads the prepared prompt (and repo context per action config), writes **`spec-output/<JIRA_KEY>/ba-codex-output.txt`**. | **Yes** — this is the BA LLM call. |
+| **2. Codex BA** | separate workflow job — `openai/codex-action@v1` | Reads the prepared prompt (and repo context per action config), writes **`async-invocation-handoff/<JIRA_KEY>/invocation-output.txt`** (default contract). | **Yes** — this is the BA LLM call. |
 | **3. Finish** | `codex_ba_finish` — same `ai-teammate-agent.ts` entrypoint | If **`AI_TEAMMATE_SKIP_BA_REASON`** is set (from job output **`skip_reason`**), records that and exits. Otherwise loads **`ba-codex-state.json`**, reads Codex output, parses/interprets the BA JSON, applies the outcome (Jira comment/transition, GitHub issue updates, labels), then continues the pipeline from **`start_developer_agent`** (or stops on incomplete BA). | **No** — parses Codex output; does not invoke Codex again. |
 
 `AI_TEAMMATE_CONCURRENCY_KEY` (workflow input) must match the Jira key embedded in `CALLER_CONFIG`, or artifact paths and the workflow disagree.
@@ -128,7 +128,7 @@ sequenceDiagram
     AT->>AT: agent-skip-if-label (Jira vs skipIfLabel) → skip_reason
     AT->>AT: codex_ba_create_github_issue — pipeline → ba-github-issue-prep.json
     AT->>AT: codex_ba_prepare_prompt (if skip_reason empty) — prompt + state (no LLM)
-    AT->>CX: Codex job — ba-codex-output.txt
+    AT->>CX: Codex job — invocation-output.txt
     AT->>AT: codex_ba_finish (TS) — read Codex output, interpret + apply (no second LLM)
     alt BA complete
         CX-->>AT: five-field JSON result

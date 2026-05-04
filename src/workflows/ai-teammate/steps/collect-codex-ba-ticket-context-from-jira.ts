@@ -1,6 +1,6 @@
 /**
  * During `codex_ba_prepare_prompt` / `AI_TEAMMATE_MODE=codex_ba_prepare_prompt`: load Jira issue + related
- * issues and assemble {@link TicketContext} for the Codex BA prompt (`ba-codex-prompt.md`).
+ * issues and assemble {@link TicketContext} for the Codex BA prompt / invocation handoff files.
  */
 import { adfToPlain } from '../../../lib/adf-to-plain.js';
 import {

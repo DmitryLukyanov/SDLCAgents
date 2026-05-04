@@ -2,7 +2,7 @@
  * Local AI Teammate debug — emulated Jira/GitHub, no real API calls.
  * Run:   npm run ai-teammate:debug
  *
- * Runs **Codex BA prepare** only (writes `spec-output/<KEY>/ba-codex-prompt.md` under the repo).
+ * Runs **Codex BA prepare** only (writes `async-invocation-handoff/<KEY>/invocation-*.md` + state under the repo).
  * `params.skipIfLabel` is evaluated in GitHub Actions only (`lib/agent-skip-if-label.ts` via `check-ba-skip-label-ci.ts`); this script does not skip BA by label.
  * Edit ISSUE_KEY or mock data below to experiment.
  */

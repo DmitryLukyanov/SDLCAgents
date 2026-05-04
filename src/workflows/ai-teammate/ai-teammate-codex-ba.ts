@@ -11,6 +11,7 @@ export {
   assertConcurrencyKeyMatchesIssue,
   specDir,
   codexBaPaths,
+  loadHandoffPathsFromConfig,
   type BaGithubIssuePrepFile,
   type BaCodexStateFile,
 } from './ai-teammate-codex-ba-shared.js';

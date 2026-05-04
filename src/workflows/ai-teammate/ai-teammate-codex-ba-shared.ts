@@ -1,7 +1,13 @@
 /**
- * Shared paths, versions, and JSON shapes for Codex BA prepare + finish (`spec-output/<KEY>/`).
+ * Shared paths, versions, and JSON shapes for Codex BA prepare + finish (`async-invocation-handoff/<KEY>/`).
  */
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import {
+  ASYNC_INVOCATION_HANDOFF_ROOT_DIR,
+  DEFAULT_AGENT_INVOCATION_CONTRACT,
+  handoffWorkspacePaths,
+  loadAgentInvocationContractFromConfigFile,
+} from '../../lib/agent-invocation-contract.js';
 import type { TicketContext } from '../business-analyst/ba-types.js';
 import type { AgentLabelParams, RunnerContext } from './runner-types.js';
 import type { StepRecord } from './ai-teammate-pipeline.js';
@@ -47,15 +53,22 @@ export function assertConcurrencyKeyMatchesIssue(issueKey: string): void {
 }
 
 export function specDir(issueKey: string): string {
-  return join(process.cwd(), 'spec-output', issueKey);
+  return join(process.cwd(), ASYNC_INVOCATION_HANDOFF_ROOT_DIR, issueKey);
 }
 
+/** Default handoff layout (invocation contract defaults). Prefer {@link handoffWorkspacePaths} when config supplies `contract`. */
 export function codexBaPaths(issueKey: string) {
-  const base = specDir(issueKey);
-  return {
-    base,
-    state: join(base, 'ba-codex-state.json'),
-    prompt: join(base, 'ba-codex-prompt.md'),
-    githubIssuePrep: join(base, 'ba-github-issue-prep.json'),
-  };
+  const { base, state, inputPaths, githubIssuePrep } = handoffWorkspacePaths(
+    issueKey,
+    DEFAULT_AGENT_INVOCATION_CONTRACT,
+  );
+  return { base, state, prompt: inputPaths['prompt']!, githubIssuePrep };
+}
+
+/** Resolve handoff paths from `CONFIG_FILE` + async step `contract`. */
+export function loadHandoffPathsFromConfig(issueKey: string): ReturnType<typeof handoffWorkspacePaths> {
+  const configFile = process.env.CONFIG_FILE?.trim();
+  if (!configFile) throw new Error('CONFIG_FILE is required for invocation contract / handoff paths');
+  const contract = loadAgentInvocationContractFromConfigFile(resolve(process.cwd(), configFile));
+  return handoffWorkspacePaths(issueKey, contract);
 }

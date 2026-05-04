@@ -2,6 +2,9 @@
 # Copy to `.github/workflows/business-analyst.yml` in the consumer repo. Set `workflowRef` in agent config
 # to your default branch if it is not `main`.
 #
+# Parent dispatch sends invocation_* inputs (from the async step `contract`). All invocation **inputs** are
+# regular files under async-invocation-handoff/<concurrency_key>/ inside the prepare-bundle artifact (artifact-only contract).
+#
 # Extra artifact: ai-teammate-ba-<key>-workflow-dispatch-inputs — expanded JSON (embedded config + decoded caller_config).
 name: Business Analyst (async Codex)
 run-name: "${{ inputs.concurrency_key }} · BA Codex"
@@ -25,6 +28,21 @@ on:
         description: "URL-encoded JSON from parent dispatch (includes parent_run_id, callback, async_trigger_step)"
         required: true
         type: string
+      invocation_prompt_file:
+        description: "Handoff artifact — relative path for Codex prompt (must exist in prepare bundle)."
+        required: false
+        type: string
+        default: 'invocation-prompt.md'
+      invocation_jira_context_file:
+        description: "Handoff artifact — relative path for ticket/Jira context snapshot (must exist in prepare bundle)."
+        required: false
+        type: string
+        default: 'invocation-jira-context.md'
+      invocation_output_file:
+        description: "Handoff artifact — relative path where Codex writes output (created/overwritten by Codex)."
+        required: false
+        type: string
+        default: 'invocation-output.txt'
 
 jobs:
   rehydrate_ba_workspace:
@@ -62,13 +80,21 @@ jobs:
           github_token: ${{ secrets.COPILOT_PAT }}
           run_id: ${{ steps.meta.outputs.prepare_run_id }}
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
-          path: spec-output/${{ inputs.concurrency_key }}/
+          path: async-invocation-handoff/${{ inputs.concurrency_key }}/
+
+      - name: Verify invocation input artifacts (consumer)
+        run: |
+          set -euo pipefail
+          BASE="async-invocation-handoff/${{ inputs.concurrency_key }}"
+          test -s "$BASE/${{ inputs.invocation_prompt_file }}"
+          test -s "$BASE/${{ inputs.invocation_jira_context_file }}"
+          echo "OK: prompt and jira-context handoff files present under $BASE"
 
       - name: Upload for Codex reusable (same-run artifact)
         uses: actions/upload-artifact@v4
         with:
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
-          path: spec-output/${{ inputs.concurrency_key }}/
+          path: async-invocation-handoff/${{ inputs.concurrency_key }}/
           if-no-files-found: error
 
   ba_codex:
@@ -77,11 +103,11 @@ jobs:
     secrets: inherit
     with:
       download_artifact_name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
-      download_path: spec-output/${{ inputs.concurrency_key }}
-      prompt_file: spec-output/${{ inputs.concurrency_key }}/ba-codex-prompt.md
-      output_file: spec-output/${{ inputs.concurrency_key }}/ba-codex-output.txt
+      download_path: async-invocation-handoff/${{ inputs.concurrency_key }}
+      prompt_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ inputs.invocation_prompt_file }}
+      output_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ inputs.invocation_output_file }}
       upload_artifact_name: ai-teammate-ba-${{ inputs.concurrency_key }}-post-codex
-      upload_path: spec-output/${{ inputs.concurrency_key }}/
+      upload_path: async-invocation-handoff/${{ inputs.concurrency_key }}/
       upload_if_no_files_found: error
       codex_model: ${{ vars.BA_CODEX_MODEL }}
       codex_step_name: Run Codex - Business Analyst

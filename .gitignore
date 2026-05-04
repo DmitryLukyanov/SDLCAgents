@@ -2,5 +2,7 @@ node_modules/
 .env.local
 .claude/
 
-# AI Teammate / Codex BA local artifacts (cwd-relative, e.g. npm run ai-teammate:debug)
+# AI Teammate async Codex handoff (cwd-relative, e.g. npm run ai-teammate:debug)
+async-invocation-handoff/
+# Legacy / developer-agent local paths
 spec-output/
