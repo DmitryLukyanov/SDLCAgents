@@ -79,7 +79,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, start_developer_agent (ba_codex_async is orchestrated in runPipelineCi).`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, prepare_ba_prompt, apply_ba_outcome, start_developer_agent. Steps with async_call are handled generically by the pipeline loop.`,
       );
   }
 }
