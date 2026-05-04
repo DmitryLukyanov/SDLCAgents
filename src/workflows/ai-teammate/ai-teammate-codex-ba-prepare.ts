@@ -87,38 +87,18 @@ export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Pr
   writeBaGithubIssuePrepCheckpoint(issueKey, ctx, records);
 }
 
-/** After `codex_ba_create_github_issue`; writes BA Codex prompt + `ba-codex-state.json`. */
-export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promise<void> {
-  const { issueKey, steps, agentLabelParams } = await requireCodexBaPipelineContext();
-  const configFile = process.env.CONFIG_FILE?.trim();
-  if (!configFile) throw new Error('CONFIG_FILE is required for codex_ba_prepare_prompt');
-  const contract = loadAgentInvocationContractFromConfigFile(resolve(process.cwd(), configFile));
+/**
+ * Core: fetch Jira data, build prompt, write all input artifacts + state + manifest.
+ * Called by both the pipeline step (ctx passed directly) and the legacy mode (ctx from checkpoint).
+ */
+export async function prepareCodexBaArtifacts(
+  ctx: RunnerContext,
+  agentLabelParams: AgentLabelParams,
+  deps: AiTeammateDeps,
+): Promise<void> {
+  const contract = loadAgentInvocationContractFromConfigFile(ctx.configFile);
   assertBaCodexPrepareContract(contract);
-  const p = handoffWorkspacePaths(issueKey, contract);
-
-  if (!existsSync(p.githubIssuePrep)) {
-    throw new Error(
-      `[codex_ba_prepare_prompt] Missing ${p.githubIssuePrep} — run codex_ba_create_github_issue first (same job or prior step).`,
-    );
-  }
-
-  const prep = JSON.parse(readFileSync(p.githubIssuePrep, 'utf8')) as BaGithubIssuePrepFile;
-  if (prep.version !== GITHUB_ISSUE_PREP_VERSION) {
-    throw new Error(`[codex_ba_prepare_prompt] Unsupported ba-github-issue-prep.json version: ${prep.version}`);
-  }
-  if (prep.runnerCtx.issueKey !== issueKey) {
-    throw new Error(
-      `[codex_ba_prepare_prompt] Checkpoint issueKey "${prep.runnerCtx.issueKey}" does not match CONFIG/CALLER_CONFIG "${issueKey}".`,
-    );
-  }
-
-  const ctx: RunnerContext = {
-    ...prep.runnerCtx,
-    baOutcome: undefined,
-  };
-  const records = prep.partialRecords;
-
-  const { ticketCtx } = await collectCodexBaTicketContextFromJira(ctx, agentLabelParams, deps);
+  const p = handoffWorkspacePaths(ctx.issueKey, contract);
   mkdirSync(p.base, { recursive: true });
 
   if (ctx.githubIssueNumber) {
@@ -129,10 +109,10 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
         ctx.githubIssueNumber,
         fillTemplate(BA_STARTED, { ISSUE_KEY: ctx.issueKey }),
       )
-      .catch(() => {
-        /* non-fatal */
-      });
+      .catch(() => { /* non-fatal */ });
   }
+
+  const { ticketCtx } = await collectCodexBaTicketContextFromJira(ctx, agentLabelParams, deps);
 
   const system = getBaAnalysisSystemPrompt();
   const ticketBlock = buildBaTicketPrompt(ticketCtx);
@@ -155,15 +135,11 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
   const promptPath = p.inputPaths['prompt'];
   const jiraContextPath = p.inputPaths['jiraContext'];
   if (!promptPath || !jiraContextPath) {
-    throw new Error('[codex_ba_prepare_prompt] contract must define inputParams.prompt and inputParams.jiraContext');
+    throw new Error('[prepare_ba_prompt] contract.inputParams must define "prompt" and "jiraContext"');
   }
 
   writeFileSync(promptPath, promptBody + '\n', 'utf8');
-
-  const jiraHandoffBody = ['# Ticket context (invocation handoff artifact)', '', ticketBlock, ''].join('\n');
-  writeFileSync(jiraContextPath, jiraHandoffBody + '\n', 'utf8');
-
-  const codexRelativeOutputPath = p.codexRelativeOutputPath;
+  writeFileSync(jiraContextPath, ['# Ticket context (invocation handoff artifact)', '', ticketBlock, ''].join('\n'), 'utf8');
 
   const state: BaCodexStateFile = {
     version: STATE_VERSION,
@@ -178,15 +154,41 @@ export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promis
       configFile: ctx.configFile,
       githubIssueNumber: ctx.githubIssueNumber,
     },
-    codexRelativeOutputPath,
-    partialRecords: records,
+    codexRelativeOutputPath: p.codexRelativeOutputPath,
   };
 
   writeFileSync(p.state, JSON.stringify(state, null, 2) + '\n', 'utf8');
   writeInvocationHandoffManifestFile(p.base, contract);
   console.log(
-    `[codex-ba-prepare-prompt] Wrote ${promptPath}, ${jiraContextPath}, ${p.state}, ${INVOCATION_HANDOFF_MANIFEST_FILENAME} (Codex output → ${codexRelativeOutputPath})`,
+    `[prepare_ba_prompt] Wrote ${promptPath}, ${jiraContextPath}, ${p.state}, ${INVOCATION_HANDOFF_MANIFEST_FILENAME}`,
   );
+}
+
+/** After `codex_ba_create_github_issue`; writes BA Codex prompt + `ba-codex-state.json`. Legacy mode. */
+export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promise<void> {
+  const { issueKey, agentLabelParams } = await requireCodexBaPipelineContext();
+  const configFile = process.env.CONFIG_FILE?.trim();
+  if (!configFile) throw new Error('CONFIG_FILE is required for codex_ba_prepare_prompt');
+  const p = handoffWorkspacePaths(issueKey, loadAgentInvocationContractFromConfigFile(resolve(process.cwd(), configFile)));
+
+  if (!existsSync(p.githubIssuePrep)) {
+    throw new Error(
+      `[codex_ba_prepare_prompt] Missing ${p.githubIssuePrep} — run codex_ba_create_github_issue first.`,
+    );
+  }
+
+  const prep = JSON.parse(readFileSync(p.githubIssuePrep, 'utf8')) as BaGithubIssuePrepFile;
+  if (prep.version !== GITHUB_ISSUE_PREP_VERSION) {
+    throw new Error(`[codex_ba_prepare_prompt] Unsupported ba-github-issue-prep.json version: ${prep.version}`);
+  }
+  if (prep.runnerCtx.issueKey !== issueKey) {
+    throw new Error(
+      `[codex_ba_prepare_prompt] Checkpoint issueKey "${prep.runnerCtx.issueKey}" does not match "${issueKey}".`,
+    );
+  }
+
+  const ctx: RunnerContext = { ...prep.runnerCtx, baOutcome: undefined };
+  await prepareCodexBaArtifacts(ctx, agentLabelParams, deps);
 }
 
 /** Runs GitHub-issue phase then BA prompt phase (same as two dedicated workflow steps). */

@@ -36,7 +36,7 @@ import {
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
-import { runPrepareBaPrompt } from './steps/prepare-ba-prompt.js';
+import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
 import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
 import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
@@ -59,7 +59,13 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     }
 
     case 'prepare_ba_prompt': {
-      return runPrepareBaPrompt(ctx, step, deps);
+      const skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
+      if (skipBa) {
+        console.log(`   ⏭ Skipped — BA segment gated (${skipBa})`);
+        return { status: 'continue' };
+      }
+      await prepareCodexBaArtifacts(ctx, ctx.agentLabelParams ?? {}, deps);
+      return { status: 'continue' };
     }
 
     case 'apply_ba_outcome': {
