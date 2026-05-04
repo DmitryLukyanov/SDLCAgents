@@ -112,7 +112,7 @@ export async function resumeBaCodexAsyncOutcomeOnly(deps: AiTeammateDeps): Promi
   }));
 
   const inlineRecord: StepRecord = {
-    runner: 'ba_codex_async',
+    runner: 'ba_async',
     status: stepOutcome.status,
     reason: stepOutcome.status === 'stop' ? stepOutcome.reason : undefined,
     durationMs: 0,
