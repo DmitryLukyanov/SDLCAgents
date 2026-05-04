@@ -290,6 +290,7 @@ function requireEnvNonEmpty(name: string): string {
 
 async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
   setGithubActionsOutput('needs_async_handoff', 'false');
+  setGithubActionsOutput('async_handoff', '');
 
   const callerEncoded = requireEnvNonEmpty('CALLER_CONFIG');
   const root = decodeCallerConfig(callerEncoded);
@@ -453,6 +454,15 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
         return;
       }
+
+      // Provide a single structured output so the YAML dispatch step can stay generic.
+      // (The dispatch step still reads config to build the full dispatch payload.)
+      const triggerStepId = step.id ?? `${step.runner}#${i}`;
+      setGithubActionsOutput('async_handoff', JSON.stringify({
+        triggerStep: triggerStepId,
+        workflowFile: step.async_call.workflowFile.trim(),
+        workflowRef: step.async_call.workflowRef?.trim() || '',
+      }));
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
       return;

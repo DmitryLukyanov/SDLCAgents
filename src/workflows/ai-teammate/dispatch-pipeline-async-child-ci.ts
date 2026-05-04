@@ -38,12 +38,26 @@ function requireEnv(name: string): string {
   return v;
 }
 
+function maybeParseAsyncHandoffFromOutput(): { triggerStep?: string; workflowFile?: string } {
+  const raw = process.env.ASYNC_HANDOFF?.trim() ?? '';
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as { triggerStep?: string; workflowFile?: string };
+    return typeof parsed === 'object' && parsed ? parsed : {};
+  } catch {
+    console.warn('[dispatch-pipeline-async-child] ASYNC_HANDOFF is not valid JSON; ignoring.');
+    return {};
+  }
+}
+
 async function main(): Promise<void> {
   const configFile = requireEnv('CONFIG_FILE');
   const callerConfigEncoded = requireEnv('CALLER_CONFIG');
   const runCodex = requireEnv('AI_TEAMMATE_RUN_CODEX') === 'true';
   const concurrencyKey = requireEnv('AI_TEAMMATE_CONCURRENCY_KEY');
   const entryWorkflow = process.env.AI_TEAMMATE_ENTRY_WORKFLOW_FILE?.trim() || 'ai-teammate.yml';
+
+  const handoff = maybeParseAsyncHandoffFromOutput();
 
   const abs = resolve(process.cwd(), configFile);
   const raw = readFileSync(abs, 'utf8');
@@ -90,7 +104,7 @@ async function main(): Promise<void> {
     githubRunId: requireEnv('GITHUB_RUN_ID'),
   });
 
-  const stepId = step.id ?? `${step.runner}#${asyncIdx}`;
+  const stepId = handoff.triggerStep?.trim() || (step.id ?? `${step.runner}#${asyncIdx}`);
   const mergedCaller = mergeCallerConfigForAsyncChildDispatch(callerConfigEncoded, {
     callback: entryWorkflow,
     async_trigger_step: stepId,
