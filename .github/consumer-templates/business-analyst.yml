@@ -1,6 +1,8 @@
 # Async BA (Codex) — dispatched from AI Teammate when `async_call.workflowFile` is `business-analyst.yml`.
 # Copy to `.github/workflows/business-analyst.yml` in the consumer repo. Set `workflowRef` in agent config
 # to your default branch if it is not `main`.
+#
+# Extra artifact: ai-teammate-ba-<key>-workflow-dispatch-inputs — JSON echo of the three workflow_dispatch inputs only.
 name: Business Analyst (async Codex)
 run-name: "${{ inputs.concurrency_key }} · BA Codex"
 
@@ -34,6 +36,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Write workflow_dispatch inputs (for artifact)
+        env:
+          concurrency_key: ${{ inputs.concurrency_key }}
+          config_file: ${{ inputs.config_file }}
+          caller_config: ${{ inputs.caller_config }}
+        run: |
+          set -euo pipefail
+          mkdir -p .workflow-dispatch-inputs-artifact
+          node <<'NODE'
+          const fs = require('fs');
+          const out = {
+            concurrency_key: process.env.concurrency_key,
+            config_file: process.env.config_file,
+            caller_config: process.env.caller_config,
+          };
+          fs.writeFileSync(
+            '.workflow-dispatch-inputs-artifact/workflow_dispatch_inputs.json',
+            JSON.stringify(out, null, 2) + '\n',
+          );
+          NODE
+
       - uses: actions/github-script@v7
         id: meta
         env:
@@ -59,6 +82,13 @@ jobs:
         with:
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
           path: spec-output/${{ inputs.concurrency_key }}/
+          if-no-files-found: error
+
+      - name: Upload workflow_dispatch inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-teammate-ba-${{ inputs.concurrency_key }}-workflow-dispatch-inputs
+          path: .workflow-dispatch-inputs-artifact/
           if-no-files-found: error
 
   ba_codex:
