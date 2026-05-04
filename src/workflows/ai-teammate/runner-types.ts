@@ -56,9 +56,9 @@ export interface RunnerContext {
   skipBaReason?: string;
   /** Written by create_github_issue; read by subsequent steps. */
   githubIssueNumber?: number;
-  /** Set after BA (Codex) analysis; read by `start_developer_agent`. */
+  /** Set after BA (Codex) analysis; may be used by later pipeline steps. */
   baOutcome?: BaOutcome;
-  /** Prior step records from pipeline execution (used by ba_async prepare for checkpoint). */
+  /** Prior step records from pipeline execution (used by async_operation prepare for checkpoint). */
   priorStepRecords?: StepRecord[];
 }
 
@@ -76,7 +76,7 @@ export interface PipelineStep {
   id?: string;
   runner: string;
   enabled?: boolean;
-  async_call?: { workflowFile: string; workflowRef?: string; inputs?: Record<string, string> };
+  async_call?: { workflowFile: string; workflowRef?: string; terminal?: boolean; inputs?: Record<string, string> };
   [key: string]: unknown;
 }
 

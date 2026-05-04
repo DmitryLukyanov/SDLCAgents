@@ -17,6 +17,8 @@
 export interface PipelineAsyncCallSpec {
   workflowFile: string;
   workflowRef?: string;
+  /** When true, dispatch child workflow without configuring callback/resume. */
+  terminal?: boolean;
   /** Extra string-only workflow_dispatch inputs merged after system fields. */
   inputs?: Record<string, string>;
 }

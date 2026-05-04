@@ -7,17 +7,15 @@
  * Supported step runners:
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
  *   create_github_issue          — creates a GitHub issue (Jira snapshot body); stores issue number in context
- *   start_developer_agent        — updates issue body with BA results + dispatches developer agent workflow (omit or set `"enabled": false` to skip dispatch only)
+ *   (developer agent dispatch is now typically done via a terminal async_call step)
  *
- * Jira context snapshot: `create_github_issue` appends a marked block to the issue body; `start_developer_agent`
- * read it back via `fetchJiraContextFromGithubIssue`.
+ * Jira context snapshot: `create_github_issue` appends a marked block to the issue body.
  *
- * Any step with `async_call` in config is handled generically: the pipeline calls `asyncStepRegistry[step.runner].prepare()`
- * on the first run, then the reusable workflow uploads artifacts and dispatches the `async_call` child.
+ * Any step with `async_call` in config is handled generically: on the first run, the pipeline executes the step runner
+ * to prepare artifacts, then the reusable workflow uploads artifacts and dispatches the `async_call` child.
  * Parent **resume** after the child: `caller_config.params.async_child_run_id` + `async_trigger_step` — walk steps
- * from the beginning, skip through the trigger step (checkpoint rows), call `asyncStepRegistry[step.runner].finish()`
+ * from the beginning, skip through the trigger step (checkpoint rows), verify child outputs exist
  * (see {@link ../../lib/invocation-handoff.js assertManifestMatchesAsyncStepAndPrimaryOutputPresent}), then run remaining steps.
- * New async runners: add an `AsyncStepRunnerDef` to `async-step-registry.ts` — no pipeline code changes needed.
  * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
@@ -39,7 +37,6 @@ import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
-import { runStartDeveloperAgent } from './steps/start-developer-agent.js';
 import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
@@ -59,7 +56,9 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runCreateGithubIssue(ctx, deps);
     }
 
-    case 'ba_async': {
+    // The async boundary is driven by config (`step.async_call.workflowFile`).
+    // The step runner itself is only responsible for preparing the invocation artifacts.
+    case 'async_operation': {
       await prepareCodexBaArtifacts(ctx, ctx.agentLabelParams ?? {}, deps, ctx.priorStepRecords);
       return { status: 'continue' };
     }
@@ -68,14 +67,10 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runApplyBaOutcome(ctx, step, deps);
     }
 
-    case 'start_developer_agent': {
-      return runStartDeveloperAgent(ctx, step as Parameters<typeof runStartDeveloperAgent>[1], deps);
-    }
-
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, prepare_ba_prompt, apply_ba_outcome, start_developer_agent. Steps with async_call are handled generically by the pipeline loop.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, apply_ba_outcome.`,
       );
   }
 }
@@ -289,6 +284,7 @@ function requireEnvNonEmpty(name: string): string {
 
 async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
   setGithubActionsOutput('needs_async_handoff', 'false');
+  setGithubActionsOutput('async_handoff', '');
 
   const callerEncoded = requireEnvNonEmpty('CALLER_CONFIG');
   const root = decodeCallerConfig(callerEncoded);
@@ -452,6 +448,15 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
         return;
       }
+
+      // Provide a single structured output so the YAML dispatch step can stay generic.
+      // (The dispatch step still reads config to build the full dispatch payload.)
+      const triggerStepId = step.id ?? `${step.runner}#${i}`;
+      setGithubActionsOutput('async_handoff', JSON.stringify({
+        triggerStep: triggerStepId,
+        workflowFile: step.async_call.workflowFile.trim(),
+        workflowRef: step.async_call.workflowRef?.trim() || '',
+      }));
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
       return;

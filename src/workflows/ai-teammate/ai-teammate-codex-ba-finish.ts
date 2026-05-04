@@ -10,7 +10,6 @@ import { join } from 'node:path';
 import { interpretBaModelOutput } from '../business-analyst/analyze-ticket.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import {
-  runPipelineFromStepId,
   writeAiTeammatePipelineSummary,
 } from './ai-teammate-pipeline.js';
 import type { StepRecord } from './runner-types.js';
@@ -22,12 +21,6 @@ import {
   codexBaPaths,
   type BaCodexStateFile,
 } from './ai-teammate-codex-ba-shared.js';
-
-function findFirstStepIdByRunner(steps: PipelineStep[], runner: string): string {
-  const idx = steps.findIndex((s) => s.runner === runner);
-  if (idx < 0) throw new Error(`No pipeline step with runner "${runner}".`);
-  return steps[idx]!.id ?? `${runner}#${idx}`;
-}
 
 export interface BaCodexAsyncResumeResult {
   issueKey: string;
@@ -160,12 +153,14 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     return;
   }
 
-  await runPipelineFromStepId(
+  // Preferred: do not jump to a hardcoded “next step”. The unified pipeline entry
+  // (`runPipelineCi`) owns the resume cursor and will continue after `async_trigger_step`.
+  // This legacy finish entrypoint is kept for compatibility, but should not be used
+  // for post-async continuation.
+  await writeAiTeammatePipelineSummary(
     r.issueKey,
-    r.steps,
-    findFirstStepIdByRunner(r.steps, 'start_developer_agent'),
-    deps,
-    r.ctx,
+    `${r.ctx.owner}/${r.ctx.repo}`,
     [...r.priorForSummary, r.inlineRecord],
+    r.ctx,
   );
 }
