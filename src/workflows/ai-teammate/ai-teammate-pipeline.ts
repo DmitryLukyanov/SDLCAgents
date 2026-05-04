@@ -76,6 +76,8 @@ export interface StepRecord {
   status: 'continue' | 'stop';
   reason?: string;
   durationMs: number;
+  /** Set on resume: rows from `ba-codex-state.json` were executed in the prepare run, not repeated in this job. */
+  source?: 'prepare_checkpoint' | 'this_invocation';
 }
 
 export async function writeAiTeammatePipelineSummary(
@@ -92,9 +94,19 @@ export async function writeAiTeammatePipelineSummary(
   const icon = (s: StepRecord) => s.status === 'continue' ? '✅' : '🛑';
   const ms = (n: number) => n < 1000 ? `${n}ms` : `${(n / 1000).toFixed(1)}s`;
 
-  const rows = records.map(r =>
-    `| \`${r.runner}\` | ${icon(r)} ${r.status}${r.reason ? ` — ${r.reason}` : ''} | ${ms(r.durationMs)} |`
-  ).join('\n');
+  const showInvocation = records.some(r => r.source === 'prepare_checkpoint');
+  const invocationLabel = (r: StepRecord) =>
+    r.source === 'prepare_checkpoint' ? 'Prior run' : r.source === 'this_invocation' ? 'This run' : 'This run';
+
+  const rows = records
+    .map(r => {
+      const outcome = `${icon(r)} ${r.status}${r.reason ? ` — ${r.reason}` : ''}`;
+      if (showInvocation) {
+        return `| \`${r.runner}\` | ${invocationLabel(r)} | ${outcome} | ${ms(r.durationMs)} |`;
+      }
+      return `| \`${r.runner}\` | ${outcome} | ${ms(r.durationMs)} |`;
+    })
+    .join('\n');
 
   const ghRepo = process.env.GITHUB_REPOSITORY ?? repo;
   const issueLink = ctx.githubIssueNumber
@@ -108,11 +120,18 @@ export async function writeAiTeammatePipelineSummary(
   const finalStep = records.at(-1);
   const pipelineStatus = finalStep?.status === 'stop' ? '🛑 Halted' : '✅ Completed';
 
+  const resumeNote = showInvocation
+    ? '> **Resume after async BA:** Rows marked **Prior run** are replayed from the prepare-phase checkpoint (`ba-codex-state.json`); those steps were **not** executed again in this job. Rows marked **This run** reflect work in the current invocation.\n\n'
+    : '';
+
   const summary = fillTemplate(AI_TEAMMATE_JOB_SUMMARY_TEMPLATE, {
     ISSUE_KEY:        issueKey,
+    RESUME_NOTE:      resumeNote,
     PIPELINE_STATUS:  pipelineStatus,
     ISSUE_LINK:       issueLink,
     BA_STATUS:        baStatus,
+    TABLE_HEADER_MID: showInvocation ? ' Invocation |' : '',
+    TABLE_SEP_MID:    showInvocation ? '------------|' : '',
     STEP_ROWS:        rows,
   });
 
@@ -216,6 +235,7 @@ export async function runPipelineFromRunner(
       reason:
         outcome.status === 'stop' ? outcome.reason : !stepEnabled ? 'skipped (enabled: false)' : undefined,
       durationMs,
+      source: 'this_invocation',
     });
 
     if (outcome.status === 'stop') {

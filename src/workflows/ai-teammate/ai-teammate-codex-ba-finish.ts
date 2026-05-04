@@ -90,18 +90,24 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
 
   const stepOutcome = await applyCodexBaOutcomeToJiraAndGithub(ctx, agentLabelParams, deps, outcome);
 
+  const priorForSummary: StepRecord[] = state.partialRecords.map(r => ({
+    ...r,
+    source: 'prepare_checkpoint',
+  }));
+
   const inlineRecord: StepRecord = {
     runner: 'ba_codex_async',
     status: stepOutcome.status,
     reason: stepOutcome.status === 'stop' ? stepOutcome.reason : undefined,
     durationMs: 0,
+    source: 'this_invocation',
   };
 
   if (stepOutcome.status === 'stop') {
     await writeAiTeammatePipelineSummary(
       issueKey,
       `${ctx.owner}/${ctx.repo}`,
-      [...state.partialRecords, inlineRecord],
+      [...priorForSummary, inlineRecord],
       ctx,
     );
     return;
@@ -113,6 +119,6 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
     'start_developer_agent',
     deps,
     ctx,
-    [...state.partialRecords, inlineRecord],
+    [...priorForSummary, inlineRecord],
   );
 }
