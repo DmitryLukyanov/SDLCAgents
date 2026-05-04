@@ -1,8 +1,8 @@
 /**
- * Codex BA — prepare (no LLM): GitHub issue checkpoint, BA prompt, `ba-codex-state.json`.
+ * Codex BA — prepare helpers (no LLM): build BA prompt, `ba-codex-state.json`, and invocation manifest.
  *
- * Modes: `codex_ba_create_github_issue`, `codex_ba_prepare_prompt`, `codex_ba_prepare` (both phases).
- * Skip-by-label is handled in CI (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`; entry: `check-ba-skip-label-ci.ts`) before `codex_ba_prepare_prompt`.
+ * These helpers are used by the config-driven pipeline async handoff.
+ * Skip-by-label is handled in CI (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`; entry: `check-ba-skip-label-ci.ts`).
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -45,7 +45,7 @@ async function requireCodexBaPipelineContext(): Promise<{
   return { issueKey, steps, agentLabelParams, ctxInit };
 }
 
-/** Persist checkpoint after `create_github_issue` for `codex_ba_prepare_prompt` / async BA handoff. */
+/** Persist checkpoint after `create_github_issue` for async BA handoff. */
 export function writeBaGithubIssuePrepCheckpoint(
   issueKey: string,
   ctx: RunnerContext,
@@ -72,7 +72,7 @@ export function writeBaGithubIssuePrepCheckpoint(
   console.log(`[codex-ba-github-issue] Wrote ${p.githubIssuePrep} (GitHub issue #${ctx.githubIssueNumber ?? '?'})`);
 }
 
-/** Pipeline through `create_github_issue`; persists `ba-github-issue-prep.json` for `codex_ba_prepare_prompt`. */
+/** Pipeline through `create_github_issue`; persists `ba-github-issue-prep.json` for async BA handoff. */
 export async function runCodexBaCreateGithubIssuePhase(deps: AiTeammateDeps): Promise<void> {
   const { issueKey, steps, ctxInit } = await requireCodexBaPipelineContext();
 
@@ -166,35 +166,4 @@ export async function prepareCodexBaArtifacts(
   );
 }
 
-/** After `codex_ba_create_github_issue`; writes BA Codex prompt + `ba-codex-state.json`. Legacy mode. */
-export async function runCodexBaPreparePromptPhase(deps: AiTeammateDeps): Promise<void> {
-  const { issueKey, agentLabelParams } = await requireCodexBaPipelineContext();
-  const configFile = process.env.CONFIG_FILE?.trim();
-  if (!configFile) throw new Error('CONFIG_FILE is required for codex_ba_prepare_prompt');
-  const p = handoffWorkspacePaths(issueKey, loadAgentInvocationContractFromConfigFile(resolve(process.cwd(), configFile)));
-
-  if (!existsSync(p.githubIssuePrep)) {
-    throw new Error(
-      `[codex_ba_prepare_prompt] Missing ${p.githubIssuePrep} — run codex_ba_create_github_issue first.`,
-    );
-  }
-
-  const prep = JSON.parse(readFileSync(p.githubIssuePrep, 'utf8')) as BaGithubIssuePrepFile;
-  if (prep.version !== GITHUB_ISSUE_PREP_VERSION) {
-    throw new Error(`[codex_ba_prepare_prompt] Unsupported ba-github-issue-prep.json version: ${prep.version}`);
-  }
-  if (prep.runnerCtx.issueKey !== issueKey) {
-    throw new Error(
-      `[codex_ba_prepare_prompt] Checkpoint issueKey "${prep.runnerCtx.issueKey}" does not match "${issueKey}".`,
-    );
-  }
-
-  const ctx: RunnerContext = { ...prep.runnerCtx, baOutcome: undefined };
-  await prepareCodexBaArtifacts(ctx, agentLabelParams, deps);
-}
-
-/** Runs GitHub-issue phase then BA prompt phase (same as two dedicated workflow steps). */
-export async function runCodexBaPrepare(deps: AiTeammateDeps): Promise<void> {
-  await runCodexBaCreateGithubIssuePhase(deps);
-  await runCodexBaPreparePromptPhase(deps);
-}
+// Legacy split-step entrypoints removed; use the pipeline async handoff instead.

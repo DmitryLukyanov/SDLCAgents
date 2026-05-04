@@ -1,5 +1,5 @@
 /**
- * During `codex_ba_prepare_prompt` / `AI_TEAMMATE_MODE=codex_ba_prepare_prompt`: load Jira issue + related
+ * During pipeline async handoff: load Jira issue + related
  * issues and assemble {@link TicketContext} for the Codex BA prompt / invocation handoff files.
  */
 import { adfToPlain } from '../../../lib/adf-to-plain.js';

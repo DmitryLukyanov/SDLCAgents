@@ -1,5 +1,5 @@
 /**
- * After the Codex BA job (`codex_ba_finish` / `AI_TEAMMATE_MODE=codex_ba_finish`): take the interpreted
+ * After the Codex BA job (pipeline resume): take the interpreted
  * BA result and persist it to Jira and the placeholder GitHub issue (labels, comments, close on incomplete).
  */
 import { loadTemplate, fillTemplate } from '../../../lib/template-utils.js';

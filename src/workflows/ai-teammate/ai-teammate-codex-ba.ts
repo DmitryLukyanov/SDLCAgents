@@ -1,8 +1,7 @@
 /**
- * Codex BA for AI Teammate — re-exports prepare, finish, and shared artifact types/paths.
+ * Codex BA for AI Teammate — helpers for async handoff + resume.
  *
- * - Prepare: `ai-teammate-codex-ba-prepare.ts` (`codex_ba_create_github_issue` / `codex_ba_prepare_prompt` / `codex_ba_prepare`).
- * - Finish: `ai-teammate-codex-ba-finish.ts` (`codex_ba_finish`).
+ * These helpers are used by the config-driven pipeline (`AI_TEAMMATE_MODE=pipeline_ci`).
  * - Shared: `ai-teammate-codex-ba-shared.ts` (paths, versions, JSON shapes).
  */
 export {
@@ -17,9 +16,6 @@ export {
 } from './ai-teammate-codex-ba-shared.js';
 
 export {
-  runCodexBaCreateGithubIssuePhase,
-  runCodexBaPreparePromptPhase,
-  runCodexBaPrepare,
   writeBaGithubIssuePrepCheckpoint,
 } from './ai-teammate-codex-ba-prepare.js';
 

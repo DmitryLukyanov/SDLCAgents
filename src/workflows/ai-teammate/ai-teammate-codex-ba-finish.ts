@@ -1,7 +1,7 @@
 /**
  * Codex BA — finish (no LLM here): read Codex output file, apply BA outcome, resume pipeline.
  *
- * Mode: `codex_ba_finish` / parent resume after async (`pipeline_ci` + `caller_config.params.async_child_run_id`).
+ * Parent resume after async (`pipeline_ci` + `caller_config.params.async_child_run_id`).
  * The BA LLM runs in the consumer async workflow (`business-analyst.yml` → `_reusable-codex-run.yml`).
  */
 import { readFileSync, existsSync } from 'node:fs';
@@ -126,7 +126,7 @@ export async function runCodexBaFinish(deps: AiTeammateDeps): Promise<void> {
   const { issueKey, runner } = await loadAiTeammatePipelineFromEnv();
   assertConcurrencyKeyMatchesIssue(issueKey);
   if (runner !== 'pipeline') {
-    throw new Error('codex_ba_finish requires params.runner "pipeline"');
+    throw new Error('Codex BA resume requires params.runner "pipeline"');
   }
 
   const skipReasonFromWorkflow = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
