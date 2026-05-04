@@ -6,7 +6,7 @@
 # prepare-bundle artifact (`async-invocation-handoff/<concurrency_key>/`). Parent dispatch does not pass
 # per-file path inputs — only `concurrency_key`, `config_file`, and `caller_config` (run correlation + Jira JQL).
 #
-# Extra artifact: ai-teammate-ba-<key>-workflow-dispatch-inputs — expanded JSON (embedded config + decoded caller_config).
+# Extra artifact: business-analyst_input_configuration — single JSON (embedded config + decoded caller_config).
 name: Business Analyst (async Codex)
 run-name: "${{ inputs.concurrency_key }} · BA Codex"
 
@@ -48,7 +48,7 @@ jobs:
           concurrency_key: ${{ inputs.concurrency_key }}
           config_file: ${{ inputs.config_file }}
           caller_config: ${{ inputs.caller_config }}
-          artifact_name: ai-teammate-ba-${{ inputs.concurrency_key }}-workflow-dispatch-inputs
+          artifact_name: business-analyst_input_configuration
           checkout_repository: 'false'
 
       - uses: actions/github-script@v7
