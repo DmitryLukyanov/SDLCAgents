@@ -7,7 +7,7 @@ This folder holds the **agent JSON** consumed by `ai-teammate-agent.ts` when the
 Business Analyst Codex is **not** a `runPipelineStep` runner; it is **`ba_codex_async`** in this JSON, wired by `_reusable-ai-teammate.yml`:
 
 1. **Prepare** — `check-ba-skip-label-ci` sets **`skip_reason`** (empty = BA OK). `AI_TEAMMATE_MODE=pipeline_ci` runs `params.steps` until **`ba_codex_async`**: if enabled and not gated, it writes **all invocation input artifacts** under **`async-invocation-handoff/<key>/`** (paths come from the async step **`contract`**; defaults: `invocation-prompt.md`, `invocation-jira-context.md`, plus internal `ba-codex-state.json` / prep JSON).
-2. **Verify + upload + dispatch** — `_reusable-ai-teammate.yml` runs **`verify-invocation-handoff-ci.ts`** so every **`contract.inputParams`** file exists, then uploads that handoff directory as **`ai-teammate-ba-<key>-prepare`**, then dispatches the child workflow with **`invocation_*`** string inputs (relative filenames). The child downloads the same bundle and verifies inputs again before Codex.
+2. **Verify + upload + dispatch** — `_reusable-ai-teammate.yml` runs **`verify-invocation-handoff-ci.ts`** so every **`contract.inputParams`** file exists, then uploads that handoff directory as **`caller-handoff_input-<key>-prepare`**, then dispatches the child workflow with **`invocation_*`** string inputs (relative filenames). The child downloads the same bundle and verifies inputs again before Codex.
 3. **Resume** — early YAML steps download parent + child artifacts when `caller_config.params.async_child_run_id` is set; the same `pipeline_ci` step runs **`codex_ba_finish`** logic (apply BA, then **`start_developer_agent`**).
 
 For local debugging without Actions, `codex_ba_prepare` / `codex_ba_finish` modes on `ai-teammate-agent.ts` still exist.
@@ -34,7 +34,7 @@ The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON fi
 
 ## Async invocation `contract` (artifact-only, agent-agnostic)
 
-On the step that declares **`async_call`**, optional **`contract`** describes **artifact files** under **`async-invocation-handoff/<issueKey>/`** (same tree the prepare job zips into **`ai-teammate-ba-<key>-prepare`**).
+On the step that declares **`async_call`**, optional **`contract`** describes **artifact files** under **`async-invocation-handoff/<issueKey>/`** (same tree the prepare job zips into **`caller-handoff_input-<key>-prepare`**).
 
 - **`inputParams`** — map of **logical name →** `{ "kind": "artifact", "scope": "handoff_workspace", "relativePath": "..." }`. Omitted keys inherit defaults (`prompt`, `jiraContext`). Extra keys are allowed in the type system; **Codex BA prepare** currently only materializes **`prompt`** and **`jiraContext`** (see `assertBaCodexPrepareContract` in `agent-invocation-contract.ts`).
 - **`outputParams`** — same shape for outputs. If you **set** `outputParams` in JSON, it **replaces** the default map entirely (you must list every output artifact, e.g. your primary file). If you **omit** `outputParams`, defaults apply (`resultState` → `invocation-output.txt`).

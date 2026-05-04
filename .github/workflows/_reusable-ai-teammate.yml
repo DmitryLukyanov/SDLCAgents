@@ -147,7 +147,7 @@ jobs:
         with:
           github_token: ${{ secrets.COPILOT_PAT }}
           run_id: ${{ steps.resume_ctx.outputs.prepare_run_id }}
-          name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+          name: caller-handoff_input-${{ inputs.concurrency_key }}-prepare
           path: async-invocation-handoff/${{ inputs.concurrency_key }}/
 
       - name: Download BA post-Codex artifact (async child run, resume only)
@@ -157,7 +157,7 @@ jobs:
         with:
           github_token: ${{ secrets.COPILOT_PAT }}
           run_id: ${{ steps.resume_ctx.outputs.codex_run_id }}
-          name: ai-teammate-ba-${{ inputs.concurrency_key }}-post-codex
+          name: caller-handoff_codex_output
           path: async-invocation-handoff/${{ inputs.concurrency_key }}/
 
       - name: Jira — check skip-if-label (params.skipIfLabel)
@@ -203,7 +203,7 @@ jobs:
         if: steps.pipeline.outputs.needs_async_handoff == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+          name: caller-handoff_input-${{ inputs.concurrency_key }}-prepare
           path: async-invocation-handoff/${{ inputs.concurrency_key }}/
           if-no-files-found: error
 

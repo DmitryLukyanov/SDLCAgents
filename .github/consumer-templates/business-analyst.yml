@@ -68,7 +68,7 @@ jobs:
         with:
           github_token: ${{ secrets.COPILOT_PAT }}
           run_id: ${{ steps.meta.outputs.prepare_run_id }}
-          name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+          name: caller-handoff_input-${{ inputs.concurrency_key }}-prepare
           path: async-invocation-handoff/${{ inputs.concurrency_key }}/
 
       - name: Resolve Codex paths from invocation-handoff-manifest.json (artifact-only)
@@ -93,7 +93,7 @@ jobs:
       - name: Upload for Codex reusable (same-run artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+          name: caller-handoff_input-${{ inputs.concurrency_key }}-prepare
           path: async-invocation-handoff/${{ inputs.concurrency_key }}/
           if-no-files-found: error
 
@@ -102,11 +102,11 @@ jobs:
     uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-codex-run.yml@master
     secrets: inherit
     with:
-      download_artifact_name: ai-teammate-ba-${{ inputs.concurrency_key }}-prepare
+      download_artifact_name: caller-handoff_input-${{ inputs.concurrency_key }}-prepare
       download_path: async-invocation-handoff/${{ inputs.concurrency_key }}
       prompt_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.prompt_rel }}
       output_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.output_rel }}
-      upload_artifact_name: ai-teammate-ba-${{ inputs.concurrency_key }}-post-codex
+      upload_artifact_name: caller-handoff_codex_output
       upload_path: async-invocation-handoff/${{ inputs.concurrency_key }}/
       upload_if_no_files_found: error
       codex_model: ${{ vars.BA_CODEX_MODEL }}
