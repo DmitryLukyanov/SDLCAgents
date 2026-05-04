@@ -43,7 +43,7 @@ jobs:
           caller_config: ${{ inputs.caller_config }}
         run: |
           set -euo pipefail
-          mkdir -p .workflow-dispatch-inputs-artifact
+          mkdir -p workflow-dispatch-inputs-artifact
           node <<'NODE'
           const fs = require('fs');
           const out = {
@@ -52,7 +52,7 @@ jobs:
             caller_config: process.env.caller_config,
           };
           fs.writeFileSync(
-            '.workflow-dispatch-inputs-artifact/workflow_dispatch_inputs.json',
+            'workflow-dispatch-inputs-artifact/workflow_dispatch_inputs.json',
             JSON.stringify(out, null, 2) + '\n',
           );
           NODE
@@ -88,7 +88,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ai-teammate-ba-${{ inputs.concurrency_key }}-workflow-dispatch-inputs
-          path: .workflow-dispatch-inputs-artifact/
+          path: workflow-dispatch-inputs-artifact/
           if-no-files-found: error
 
   ba_codex:
