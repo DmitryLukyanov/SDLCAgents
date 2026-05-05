@@ -334,13 +334,18 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
 
   let skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
   if (!skipBa && !resumeAfterAsyncChild) {
-    const { skipReason, skipIfLabel } = await evaluateSkipIfLabelFromConfigFile({
-      configFilePath: requireEnvNonEmpty('CONFIG_FILE'),
-      issueKey,
-    });
-    skipBa = skipReason;
-    if (skipReason && skipIfLabel) {
-      console.log(`[pipeline] Jira ${issueKey} has label "${skipIfLabel}" — gated segment will be skipped.`);
+    try {
+      const { skipReason, skipIfLabel } = await evaluateSkipIfLabelFromConfigFile({
+        configFilePath: requireEnvNonEmpty('CONFIG_FILE'),
+        issueKey,
+      });
+      skipBa = skipReason;
+      if (skipReason && skipIfLabel) {
+        console.log(`[pipeline] Jira ${issueKey} has label "${skipIfLabel}" — gated segment will be skipped.`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[pipeline] skipIfLabel gate check failed — continuing without gate. Details: ${msg}`);
     }
   }
 
