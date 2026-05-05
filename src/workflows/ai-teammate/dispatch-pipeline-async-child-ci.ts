@@ -13,6 +13,7 @@ import { resolve } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { findFirstEnabledAsyncCallStepIndex, parseAgentPipelineSteps } from '../../lib/pipeline-config.js';
 import { buildParentRunFields, mergeCallerConfigForAsyncChildDispatch } from '../../lib/pipeline-callback-config.js';
+import { decodeCallerConfig, isParentAsyncChildResumeCallerConfig } from '../../lib/caller-config.js';
 import {
   buildGithubWorkflowDispatchPayload,
   buildAiTeammateWorkflowDispatchInputsWithCaller,
@@ -58,6 +59,26 @@ async function main(): Promise<void> {
   const entryWorkflow = process.env.AI_TEAMMATE_ENTRY_WORKFLOW_FILE?.trim() || 'ai-teammate.yml';
 
   const handoff = maybeParseAsyncHandoffFromOutput();
+
+  // Check if we're in a resume context — if so, don't dispatch again (prevents cycle)
+  const callerRoot = decodeCallerConfig(callerConfigEncoded);
+  if (isParentAsyncChildResumeCallerConfig(callerRoot)) {
+    setOutput('dispatched', 'false');
+    console.log('[dispatch-pipeline-async-child] Skipping dispatch — parent is resuming after async child (prevents cycle).');
+    appendJobSummary(
+      [
+        '### AI Teammate — async handoff',
+        '',
+        'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
+        '',
+        `- **Concurrency key:** \`${concurrencyKey}\``,
+        '- **Reason:** Parent is resuming after async child completion (prevents infinite cycle).',
+        '',
+        `_Config file:_ \`${configFile}\``,
+      ].join('\n'),
+    );
+    return;
+  }
 
   const abs = resolve(process.cwd(), configFile);
   const raw = readFileSync(abs, 'utf8');
