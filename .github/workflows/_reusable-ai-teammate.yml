@@ -216,6 +216,8 @@ jobs:
       - name: Dispatch async BA child (config async_call)
         if: steps.pipeline.outputs.needs_async_handoff == 'true'
         shell: bash
+        env:
+          ASYNC_HANDOFF: ${{ steps.pipeline.outputs.async_handoff }}
         run: |
           set -euo pipefail
           WORKFLOW_REF="${{ github.workflow_ref }}"
