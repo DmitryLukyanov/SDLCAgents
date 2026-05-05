@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     githubRunId: requireEnv('GITHUB_RUN_ID'),
   });
 
-  const stepId = handoff.triggerStep?.trim() || (step.id ?? step.runner);
+  const stepId = handoff.triggerStep?.trim() || step.id;
 
   const terminal = ac.terminal === true;
   const mergedCaller = terminal
