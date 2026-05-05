@@ -216,6 +216,8 @@ jobs:
       - name: Dispatch async BA child (config async_call)
         if: steps.pipeline.outputs.needs_async_handoff == 'true'
         shell: bash
+        env:
+          ASYNC_HANDOFF: ${{ steps.pipeline.outputs.async_handoff }}
         run: |
           set -euo pipefail
           WORKFLOW_REF="${{ github.workflow_ref }}"
@@ -236,7 +238,6 @@ jobs:
           export AI_TEAMMATE_SKIP_BA_REASON=""
           export AI_TEAMMATE_RUN_CODEX="true"
           export AI_TEAMMATE_ENTRY_WORKFLOW_FILE="${ENTRY_FILE}"
-          export ASYNC_HANDOFF="${{ steps.pipeline.outputs.async_handoff }}"
           .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/dispatch-pipeline-async-child-ci.ts
 
       # Optional dump of async handoff tree (local debug) — not spec-kit step output.
