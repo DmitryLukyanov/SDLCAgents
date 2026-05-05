@@ -1,0 +1,18 @@
+# PR Merged — fires when any PR is merged.
+# Closes the linked GitHub issue and transitions the Jira ticket to Done.
+name: PR Merged
+run-name: "PR #${{ github.event.pull_request.number }} merged · close issue + update Jira"
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  call:
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-pr-merged.yml@master
+    secrets: inherit

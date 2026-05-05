@@ -1,0 +1,152 @@
+# Async BA (Codex) — dispatched from AI Teammate when `async_call.workflowFile` is `business-analyst.yml`.
+# Copy to `.github/workflows/business-analyst.yml` in the consumer repo. Set `workflowRef` in agent config
+# to your default branch if it is not `main`.
+#
+# **Artifact-only invocation:** paths for Codex come only from `invocation-handoff-manifest.json` inside the
+# prepare-bundle artifact (`async-invocation-handoff/<concurrency_key>/`). Parent dispatch does not pass
+# per-file path inputs — only `concurrency_key`, `config_file`, and `caller_config` (run correlation + Jira JQL).
+#
+# Extra artifact: business-analyst_input_configuration — single JSON (embedded config + decoded caller_config).
+name: Business Analyst (async Codex)
+run-name: "${{ inputs.concurrency_key }} · BA Codex"
+
+concurrency:
+  group: business-analyst-${{ inputs.concurrency_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency_key:
+        description: "Jira issue key (must match AI Teammate concurrency_key)"
+        required: true
+        type: string
+      config_file:
+        description: "Same path as AI Teammate (agent JSON in consumer repo)"
+        required: true
+        type: string
+      caller_config:
+        description: "URL-encoded JSON from parent dispatch (includes parent_run_id, callback, async_trigger_step)"
+        required: true
+        type: string
+
+jobs:
+  rehydrate_ba_workspace:
+    name: Rehydrate BA workspace from parent run
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      prompt_rel: ${{ steps.manifest.outputs.prompt_rel }}
+      output_rel: ${{ steps.manifest.outputs.output_rel }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DmitryLukyanov/SDLCAgents/.github/actions/upload-workflow-dispatch-inputs-artifact@master
+        with:
+          concurrency_key: ${{ inputs.concurrency_key }}
+          config_file: ${{ inputs.config_file }}
+          caller_config: ${{ inputs.caller_config }}
+          artifact_name: business-analyst_input_configuration
+          checkout_repository: 'false'
+
+      - uses: actions/github-script@v7
+        id: meta
+        env:
+          CALLER_CONFIG_RAW: ${{ inputs.caller_config }}
+        with:
+          script: |
+            const raw = decodeURIComponent(process.env.CALLER_CONFIG_RAW.trim());
+            const j = JSON.parse(raw);
+            const parent = (j?.params?.parent_run_id ?? '').toString().trim();
+            if (!parent) core.setFailed('caller_config.params.parent_run_id is required');
+            core.setOutput('prepare_run_id', parent);
+
+      - name: Download prepare bundle from parent Actions run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.COPILOT_PAT }}
+          run_id: ${{ steps.meta.outputs.prepare_run_id }}
+          name: caller-handoff_input
+          path: async-invocation-handoff/${{ inputs.concurrency_key }}/
+
+      - name: Resolve Codex paths from invocation-handoff-manifest.json (artifact-only)
+        id: manifest
+        run: |
+          set -euo pipefail
+          BASE="async-invocation-handoff/${{ inputs.concurrency_key }}"
+          M="$BASE/invocation-handoff-manifest.json"
+          test -s "$M"
+          test "$(jq -r .version "$M")" = "1"
+          p=$(jq -r .dispatchPathHints.invocation_prompt_file "$M")
+          j=$(jq -r .dispatchPathHints.invocation_jira_context_file "$M")
+          o=$(jq -r .dispatchPathHints.invocation_output_file "$M")
+          test -n "$p" && test -n "$j" && test -n "$o"
+          test -s "$BASE/$p"
+          test -s "$BASE/$j"
+          echo "prompt_rel=$p" >> "$GITHUB_OUTPUT"
+          echo "jira_context_rel=$j" >> "$GITHUB_OUTPUT"
+          echo "output_rel=$o" >> "$GITHUB_OUTPUT"
+          echo "OK: manifest + input artifacts under $BASE"
+
+      - name: Upload for Codex reusable (same-run artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: caller-handoff_input
+          path: async-invocation-handoff/${{ inputs.concurrency_key }}/
+          if-no-files-found: error
+
+  ba_codex:
+    needs: [rehydrate_ba_workspace]
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-codex-run.yml@master
+    secrets: inherit
+    with:
+      download_artifact_name: caller-handoff_input
+      download_path: async-invocation-handoff/${{ inputs.concurrency_key }}
+      prompt_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.prompt_rel }}
+      output_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.output_rel }}
+      upload_artifact_name: caller-handoff_codex_output
+      upload_path: async-invocation-handoff/${{ inputs.concurrency_key }}/
+      upload_if_no_files_found: error
+      codex_model: ${{ vars.BA_CODEX_MODEL }}
+      codex_step_name: Run Codex - Business Analyst
+      timeout_minutes: 30
+
+  dispatch_parent_callback:
+    name: Dispatch parent entry workflow (resume)
+    needs: [ba_codex]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Checkout SDLCAgents (dispatch script + routing_helper)
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: master
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Dispatch parent via routing_helper payload (Octokit)
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/lib/dispatch-parent-callback-workflow-ci.ts
+        env:
+          CALLER_CONFIG: ${{ inputs.caller_config }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
