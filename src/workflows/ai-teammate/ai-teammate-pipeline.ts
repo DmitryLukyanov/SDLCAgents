@@ -69,6 +69,11 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return { status: 'continue' };
     }
 
+    // Terminal async dispatch: no handoff artifacts, no callback/resume. The pipeline will stop after dispatch.
+    case 'async_terminal_operation': {
+      return { status: 'continue' };
+    }
+
     case 'apply_ba_outcome': {
       return runApplyBaOutcome(ctx, step, deps);
     }
@@ -76,7 +81,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, apply_ba_outcome.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, async_terminal_operation, apply_ba_outcome.`,
       );
   }
 }
@@ -498,6 +503,10 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
       }));
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+
+      if (step.runner === 'async_terminal_operation') {
+        return;
+      }
       return;
     }
 
