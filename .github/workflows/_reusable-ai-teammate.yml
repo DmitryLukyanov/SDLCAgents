@@ -61,9 +61,6 @@ jobs:
     name: AI Teammate (config pipeline)
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      # Use a PAT for API calls that may dispatch downstream workflows (async BA / developer agent).
-      GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
     permissions:
       contents: write
       actions: write
@@ -175,6 +172,8 @@ jobs:
         env:
           AI_TEAMMATE_MODE: pipeline_ci
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+          # Use a PAT for GitHub API calls that may dispatch downstream workflows (async BA / developer agent).
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
@@ -194,6 +193,7 @@ jobs:
         if: steps.pipeline.outputs.needs_async_handoff == 'true'
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/verify-invocation-handoff-ci.ts
         env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
           CALLER_CONFIG: ${{ inputs.caller_config }}
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
@@ -229,6 +229,7 @@ jobs:
           export CONFIG_FILE="${{ inputs.config_file }}"
           export CALLER_CONFIG="${{ inputs.caller_config }}"
           export COPILOT_PAT="${{ secrets.COPILOT_PAT }}"
+          export GITHUB_TOKEN="${{ secrets.COPILOT_PAT }}"
           export GITHUB_REPOSITORY="${{ github.repository }}"
           export GITHUB_SERVER_URL="${{ github.server_url }}"
           export GITHUB_RUN_ID="${{ github.run_id }}"
