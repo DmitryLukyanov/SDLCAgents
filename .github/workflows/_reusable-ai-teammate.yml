@@ -131,12 +131,20 @@ jobs:
             const j = JSON.parse(raw);
             const child = (j?.params?.async_child_run_id ?? '').toString().trim();
             const parent = (j?.params?.parent_run_id ?? '').toString().trim();
-            if (child && !parent) {
+            // Guard: treat unevaluated GHA expression placeholders as absent.
+            // When caller_config is assembled at dispatch time the template literal
+            // `${{ steps.X.outputs.run_id }}` can leak through as a literal string
+            // if the upstream step hasn't produced the output yet. Treating that
+            // placeholder as a real run-id would mis-detect a resume and attempt
+            // artifact downloads / repeated BA dispatch.
+            const isPlaceholder = child.includes('${{');
+            const isResume = Boolean(child) && !isPlaceholder;
+            if (isResume && !parent) {
               core.setFailed('caller_config.params.parent_run_id is required when async_child_run_id is set (resume after async BA)');
               return;
             }
-            core.setOutput('is_resume', child ? 'true' : 'false');
-            if (child) {
+            core.setOutput('is_resume', isResume ? 'true' : 'false');
+            if (isResume) {
               core.setOutput('prepare_run_id', parent);
               core.setOutput('codex_run_id', child);
             }
