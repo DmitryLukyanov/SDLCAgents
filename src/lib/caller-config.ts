@@ -56,7 +56,15 @@ export function extractIssueKeyFromCallerConfig(root: CallerConfigRoot): string 
  * Use with {@link requireAsyncResumeTriggerStepId} to locate the skipped async step in `params.steps`.
  */
 export function isParentAsyncChildResumeCallerConfig(root: CallerConfigRoot): boolean {
-  return Boolean(root.params?.async_child_run_id?.toString().trim());
+  const child = root.params?.async_child_run_id?.toString().trim() ?? '';
+  if (!child) return false;
+
+  // Guard against accidental reuse of the dispatch-time template placeholders.
+  // If these placeholders leak into `caller_config`, the parent will mis-detect
+  // a resume and keep attempting the async boundary, causing repeated BA dispatch.
+  if (child.includes('${{') || child.includes('}}')) return false;
+
+  return true;
 }
 
 /** Require `caller_config.params.async_trigger_step` when resuming after an async child (inclusive skip boundary). */
