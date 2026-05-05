@@ -423,9 +423,21 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
 
     if (step.async_call) {
       if (resumeAfterAsyncChild) {
-        throw new Error(
-          'Pipeline: encountered a second async step after the resume boundary; only one async handoff per invocation is supported.',
-        );
+        const t0 = Date.now();
+        // On resume, we may still have additional async_operation steps later in the pipeline
+        // (e.g. optional developer agent). Those should be treated normally: respect enabled=false
+        // and, if enabled=true, perform a new async handoff.
+        if (!isStepEnabled(step)) {
+          console.log('   ⏭ Skipped — step.enabled is false in config');
+          records.push({
+            runner: step.runner,
+            status: 'continue',
+            reason: 'skipped (enabled: false)',
+            durationMs: Date.now() - t0,
+            source: 'this_invocation',
+          });
+          continue;
+        }
       }
       const t0 = Date.now();
       if (!isStepEnabled(step)) {
