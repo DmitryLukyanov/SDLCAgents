@@ -62,7 +62,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      GITHUB_TOKEN: ${{ github.token }}
+      # Use a PAT for API calls that may dispatch downstream workflows (async BA / developer agent).
+      GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
     permissions:
       contents: write
       actions: write

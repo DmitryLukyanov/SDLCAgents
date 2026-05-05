@@ -50,7 +50,6 @@ Then customize:
       "jql": "project = MYPROJ AND status = 'To Do' ORDER BY updated ASC",
       "configFile": "config/workflows/ai-teammate/ai-teammate.config",
       "workflowFile": "ai-teammate.yml",
-      "workflowRef": "main",
       "limit": 5,
       "skipIfLabel": "sm_triggered",
       "addLabel": "sm_triggered"
@@ -127,7 +126,7 @@ Scrum Master (Jira)
 
 ## Pinning to a specific version
 
-By default, workflows pull from `main` of SDLCAgents. To pin to a specific commit or tag,
+By default, workflows pull from `master` of SDLCAgents. To pin to a specific commit or tag,
 edit the `sdlc_agents_ref` input in your caller workflows:
 
 ```yaml
@@ -149,4 +148,4 @@ jobs:
 | `Missing agent file` | Copy missing files from `SDLCAgents/.github/agents/` |
 | `No open PR found for branch` | Copilot may not have opened a PR yet; check the Copilot agent session |
 | Jira transition skipped | PR title must contain the Jira key, e.g. `TC-5: ...` |
-| `404` dispatching `ai-teammate.yml` | Ensure `ai-teammate.yml` is committed on the branch set in `workflowRef` in `config/workflows/scrum-master/scrum-master.config` |
+| `404` dispatching `ai-teammate.yml` | Ensure `ai-teammate.yml` is committed on the ref being dispatched (either the current branch, or the explicit `workflowRef` in `config/workflows/scrum-master/scrum-master.config`). Also verify `COPILOT_PAT` exists and has `workflow` scope (Scrum Master uses it for `workflow_dispatch`). |

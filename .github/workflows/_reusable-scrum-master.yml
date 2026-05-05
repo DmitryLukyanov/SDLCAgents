@@ -49,7 +49,9 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ github.token }}
+      # Use a PAT for workflow_dispatch. GitHub's ephemeral `${{ github.token }}` commonly cannot
+      # trigger downstream workflows, which breaks Scrum Master → AI Teammate dispatch.
+      GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
     permissions:
       contents: read
       actions: write
