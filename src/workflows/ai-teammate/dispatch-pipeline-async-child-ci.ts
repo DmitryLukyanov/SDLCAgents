@@ -227,16 +227,19 @@ async function main(): Promise<void> {
   if (terminal && workflowFile === 'developer-agent.yml') {
     const issueKey = handoff.issueKey || concurrencyKey;
     const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
+    // Allow step to be configured via async_call.inputs.step, default to 'specify'
+    const stepValue = ac.inputs?.step?.trim() || 'specify';
 
     console.log(`[dispatch-pipeline-async-child] Building developer agent inputs...`);
     console.log(`[dispatch-pipeline-async-child]   - issueKey: "${issueKey}"`);
     console.log(`[dispatch-pipeline-async-child]   - githubIssueNumber: "${githubIssueNumber}"`);
+    console.log(`[dispatch-pipeline-async-child]   - step: "${stepValue}" (from async_call.inputs.step or default)`);
 
     inputs = {
       mode: 'speckit',
       issue_number: githubIssueNumber,
       issue_key: issueKey,
-      step: 'specify',
+      step: stepValue,
       branch_name: '',  // Empty means bootstrap will create the branch
       pr_number: '',
       prompt: '',
