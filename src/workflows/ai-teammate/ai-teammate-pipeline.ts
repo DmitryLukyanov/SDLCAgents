@@ -18,7 +18,7 @@
  * (see {@link ../../lib/invocation-handoff.js assertManifestMatchesAsyncStepAndPrimaryOutputPresent}), then run remaining steps.
  * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import {
   decodeCallerConfig,
   isParentAsyncChildResumeCallerConfig,
@@ -37,7 +37,13 @@ import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
-import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
+import {
+  assertConcurrencyKeyMatchesIssue,
+  codexBaPaths,
+  loadHandoffPathsFromConfig,
+  STATE_VERSION,
+  type BaCodexStateFile,
+} from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
 
@@ -282,6 +288,33 @@ function requireEnvNonEmpty(name: string): string {
   return v;
 }
 
+function writeMultiAsyncResumeCheckpoint(issueKey: string, ctx: RunnerContext, records: StepRecord[]): void {
+  const prev = JSON.parse(readFileSync(codexBaPaths(issueKey).state, 'utf8')) as BaCodexStateFile;
+  if (prev.version !== STATE_VERSION) {
+    throw new Error(
+      `Pipeline multi-async checkpoint: unsupported ba-codex-state.json version: ${String(prev.version)}`,
+    );
+  }
+
+  const p = loadHandoffPathsFromConfig(issueKey);
+  const next: BaCodexStateFile = {
+    ...prev,
+    runnerCtx: {
+      issueKey: ctx.issueKey,
+      owner: ctx.owner,
+      repo: ctx.repo,
+      ref: ctx.ref,
+      callerConfig: ctx.callerConfig,
+      configFile: ctx.configFile,
+      githubIssueNumber: ctx.githubIssueNumber,
+    },
+    codexRelativeOutputPath: p.codexRelativeOutputPath,
+    partialRecords: records,
+  };
+
+  writeFileSync(p.state, JSON.stringify(next, null, 2) + '\n', 'utf8');
+}
+
 async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
   setGithubActionsOutput('needs_async_handoff', 'false');
   setGithubActionsOutput('async_handoff', '');
@@ -422,23 +455,6 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
     }
 
     if (step.async_call) {
-      if (resumeAfterAsyncChild) {
-        const t0 = Date.now();
-        // On resume, we may still have additional async_operation steps later in the pipeline
-        // (e.g. optional developer agent). Those should be treated normally: respect enabled=false
-        // and, if enabled=true, perform a new async handoff.
-        if (!isStepEnabled(step)) {
-          console.log('   ⏭ Skipped — step.enabled is false in config');
-          records.push({
-            runner: step.runner,
-            status: 'continue',
-            reason: 'skipped (enabled: false)',
-            durationMs: Date.now() - t0,
-            source: 'this_invocation',
-          });
-          continue;
-        }
-      }
       const t0 = Date.now();
       if (!isStepEnabled(step)) {
         console.log('   ⏭ Skipped — step.enabled is false in config');
@@ -447,6 +463,7 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
           status: 'continue',
           reason: 'skipped (enabled: false)',
           durationMs: Date.now() - t0,
+          source: 'this_invocation',
         });
         continue;
       }
@@ -456,6 +473,11 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
             'Add async_call.workflowFile or set enabled: false.',
         );
       }
+
+      if (resumeAfterAsyncChild) {
+        writeMultiAsyncResumeCheckpoint(issueKey, ctx, records);
+      }
+
       // Run the step to prepare input artifacts, then signal handoff.
       ctx.priorStepRecords = records;
       const prepOutcome = await runPipelineStep(ctx, step as PipelineStep, deps);
