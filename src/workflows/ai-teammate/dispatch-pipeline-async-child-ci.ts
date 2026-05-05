@@ -164,7 +164,7 @@ async function main(): Promise<void> {
 
   const ac = step.async_call;
   const ref = (ac.workflowRef?.trim() || requireEnv('GITHUB_REF_NAME')).trim();
-  console.log(`[dispatch-pipeline-async-child] async_call config:`, JSON.stringify(ac, null, 2));
+  console.log(`[dispatch-pipeline-async-child] async_call: workflowFile="${ac.workflowFile}", workflowRef="${ac.workflowRef ?? ''}", terminal=${ac.terminal ?? false}, inputs keys=[${Object.keys(ac.inputs ?? {}).join(', ')}]`);
   console.log(`[dispatch-pipeline-async-child] Using ref: "${ref}"`);
 
   const repoFull = requireEnv('GITHUB_REPOSITORY');

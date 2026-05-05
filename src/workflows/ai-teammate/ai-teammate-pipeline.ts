@@ -465,7 +465,7 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
       console.log(`[ai-teammate-pipeline] Step runner: ${step.runner}`);
       console.log(`[ai-teammate-pipeline] Step id: ${step.id}`);
       console.log(`[ai-teammate-pipeline] Step enabled: ${isStepEnabled(step)}`);
-      console.log(`[ai-teammate-pipeline] async_call config:`, JSON.stringify(step.async_call, null, 2));
+      console.log(`[ai-teammate-pipeline] async_call: workflowFile="${step.async_call.workflowFile}", workflowRef="${step.async_call.workflowRef ?? ''}", terminal=${step.async_call.terminal ?? false}, inputs keys=[${Object.keys(step.async_call.inputs ?? {}).join(', ')}]`);
 
       if (!isStepEnabled(step)) {
         console.log('   ⏭ Skipped — step.enabled is false in config');
