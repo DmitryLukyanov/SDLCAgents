@@ -80,7 +80,7 @@ async function main(): Promise<void> {
 
   // Check if we're in a resume context — if so, don't dispatch again (prevents cycle)
   const callerRoot = decodeCallerConfig(callerConfigEncoded);
-  console.log(`[dispatch-pipeline-async-child] callerRoot decoded:`, JSON.stringify(callerRoot, null, 2));
+  console.log(`[dispatch-pipeline-async-child] callerRoot has async_child_run_id: ${!!callerRoot.params?.async_child_run_id}, async_trigger_step: ${callerRoot.params?.async_trigger_step ?? '(none)'}`);
   const isResume = isParentAsyncChildResumeCallerConfig(callerRoot);
   console.log(`[dispatch-pipeline-async-child] isParentAsyncChildResumeCallerConfig result: ${isResume}`);
   if (isResume) {
@@ -177,7 +177,7 @@ async function main(): Promise<void> {
     githubRepository: repoFull,
     githubRunId: requireEnv('GITHUB_RUN_ID'),
   });
-  console.log(`[dispatch-pipeline-async-child] Parent run fields:`, JSON.stringify(parentFields, null, 2));
+  console.log(`[dispatch-pipeline-async-child] Parent run fields: parent_run_id=${parentFields.parent_run_id}, has parent_run_url=${!!parentFields.parent_run_url}`);
 
   const stepId = handoff.triggerStep?.trim() || step.id;
   console.log(`[dispatch-pipeline-async-child] Using stepId: "${stepId}"`);
@@ -215,7 +215,7 @@ async function main(): Promise<void> {
       prompt: '',
     };
 
-    console.log(`[dispatch-pipeline-async-child] Developer agent inputs built:`, JSON.stringify(inputs, null, 2));
+    console.log(`[dispatch-pipeline-async-child] Developer agent inputs built: mode=${inputs.mode}, issue_key=${inputs.issue_key}, issue_number=${inputs.issue_number}, step=${inputs.step}`);
   } else {
     // For other workflows (like business-analyst.yml), use AI Teammate inputs
     console.log(`[dispatch-pipeline-async-child] Building AI Teammate inputs (not developer-agent.yml)...`);
@@ -226,18 +226,18 @@ async function main(): Promise<void> {
         callerConfigEncoded: mergedCaller,
       }),
     };
-    console.log(`[dispatch-pipeline-async-child] AI Teammate inputs built:`, JSON.stringify(inputs, null, 2));
+    console.log(`[dispatch-pipeline-async-child] AI Teammate inputs built with ${Object.keys(inputs).length} keys: ${Object.keys(inputs).join(', ')}`);
   }
 
   // Merge any additional inputs from config
   if (ac.inputs) {
-    console.log(`[dispatch-pipeline-async-child] Merging additional inputs from async_call.inputs:`, JSON.stringify(ac.inputs, null, 2));
+    console.log(`[dispatch-pipeline-async-child] Merging additional inputs from async_call.inputs (${Object.keys(ac.inputs).length} keys)`);
     for (const [k, v] of Object.entries(ac.inputs)) {
       if (v !== undefined && v !== null) inputs[k] = String(v);
     }
   }
 
-  console.log(`[dispatch-pipeline-async-child] Final inputs after merge:`, JSON.stringify(inputs, null, 2));
+  console.log(`[dispatch-pipeline-async-child] Final inputs: ${Object.keys(inputs).length} total keys`);
 
   const payload = buildGithubWorkflowDispatchPayload({
     owner,
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
     inputs,
   });
 
-  console.log(`[dispatch-pipeline-async-child] Workflow dispatch payload:`, JSON.stringify(payload, null, 2));
+  console.log(`[dispatch-pipeline-async-child] Workflow dispatch: owner=${owner}, repo=${repo}, workflowId=${workflowFile}, ref=${ref}, inputs count=${Object.keys(inputs).length}`);
   console.log(`[dispatch-pipeline-async-child] Dispatching workflow...`);
 
   const octokit = new Octokit({ auth: requireEnv('COPILOT_PAT') });
