@@ -1,0 +1,88 @@
+# Developer Agent — bootstrap (specify only) then spec-kit steps and /fix (same reusable workflow; prompt differs by inputs).
+# Triggered by: AI Teammate (specify), proceed workflow, or PR Comment Handler (/fix).
+#
+# mode=speckit (default): For step=specify with empty pr_number, runs reusable bootstrap first (branch + draft PR +
+#   speckit-state.json), then developer-agent. Other steps: branch_name from dispatch (e.g. proceed); setup reads state.
+# mode=fix: issue_key, pr_number, prompt, branch_name (PR comment handler sets these); bootstrap job skipped.
+#
+# Required secrets: COPILOT_PAT, OPENAI_API_KEY
+name: Developer Agent
+run-name: ${{ inputs.mode == 'fix' && format('Developer Agent — Fix (PR {0})', inputs.pr_number) || format('{0} · Developer Agent ({1})', inputs.issue_key, inputs.step) }}
+
+concurrency:
+  group: developer-agent-${{ inputs.mode == 'fix' && format('fix-pr-{0}', inputs.pr_number) || inputs.issue_key }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "speckit — spec-kit pipeline; fix — /fix (issue_key + pr_number + prompt + branch_name)"
+        required: false
+        type: string
+        default: 'speckit'
+      issue_number:
+        description: "GitHub issue number (mode=speckit)"
+        required: false
+        type: string
+        default: ''
+      issue_key:
+        description: "Jira issue key (speckit and fix — required; /fix handler resolves from PR label or speckit-state)"
+        required: false
+        type: string
+        default: ''
+      step:
+        description: "Spec-kit step (mode=speckit)"
+        required: false
+        type: string
+        default: ''
+      branch_name:
+        description: "Git ref for developer-agent checkout. specify: usually from bootstrap output (leave blank for AI Teammate). Other steps / fix: feature branch or PR head."
+        required: false
+        type: string
+        default: ''
+      pr_number:
+        description: "PR number (mode=fix). mode=speckit: optional; if set with specify, skips bootstrap (you must set branch_name)."
+        required: false
+        type: string
+        default: ''
+      prompt:
+        description: "mode=fix: /fix comment (+ optional HIL). mode=speckit: optional path or text after setup. See SDLCAgents reusable docs."
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  bootstrap:
+    name: Bootstrap (specify)
+    if: ${{ inputs.mode == 'speckit' && inputs.step == 'specify' && inputs.pr_number == '' }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-developer-agent-bootstrap.yml@master
+    with:
+      issue_number: ${{ inputs.issue_number }}
+      issue_key: ${{ inputs.issue_key }}
+      branch_name: ${{ inputs.branch_name }}
+    secrets: inherit
+
+  agent:
+    name: Developer Agent
+    needs: [bootstrap]
+    if: ${{ !cancelled() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped') }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-developer-agent.yml@master
+    with:
+      mode: ${{ inputs.mode }}
+      issue_number: ${{ inputs.issue_number }}
+      issue_key: ${{ inputs.issue_key }}
+      step: ${{ inputs.step }}
+      branch_name: ${{ inputs.branch_name || needs.bootstrap.outputs.branch_name || github.ref_name }}
+      fix_pr_number: ${{ inputs.pr_number }}
+      prompt: ${{ inputs.prompt }}
+      speckit_pr_number: ${{ needs.bootstrap.outputs.pr_number || inputs.pr_number }}
+    secrets: inherit

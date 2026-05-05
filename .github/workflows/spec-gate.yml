@@ -1,0 +1,30 @@
+# Spec Gate — automatic LLM review after each speckit step.
+#
+# HOW IT WORKS:
+#   1. Triggers when speckit-state.json is pushed to a feature branch.
+#   2. Runs an LLM analysis on the spec artifacts for the completed step.
+#   3. If clean: dispatches developer-agent-proceed (PAT), then posts a status PR comment.
+#      If HIL: posts the review comment → human fixes and comments /proceed or @codex…
+#
+# NOTE: After "implement", the pipeline runs "code_review" automatically when the gate passes.
+#       The "code_review" gate expects human merge / review of review artifacts.
+#
+# Requires secret OPENAI_API_KEY (Codex). Optional repo variable GATE_CODEX_MODEL (default o4-mini).
+# Caller job needs contents: write so openai/codex-action can pass its preflight when org caps the token.
+name: Spec Gate
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+    paths:
+      - '**/speckit-state.json'
+
+jobs:
+  call:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-spec-gate.yml@master
+    secrets: inherit

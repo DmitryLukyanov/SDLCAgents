@@ -1,0 +1,45 @@
+# Scrum Master — dispatches AI Teammate for each matching Jira ticket.
+# JQL and per-rule settings (including optional requiredJiraStatus / postReadStatus per rule) live in config/workflows/scrum-master/scrum-master.config.
+# Delegates execution to the shared SDLCAgents reusable workflow.
+#
+# Required secrets (Settings > Secrets and variables > Actions):
+#   JIRA_BASE_URL    — https://yourorg.atlassian.net
+#   JIRA_EMAIL       — your-jira-email@example.com
+#   JIRA_API_TOKEN   — Jira API token
+#   COPILOT_PAT      — GitHub Classic PAT with repo + workflow + read:org scopes
+name: Scrum Master (Jira)
+run-name: "Scrum Master (Jira) — ${{ github.ref_name }}"
+
+concurrency:
+  group: scrum-master-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max issues per rule (1–50)"
+        required: false
+        default: '10'
+        type: string
+      jira_project:
+        description: "Replaces {jiraProject} in rule JQL"
+        required: false
+        type: string
+      ticket_context_depth:
+        description: "0=primary only; 1=linked issues+subtasks"
+        required: false
+        default: '1'
+        type: string
+
+jobs:
+  call:
+    permissions:
+      contents: read
+      actions: write
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-scrum-master.yml@master
+    with:
+      limit: ${{ inputs.limit || '10' }}
+      jira_project: ${{ inputs.jira_project || '' }}
+      ticket_context_depth: ${{ inputs.ticket_context_depth || '1' }}
+    secrets: inherit

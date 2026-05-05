@@ -1,0 +1,53 @@
+# Copilot Coding Agent environment setup — runs before Copilot starts on a task.
+# Default branch must contain this file. See:
+# https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
+#
+# The job MUST be named `copilot-setup-steps` (GitHub requirement).
+#
+# Optional (GitHub Copilot / upstream spec-kit only): speckit.*.agent.md and speckit.*.prompt.md.
+# Codex pipelines use .agents/skills/speckit-*/SKILL.md from SDLC onboarding instead.
+#
+# Do NOT use actions/setup-node `cache` + `cache-dependency-path` unless every path exists on
+# every Copilot branch. Missing lockfiles cause: "Some specified paths were not resolved,
+# unable to cache dependencies" and block the agent (including code_review / Phase 2).
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git credentials
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.COPILOT_PAT }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JavaScript dependencies (when lockfile exists)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f frontend/package-lock.json ]; then
+            cd frontend && npm ci
+          elif [ -f pnpm-lock.yaml ]; then
+            corepack enable pnpm
+            pnpm install --frozen-lockfile
+          else
+            echo "No lockfile at repo root, frontend/, or pnpm-lock.yaml — skipping install (Copilot can scaffold)."
+          fi
