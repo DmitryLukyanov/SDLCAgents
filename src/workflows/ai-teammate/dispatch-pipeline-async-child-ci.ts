@@ -4,8 +4,8 @@
  *
  * Env: CONFIG_FILE, CALLER_CONFIG, COPILOT_PAT, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID,
  *      GITHUB_REF_NAME, AI_TEAMMATE_CONCURRENCY_KEY, AI_TEAMMATE_SKIP_BA_REASON (empty = run BA),
- *      AI_TEAMMATE_RUN_CODEX (`true` / `false`), AI_TEAMMATE_ENTRY_WORKFLOW_FILE (callback target YAML name; CI sets from
- *      `github.workflow_ref` basename in `_reusable-ai-teammate.yml`).
+ *      AI_TEAMMATE_RUN_CODEX (`true` / `false`), AI_TEAMMATE_ENTRY_WORKFLOW_FILE (callback target workflow filename in
+ *      the consumer repo; must support workflow_dispatch; defaults to `ai-teammate.yml` in `_reusable-ai-teammate.yml`).
  *      GITHUB_STEP_SUMMARY (optional): appends a markdown section for async handoff (dispatched or skipped).
  */
 import { appendFileSync, readFileSync } from 'node:fs';
