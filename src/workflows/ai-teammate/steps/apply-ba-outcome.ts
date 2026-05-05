@@ -10,7 +10,6 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { decodeCodexOutputBestEffort } from '../../business-analyst/codex-output-decode.js';
 import { interpretBaModelOutput } from '../../business-analyst/analyze-ticket.js';
 import { codexBaPaths } from '../ai-teammate-codex-ba-shared.js';
 import type { BaCodexStateFile } from '../ai-teammate-codex-ba-shared.js';
@@ -46,7 +45,12 @@ export async function runApplyBaOutcome(
   const agentLabelParams = raw.agentLabelParams ?? ctx.agentLabelParams ?? {};
 
   const outAbs = join(process.cwd(), raw.codexRelativeOutputPath);
-  const codexOutput = decodeCodexOutputBestEffort(outAbs, '[apply_ba_outcome]');
+  let codexOutput = '';
+  try {
+    codexOutput = readFileSync(outAbs, 'utf8');
+  } catch {
+    console.warn(`[apply_ba_outcome] Missing or unreadable Codex output: ${outAbs}`);
+  }
 
   console.log('\n── BA: Interpreting Codex output ──');
   const outcome = interpretBaModelOutput(codexOutput, raw.ticketCtx);

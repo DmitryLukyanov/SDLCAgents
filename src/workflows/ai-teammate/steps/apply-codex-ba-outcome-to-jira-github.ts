@@ -41,12 +41,8 @@ export async function applyCodexBaOutcomeToJiraAndGithub(
   console.log('\n── BA: Analysis incomplete — blocking ticket ──');
 
   if (incompleteStatus) {
-    try {
-      await deps.transitionIssueToStatusName(issueKey, incompleteStatus);
-      console.log(`   ✅ Transitioned ${issueKey} to "${incompleteStatus}"`);
-    } catch (e) {
-      console.warn(`   ⚠️ Could not transition ${issueKey} to "${incompleteStatus}" (non-fatal):`, e);
-    }
+    await deps.transitionIssueToStatusName(issueKey, incompleteStatus);
+    console.log(`   ✅ Transitioned ${issueKey} to "${incompleteStatus}"`);
   }
 
   try {
