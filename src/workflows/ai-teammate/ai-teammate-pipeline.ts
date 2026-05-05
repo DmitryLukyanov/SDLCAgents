@@ -18,7 +18,7 @@
  * (see {@link ../../lib/invocation-handoff.js assertManifestMatchesAsyncStepAndPrimaryOutputPresent}), then run remaining steps.
  * Shared label gate: `params.skipIfLabel` / `params.addLabel`.
  */
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import {
   decodeCallerConfig,
   isParentAsyncChildResumeCallerConfig,
@@ -37,7 +37,13 @@ import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
-import { assertConcurrencyKeyMatchesIssue, codexBaPaths, STATE_VERSION } from './ai-teammate-codex-ba-shared.js';
+import {
+  assertConcurrencyKeyMatchesIssue,
+  codexBaPaths,
+  loadHandoffPathsFromConfig,
+  STATE_VERSION,
+  type BaCodexStateFile,
+} from './ai-teammate-codex-ba-shared.js';
 import { loadAiTeammatePipelineFromEnv } from './ai-teammate-core.js';
 import type { AiTeammateDeps, PipelineStep, RunnerContext, StepOutcome, StepRecord } from './runner-types.js';
 
@@ -63,6 +69,11 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return { status: 'continue' };
     }
 
+    // Terminal async dispatch: no handoff artifacts, no callback/resume. The pipeline will stop after dispatch.
+    case 'async_terminal_operation': {
+      return { status: 'continue' };
+    }
+
     case 'apply_ba_outcome': {
       return runApplyBaOutcome(ctx, step, deps);
     }
@@ -70,7 +81,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, apply_ba_outcome.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, async_terminal_operation, apply_ba_outcome.`,
       );
   }
 }
@@ -282,6 +293,33 @@ function requireEnvNonEmpty(name: string): string {
   return v;
 }
 
+function writeMultiAsyncResumeCheckpoint(issueKey: string, ctx: RunnerContext, records: StepRecord[]): void {
+  const prev = JSON.parse(readFileSync(codexBaPaths(issueKey).state, 'utf8')) as BaCodexStateFile;
+  if (prev.version !== STATE_VERSION) {
+    throw new Error(
+      `Pipeline multi-async checkpoint: unsupported ba-codex-state.json version: ${String(prev.version)}`,
+    );
+  }
+
+  const p = loadHandoffPathsFromConfig(issueKey);
+  const next: BaCodexStateFile = {
+    ...prev,
+    runnerCtx: {
+      issueKey: ctx.issueKey,
+      owner: ctx.owner,
+      repo: ctx.repo,
+      ref: ctx.ref,
+      callerConfig: ctx.callerConfig,
+      configFile: ctx.configFile,
+      githubIssueNumber: ctx.githubIssueNumber,
+    },
+    codexRelativeOutputPath: p.codexRelativeOutputPath,
+    partialRecords: records,
+  };
+
+  writeFileSync(p.state, JSON.stringify(next, null, 2) + '\n', 'utf8');
+}
+
 async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
   setGithubActionsOutput('needs_async_handoff', 'false');
   setGithubActionsOutput('async_handoff', '');
@@ -334,13 +372,18 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
 
   let skipBa = process.env.AI_TEAMMATE_SKIP_BA_REASON?.trim() ?? '';
   if (!skipBa && !resumeAfterAsyncChild) {
-    const { skipReason, skipIfLabel } = await evaluateSkipIfLabelFromConfigFile({
-      configFilePath: requireEnvNonEmpty('CONFIG_FILE'),
-      issueKey,
-    });
-    skipBa = skipReason;
-    if (skipReason && skipIfLabel) {
-      console.log(`[pipeline] Jira ${issueKey} has label "${skipIfLabel}" — gated segment will be skipped.`);
+    try {
+      const { skipReason, skipIfLabel } = await evaluateSkipIfLabelFromConfigFile({
+        configFilePath: requireEnvNonEmpty('CONFIG_FILE'),
+        issueKey,
+      });
+      skipBa = skipReason;
+      if (skipReason && skipIfLabel) {
+        console.log(`[pipeline] Jira ${issueKey} has label "${skipIfLabel}" — gated segment will be skipped.`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[pipeline] skipIfLabel gate check failed — continuing without gate. Details: ${msg}`);
     }
   }
 
@@ -417,11 +460,6 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
     }
 
     if (step.async_call) {
-      if (resumeAfterAsyncChild) {
-        throw new Error(
-          'Pipeline: encountered a second async step after the resume boundary; only one async handoff per invocation is supported.',
-        );
-      }
       const t0 = Date.now();
       if (!isStepEnabled(step)) {
         console.log('   ⏭ Skipped — step.enabled is false in config');
@@ -430,6 +468,7 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
           status: 'continue',
           reason: 'skipped (enabled: false)',
           durationMs: Date.now() - t0,
+          source: 'this_invocation',
         });
         continue;
       }
@@ -439,6 +478,11 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
             'Add async_call.workflowFile or set enabled: false.',
         );
       }
+
+      if (resumeAfterAsyncChild) {
+        writeMultiAsyncResumeCheckpoint(issueKey, ctx, records);
+      }
+
       // Run the step to prepare input artifacts, then signal handoff.
       ctx.priorStepRecords = records;
       const prepOutcome = await runPipelineStep(ctx, step as PipelineStep, deps);
@@ -459,6 +503,10 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
       }));
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
+
+      if (step.runner === 'async_terminal_operation') {
+        return;
+      }
       return;
     }
 
