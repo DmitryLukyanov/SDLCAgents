@@ -78,33 +78,76 @@ async function main(): Promise<void> {
   console.log(`[dispatch-pipeline-async-child] ASYNC_HANDOFF raw env: ${process.env.ASYNC_HANDOFF?.trim() ?? '(empty)'}`);
   console.log(`[dispatch-pipeline-async-child] handoff parsed:`, JSON.stringify(handoff, null, 2));
 
-  // Check if we're in a resume context — if so, don't dispatch again (prevents cycle)
+  // Check if we're in a resume context — if so, only skip if trying to dispatch the SAME step
+  // (prevents cycle). If it's a NEW async step, we should dispatch it.
   const callerRoot = decodeCallerConfig(callerConfigEncoded);
   console.log(`[dispatch-pipeline-async-child] callerRoot has async_child_run_id: ${!!callerRoot.params?.async_child_run_id}, async_trigger_step: ${callerRoot.params?.async_trigger_step ?? '(none)'}`);
   const isResume = isParentAsyncChildResumeCallerConfig(callerRoot);
   console.log(`[dispatch-pipeline-async-child] isParentAsyncChildResumeCallerConfig result: ${isResume}`);
+
+  // Load config early — needed both for cycle-prevention (resolved step.id as fallback identifier)
+  // and for the actual dispatch further below.
+  const abs = resolve(process.cwd(), configFile);
+  console.log(`[dispatch-pipeline-async-child] Loading config from absolute path: ${abs}`);
+  const raw = readFileSync(abs, 'utf8');
+  const steps = parseAgentPipelineSteps(raw, configFile);
+  console.log(`[dispatch-pipeline-async-child] Parsed ${steps.length} steps from config`);
+
+  // Find the step by triggerStep id first (stable, avoids ambiguity when multiple steps share the
+  // same workflowFile), then fall back to matching by workflowFile for older pipeline outputs.
+  const triggerStep = handoff.triggerStep?.trim();
+  const workflowFileRaw = handoff.workflowFile?.trim() ?? '';
+  console.log(`[dispatch-pipeline-async-child] Searching for step with triggerStep id: "${triggerStep ?? '(none)'}"`);
+  console.log(`[dispatch-pipeline-async-child] Step ids in config: ${steps.map(s => `"${s.id}"`).join(', ')}`);
+  let step;
+  if (triggerStep) {
+    step = steps.find(s => s.id === triggerStep);
+  } else if (workflowFileRaw) {
+    step = steps.find(s => s.async_call?.workflowFile?.trim() === workflowFileRaw);
+  }
+  console.log(`[dispatch-pipeline-async-child] Found step: ${step ? `runner="${step.runner}", id="${step.id}", has async_call=${!!step.async_call}` : '(not found)'}`);
+
+  // Cycle prevention: when resuming after an async child, skip dispatch only when the effective
+  // step id matches the previous async_trigger_step.  Using step.id as a fallback covers older
+  // ASYNC_HANDOFF payloads that omit triggerStep and match by workflowFile only.
   if (isResume) {
-    setOutput('dispatched', 'false');
-    console.log('[dispatch-pipeline-async-child] Skipping dispatch — parent is resuming after async child (prevents cycle).');
-    appendJobSummary(
-      [
-        '### AI Teammate — async handoff',
-        '',
-        'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
-        '',
-        `- **Concurrency key:** \`${concurrencyKey}\``,
-        '- **Reason:** Parent is resuming after async child completion (prevents infinite cycle).',
-        '',
-        `_Config file:_ \`${configFile}\``,
-      ].join('\n'),
-    );
-    return;
+    const previousTriggerStep = callerRoot.params?.async_trigger_step != null
+      ? callerRoot.params.async_trigger_step.toString().trim()
+      : '';
+    // When triggerStep is absent from handoff, fall back to the resolved step.id so that
+    // cycle prevention is robust even for payloads that only carry workflowFile.
+    const effectiveTriggerStep = (triggerStep || step?.id || '').trim();
+    console.log(`[dispatch-pipeline-async-child] Comparing steps: previous="${previousTriggerStep}", effective="${effectiveTriggerStep}"`);
+    if (!effectiveTriggerStep) {
+      console.log('[dispatch-pipeline-async-child] Cannot determine effective step id (triggerStep absent and step not resolved) — skipping cycle check, continuing with dispatch.');
+    }
+
+    if (effectiveTriggerStep && previousTriggerStep === effectiveTriggerStep) {
+      setOutput('dispatched', 'false');
+      console.log('[dispatch-pipeline-async-child] Skipping dispatch — parent is resuming at the SAME async step (prevents cycle).');
+      appendJobSummary(
+        [
+          '### AI Teammate — async handoff',
+          '',
+          'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
+          '',
+          `- **Concurrency key:** \`${concurrencyKey}\``,
+          '- **Reason:** Parent is resuming after async child completion at the same step (prevents infinite cycle).',
+          `- **Step:** \`${effectiveTriggerStep}\``,
+          '',
+          `_Config file:_ \`${configFile}\``,
+        ].join('\n'),
+      );
+      return;
+    } else {
+      console.log('[dispatch-pipeline-async-child] Parent is resuming but this is a NEW async step — continuing with dispatch.');
+    }
   }
 
   // The pipeline already identified the specific async step and passed it via ASYNC_HANDOFF output.
   // Use the workflowFile from handoff instead of searching for the first async step.
-  console.log(`[dispatch-pipeline-async-child] Checking workflowFile from handoff: "${handoff.workflowFile?.trim() ?? '(empty)'}"`);
-  if (!handoff.workflowFile?.trim()) {
+  console.log(`[dispatch-pipeline-async-child] Checking workflowFile from handoff: "${workflowFileRaw}"`);
+  if (!workflowFileRaw) {
     setOutput('dispatched', 'false');
     console.log('[dispatch-pipeline-async-child] No workflowFile in ASYNC_HANDOFF — not dispatching async child.');
     appendJobSummary(
@@ -122,25 +165,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  const workflowFile = handoff.workflowFile.trim();
+  const workflowFile = workflowFileRaw;
   console.log(`[dispatch-pipeline-async-child] workflowFile set to: "${workflowFile}"`);
 
-  // Need to load the config to get the async_call details (workflowRef, terminal, inputs, etc.)
-  const abs = resolve(process.cwd(), configFile);
-  console.log(`[dispatch-pipeline-async-child] Loading config from absolute path: ${abs}`);
-  const raw = readFileSync(abs, 'utf8');
-  const steps = parseAgentPipelineSteps(raw, configFile);
-  console.log(`[dispatch-pipeline-async-child] Parsed ${steps.length} steps from config`);
-
-  // Find the step by triggerStep id first (stable, avoids ambiguity when multiple steps share the
-  // same workflowFile), then fall back to matching by workflowFile for older pipeline outputs.
-  const triggerStep = handoff.triggerStep?.trim();
-  console.log(`[dispatch-pipeline-async-child] Searching for step with triggerStep id: "${triggerStep ?? '(none)'}"`);
-  console.log(`[dispatch-pipeline-async-child] Step ids in config: ${steps.map(s => `"${s.id}"`).join(', ')}`);
-  const step = triggerStep
-    ? steps.find(s => s.id === triggerStep)
-    : steps.find(s => s.async_call?.workflowFile?.trim() === workflowFile);
-  console.log(`[dispatch-pipeline-async-child] Found step: ${step ? `runner="${step.runner}", id="${step.id}", has async_call=${!!step.async_call}` : '(not found)'}`);
   if (!step || !step.async_call) {
     const reason = triggerStep
       ? `No step with id="${triggerStep}" found in config.`
@@ -179,7 +206,7 @@ async function main(): Promise<void> {
   });
   console.log(`[dispatch-pipeline-async-child] Parent run fields: parent_run_id=${parentFields.parent_run_id}, has parent_run_url=${!!parentFields.parent_run_url}`);
 
-  const stepId = handoff.triggerStep?.trim() || step.id;
+  const stepId = handoff.triggerStep?.trim() || step.id || `${step.runner}#unknown`;
   console.log(`[dispatch-pipeline-async-child] Using stepId: "${stepId}"`);
 
   const terminal = ac.terminal === true;
@@ -199,7 +226,7 @@ async function main(): Promise<void> {
   console.log(`[dispatch-pipeline-async-child] Checking if terminal && workflowFile === 'developer-agent.yml': terminal=${terminal}, workflowFile="${workflowFile}"`);
   if (terminal && workflowFile === 'developer-agent.yml') {
     const issueKey = handoff.issueKey || concurrencyKey;
-    const githubIssueNumber = handoff.githubIssueNumber?.toString() || '';
+    const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
 
     console.log(`[dispatch-pipeline-async-child] Building developer agent inputs...`);
     console.log(`[dispatch-pipeline-async-child]   - issueKey: "${issueKey}"`);
