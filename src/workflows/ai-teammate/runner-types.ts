@@ -29,6 +29,8 @@ export interface AiTeammateDeps {
   createGithubIssue: (owner: string, repo: string, issueKey: string) => Promise<number>;
   /** Update the GitHub issue body (no Copilot assignment). */
   updateGithubIssueBody: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;
+  /** Get the GitHub issue body. */
+  getGithubIssueBody: (owner: string, repo: string, issueNumber: number) => Promise<string>;
   /** Dispatch the developer agent workflow in the consumer repo. */
   dispatchDeveloperAgent: (
     owner: string,

@@ -28,11 +28,34 @@ export async function applyCodexBaOutcomeToJiraAndGithub(
     }
 
     if (ctx.githubIssueNumber) {
+      // Add comment about BA completion
       await deps
         .addGithubIssueComment(ctx.owner, ctx.repo, ctx.githubIssueNumber, fillTemplate(BA_COMPLETE, { ISSUE_KEY: issueKey }))
         .catch(() => {
           /* non-fatal */
         });
+
+      // Append pipeline config to issue body so developer agent can read it
+      try {
+        const pipelineConfig = {
+          specifyInput: outcome.result.specifyInput ?? '',
+          clarifyInput: outcome.result.clarifyInput ?? '',
+          planInput: outcome.result.planInput ?? '',
+          tasksInput: outcome.result.tasksInput ?? '',
+          implementInput: outcome.result.implementInput ?? '',
+        };
+        const configBlock = `\n\n<!--sdlc-pipeline-config\n${JSON.stringify(pipelineConfig, null, 2)}\n/sdlc-pipeline-config-->`;
+
+        // Get current issue body and append config
+        const currentBody = await deps.getGithubIssueBody(ctx.owner, ctx.repo, ctx.githubIssueNumber);
+        // Only append if not already present
+        if (!currentBody.includes('<!--sdlc-pipeline-config')) {
+          await deps.updateGithubIssueBody(ctx.owner, ctx.repo, ctx.githubIssueNumber, currentBody + configBlock);
+          console.log('   ✅ Appended pipeline config to GitHub issue body');
+        }
+      } catch (e) {
+        console.warn('   ⚠️ Could not append pipeline config to GitHub issue (non-fatal):', e);
+      }
     }
 
     return { status: 'continue' };
