@@ -89,7 +89,9 @@ async function main(): Promise<void> {
   // If they match, we're trying to re-dispatch the same step (cycle prevention)
   // If they differ, we're at a NEW async boundary and should dispatch
   if (isResume) {
-    const previousTriggerStep = callerRoot.params?.async_trigger_step?.trim() ?? '';
+    const previousTriggerStep = callerRoot.params?.async_trigger_step != null
+      ? callerRoot.params.async_trigger_step.toString().trim()
+      : '';
     const currentTriggerStep = handoff.triggerStep?.trim() ?? '';
     console.log(`[dispatch-pipeline-async-child] Comparing steps: previous="${previousTriggerStep}", current="${currentTriggerStep}"`);
 
