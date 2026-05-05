@@ -193,7 +193,7 @@ async function main(): Promise<void> {
   });
   console.log(`[dispatch-pipeline-async-child] Parent run fields: parent_run_id=${parentFields.parent_run_id}, has parent_run_url=${!!parentFields.parent_run_url}`);
 
-  const stepId = handoff.triggerStep?.trim() || step.id;
+  const stepId = handoff.triggerStep?.trim() || step.id || `${step.runner}#unknown`;
   console.log(`[dispatch-pipeline-async-child] Using stepId: "${stepId}"`);
 
   const terminal = ac.terminal === true;
@@ -213,7 +213,7 @@ async function main(): Promise<void> {
   console.log(`[dispatch-pipeline-async-child] Checking if terminal && workflowFile === 'developer-agent.yml': terminal=${terminal}, workflowFile="${workflowFile}"`);
   if (terminal && workflowFile === 'developer-agent.yml') {
     const issueKey = handoff.issueKey || concurrencyKey;
-    const githubIssueNumber = handoff.githubIssueNumber?.toString() || '';
+    const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
 
     console.log(`[dispatch-pipeline-async-child] Building developer agent inputs...`);
     console.log(`[dispatch-pipeline-async-child]   - issueKey: "${issueKey}"`);
