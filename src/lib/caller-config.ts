@@ -62,7 +62,7 @@ export function isParentAsyncChildResumeCallerConfig(root: CallerConfigRoot): bo
   // Guard against accidental reuse of the dispatch-time template placeholders.
   // If these placeholders leak into `caller_config`, the parent will mis-detect
   // a resume and keep attempting the async boundary, causing repeated BA dispatch.
-  if (child.includes('${{') || child.includes('}}')) return false;
+  if (child.includes('${{')) return false;
 
   return true;
 }
