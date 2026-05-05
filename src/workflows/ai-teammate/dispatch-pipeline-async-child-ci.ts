@@ -39,11 +39,21 @@ function requireEnv(name: string): string {
   return v;
 }
 
-function maybeParseAsyncHandoffFromOutput(): { triggerStep?: string; workflowFile?: string } {
+function maybeParseAsyncHandoffFromOutput(): {
+  triggerStep?: string;
+  workflowFile?: string;
+  issueKey?: string;
+  githubIssueNumber?: number;
+} {
   const raw = process.env.ASYNC_HANDOFF?.trim() ?? '';
   if (!raw) return {};
   try {
-    const parsed = JSON.parse(raw) as { triggerStep?: string; workflowFile?: string };
+    const parsed = JSON.parse(raw) as {
+      triggerStep?: string;
+      workflowFile?: string;
+      issueKey?: string;
+      githubIssueNumber?: number;
+    };
     return typeof parsed === 'object' && parsed ? parsed : {};
   } catch {
     console.warn('[dispatch-pipeline-async-child] ASYNC_HANDOFF is not valid JSON; ignoring.');
@@ -136,13 +146,37 @@ async function main(): Promise<void> {
         ...parentFields,
       });
 
-  const inputs: Record<string, string> = {
-    ...buildAiTeammateWorkflowDispatchInputsWithCaller({
-      concurrencyKey,
-      configFile,
-      callerConfigEncoded: mergedCaller,
-    }),
-  };
+  // Build inputs based on the target workflow
+  let inputs: Record<string, string> = {};
+
+  // For developer-agent.yml (terminal operation), build developer agent inputs
+  if (terminal && workflowFile === 'developer-agent.yml') {
+    const issueKey = handoff.issueKey || concurrencyKey;
+    const githubIssueNumber = handoff.githubIssueNumber?.toString() || '';
+
+    inputs = {
+      mode: 'speckit',
+      issue_number: githubIssueNumber,
+      issue_key: issueKey,
+      step: 'specify',
+      branch_name: '',  // Empty means bootstrap will create the branch
+      pr_number: '',
+      prompt: '',
+    };
+
+    console.log(`[dispatch-pipeline-async-child] Building developer agent inputs: issue_key=${issueKey}, issue_number=${githubIssueNumber}`);
+  } else {
+    // For other workflows (like business-analyst.yml), use AI Teammate inputs
+    inputs = {
+      ...buildAiTeammateWorkflowDispatchInputsWithCaller({
+        concurrencyKey,
+        configFile,
+        callerConfigEncoded: mergedCaller,
+      }),
+    };
+  }
+
+  // Merge any additional inputs from config
   if (ac.inputs) {
     for (const [k, v] of Object.entries(ac.inputs)) {
       if (v !== undefined && v !== null) inputs[k] = String(v);
