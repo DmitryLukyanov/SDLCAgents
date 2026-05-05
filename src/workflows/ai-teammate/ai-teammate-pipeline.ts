@@ -500,6 +500,8 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         triggerStep: triggerStepId,
         workflowFile: step.async_call.workflowFile.trim(),
         workflowRef: step.async_call.workflowRef?.trim() || '',
+        issueKey: ctx.issueKey,
+        githubIssueNumber: ctx.githubIssueNumber,
       }));
       setGithubActionsOutput('needs_async_handoff', 'true');
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
