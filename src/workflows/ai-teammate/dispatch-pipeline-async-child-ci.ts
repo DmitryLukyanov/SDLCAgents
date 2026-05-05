@@ -11,7 +11,7 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Octokit } from '@octokit/rest';
-import { findFirstEnabledAsyncCallStepIndex, parseAgentPipelineSteps } from '../../lib/pipeline-config.js';
+import { parseAgentPipelineSteps } from '../../lib/pipeline-config.js';
 import { buildParentRunFields, mergeCallerConfigForAsyncChildDispatch } from '../../lib/pipeline-callback-config.js';
 import { decodeCallerConfig, isParentAsyncChildResumeCallerConfig } from '../../lib/caller-config.js';
 import {
@@ -90,21 +90,45 @@ async function main(): Promise<void> {
     return;
   }
 
+  // The pipeline already identified the specific async step and passed it via ASYNC_HANDOFF output.
+  // Use the workflowFile from handoff instead of searching for the first async step.
+  if (!handoff.workflowFile?.trim()) {
+    setOutput('dispatched', 'false');
+    console.log('[dispatch-pipeline-async-child] No workflowFile in ASYNC_HANDOFF — not dispatching async child.');
+    appendJobSummary(
+      [
+        '### AI Teammate — async handoff',
+        '',
+        'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
+        '',
+        `- **Concurrency key:** \`${concurrencyKey}\``,
+        '- **Reason:** No workflowFile in ASYNC_HANDOFF output (pipeline should set this).',
+        '',
+        `_Config file:_ \`${configFile}\``,
+      ].join('\n'),
+    );
+    return;
+  }
+
+  const workflowFile = handoff.workflowFile.trim();
+
+  // Need to load the config to get the async_call details (workflowRef, terminal, inputs, etc.)
   const abs = resolve(process.cwd(), configFile);
   const raw = readFileSync(abs, 'utf8');
   const steps = parseAgentPipelineSteps(raw, configFile);
-  const asyncIdx = findFirstEnabledAsyncCallStepIndex(steps);
 
-  if (!runCodex || asyncIdx < 0) {
+  // Find the step by triggerStep id first (stable, avoids ambiguity when multiple steps share the
+  // same workflowFile), then fall back to matching by workflowFile for older pipeline outputs.
+  const triggerStep = handoff.triggerStep?.trim();
+  const step = triggerStep
+    ? steps.find(s => s.id === triggerStep)
+    : steps.find(s => s.async_call?.workflowFile?.trim() === workflowFile);
+  if (!step || !step.async_call) {
+    const reason = triggerStep
+      ? `No step with id="${triggerStep}" found in config.`
+      : `No step with async_call.workflowFile="${workflowFile}" found in config.`;
     setOutput('dispatched', 'false');
-    let reason = '';
-    if (asyncIdx < 0) {
-      reason = 'No enabled step with `async_call` in the agent config.';
-      console.log('[dispatch-pipeline-async-child] No enabled step with async_call — not dispatching async child.');
-    } else if (!runCodex) {
-      reason = 'Codex BA is disabled for this run (`AI_TEAMMATE_RUN_CODEX` is not `true`).';
-      console.log('[dispatch-pipeline-async-child] BA skipped or disabled — not dispatching async child.');
-    }
+    console.log(`[dispatch-pipeline-async-child] ${reason} — not dispatching.`);
     appendJobSummary(
       [
         '### AI Teammate — async handoff',
@@ -120,9 +144,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const step = steps[asyncIdx]!;
-  const ac = step.async_call!;
-  const workflowFile = ac.workflowFile.trim();
+  const ac = step.async_call;
   const ref = (ac.workflowRef?.trim() || requireEnv('GITHUB_REF_NAME')).trim();
 
   const repoFull = requireEnv('GITHUB_REPOSITORY');
@@ -135,7 +157,7 @@ async function main(): Promise<void> {
     githubRunId: requireEnv('GITHUB_RUN_ID'),
   });
 
-  const stepId = handoff.triggerStep?.trim() || (step.id ?? `${step.runner}#${asyncIdx}`);
+  const stepId = handoff.triggerStep?.trim() || step.id;
 
   const terminal = ac.terminal === true;
   const mergedCaller = terminal
