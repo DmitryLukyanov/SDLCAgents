@@ -62,17 +62,28 @@ function maybeParseAsyncHandoffFromOutput(): {
 }
 
 async function main(): Promise<void> {
+  console.log('[dispatch-pipeline-async-child] ======== START DISPATCH PROCESS ========');
   const configFile = requireEnv('CONFIG_FILE');
   const callerConfigEncoded = requireEnv('CALLER_CONFIG');
   const runCodex = requireEnv('AI_TEAMMATE_RUN_CODEX') === 'true';
   const concurrencyKey = requireEnv('AI_TEAMMATE_CONCURRENCY_KEY');
   const entryWorkflow = process.env.AI_TEAMMATE_ENTRY_WORKFLOW_FILE?.trim() || 'ai-teammate.yml';
 
+  console.log(`[dispatch-pipeline-async-child] configFile: ${configFile}`);
+  console.log(`[dispatch-pipeline-async-child] runCodex: ${runCodex}`);
+  console.log(`[dispatch-pipeline-async-child] concurrencyKey: ${concurrencyKey}`);
+  console.log(`[dispatch-pipeline-async-child] entryWorkflow: ${entryWorkflow}`);
+
   const handoff = maybeParseAsyncHandoffFromOutput();
+  console.log(`[dispatch-pipeline-async-child] ASYNC_HANDOFF raw env: ${process.env.ASYNC_HANDOFF?.trim() ?? '(empty)'}`);
+  console.log(`[dispatch-pipeline-async-child] handoff parsed:`, JSON.stringify(handoff, null, 2));
 
   // Check if we're in a resume context — if so, don't dispatch again (prevents cycle)
   const callerRoot = decodeCallerConfig(callerConfigEncoded);
-  if (isParentAsyncChildResumeCallerConfig(callerRoot)) {
+  console.log(`[dispatch-pipeline-async-child] callerRoot has async_child_run_id: ${!!callerRoot.params?.async_child_run_id}, async_trigger_step: ${callerRoot.params?.async_trigger_step ?? '(none)'}`);
+  const isResume = isParentAsyncChildResumeCallerConfig(callerRoot);
+  console.log(`[dispatch-pipeline-async-child] isParentAsyncChildResumeCallerConfig result: ${isResume}`);
+  if (isResume) {
     setOutput('dispatched', 'false');
     console.log('[dispatch-pipeline-async-child] Skipping dispatch — parent is resuming after async child (prevents cycle).');
     appendJobSummary(
@@ -92,6 +103,7 @@ async function main(): Promise<void> {
 
   // The pipeline already identified the specific async step and passed it via ASYNC_HANDOFF output.
   // Use the workflowFile from handoff instead of searching for the first async step.
+  console.log(`[dispatch-pipeline-async-child] Checking workflowFile from handoff: "${handoff.workflowFile?.trim() ?? '(empty)'}"`);
   if (!handoff.workflowFile?.trim()) {
     setOutput('dispatched', 'false');
     console.log('[dispatch-pipeline-async-child] No workflowFile in ASYNC_HANDOFF — not dispatching async child.');
@@ -111,18 +123,24 @@ async function main(): Promise<void> {
   }
 
   const workflowFile = handoff.workflowFile.trim();
+  console.log(`[dispatch-pipeline-async-child] workflowFile set to: "${workflowFile}"`);
 
   // Need to load the config to get the async_call details (workflowRef, terminal, inputs, etc.)
   const abs = resolve(process.cwd(), configFile);
+  console.log(`[dispatch-pipeline-async-child] Loading config from absolute path: ${abs}`);
   const raw = readFileSync(abs, 'utf8');
   const steps = parseAgentPipelineSteps(raw, configFile);
+  console.log(`[dispatch-pipeline-async-child] Parsed ${steps.length} steps from config`);
 
   // Find the step by triggerStep id first (stable, avoids ambiguity when multiple steps share the
   // same workflowFile), then fall back to matching by workflowFile for older pipeline outputs.
   const triggerStep = handoff.triggerStep?.trim();
+  console.log(`[dispatch-pipeline-async-child] Searching for step with triggerStep id: "${triggerStep ?? '(none)'}"`);
+  console.log(`[dispatch-pipeline-async-child] Step ids in config: ${steps.map(s => `"${s.id}"`).join(', ')}`);
   const step = triggerStep
     ? steps.find(s => s.id === triggerStep)
     : steps.find(s => s.async_call?.workflowFile?.trim() === workflowFile);
+  console.log(`[dispatch-pipeline-async-child] Found step: ${step ? `runner="${step.runner}", id="${step.id}", has async_call=${!!step.async_call}` : '(not found)'}`);
   if (!step || !step.async_call) {
     const reason = triggerStep
       ? `No step with id="${triggerStep}" found in config.`
@@ -146,20 +164,26 @@ async function main(): Promise<void> {
 
   const ac = step.async_call;
   const ref = (ac.workflowRef?.trim() || requireEnv('GITHUB_REF_NAME')).trim();
+  console.log(`[dispatch-pipeline-async-child] async_call: workflowFile="${ac.workflowFile}", workflowRef="${ac.workflowRef ?? ''}", terminal=${ac.terminal ?? false}, inputs keys=[${Object.keys(ac.inputs ?? {}).join(', ')}]`);
+  console.log(`[dispatch-pipeline-async-child] Using ref: "${ref}"`);
 
   const repoFull = requireEnv('GITHUB_REPOSITORY');
   const [owner, repo] = repoFull.split('/');
   if (!owner || !repo) throw new Error(`Invalid GITHUB_REPOSITORY: ${repoFull}`);
+  console.log(`[dispatch-pipeline-async-child] Repository: ${owner}/${repo}`);
 
   const parentFields = buildParentRunFields({
     githubServerUrl: requireEnv('GITHUB_SERVER_URL'),
     githubRepository: repoFull,
     githubRunId: requireEnv('GITHUB_RUN_ID'),
   });
+  console.log(`[dispatch-pipeline-async-child] Parent run fields: parent_run_id=${parentFields.parent_run_id}, has parent_run_url=${!!parentFields.parent_run_url}`);
 
   const stepId = handoff.triggerStep?.trim() || step.id;
+  console.log(`[dispatch-pipeline-async-child] Using stepId: "${stepId}"`);
 
   const terminal = ac.terminal === true;
+  console.log(`[dispatch-pipeline-async-child] Is terminal operation: ${terminal}`);
   const mergedCaller = terminal
     ? callerConfigEncoded
     : mergeCallerConfigForAsyncChildDispatch(callerConfigEncoded, {
@@ -172,9 +196,14 @@ async function main(): Promise<void> {
   let inputs: Record<string, string> = {};
 
   // For developer-agent.yml (terminal operation), build developer agent inputs
+  console.log(`[dispatch-pipeline-async-child] Checking if terminal && workflowFile === 'developer-agent.yml': terminal=${terminal}, workflowFile="${workflowFile}"`);
   if (terminal && workflowFile === 'developer-agent.yml') {
     const issueKey = handoff.issueKey || concurrencyKey;
     const githubIssueNumber = handoff.githubIssueNumber?.toString() || '';
+
+    console.log(`[dispatch-pipeline-async-child] Building developer agent inputs...`);
+    console.log(`[dispatch-pipeline-async-child]   - issueKey: "${issueKey}"`);
+    console.log(`[dispatch-pipeline-async-child]   - githubIssueNumber: "${githubIssueNumber}"`);
 
     inputs = {
       mode: 'speckit',
@@ -186,9 +215,10 @@ async function main(): Promise<void> {
       prompt: '',
     };
 
-    console.log(`[dispatch-pipeline-async-child] Building developer agent inputs: issue_key=${issueKey}, issue_number=${githubIssueNumber}`);
+    console.log(`[dispatch-pipeline-async-child] Developer agent inputs built: mode=${inputs.mode}, issue_key=${inputs.issue_key}, issue_number=${inputs.issue_number}, step=${inputs.step}`);
   } else {
     // For other workflows (like business-analyst.yml), use AI Teammate inputs
+    console.log(`[dispatch-pipeline-async-child] Building AI Teammate inputs (not developer-agent.yml)...`);
     inputs = {
       ...buildAiTeammateWorkflowDispatchInputsWithCaller({
         concurrencyKey,
@@ -196,14 +226,18 @@ async function main(): Promise<void> {
         callerConfigEncoded: mergedCaller,
       }),
     };
+    console.log(`[dispatch-pipeline-async-child] AI Teammate inputs built with ${Object.keys(inputs).length} keys: ${Object.keys(inputs).join(', ')}`);
   }
 
   // Merge any additional inputs from config
   if (ac.inputs) {
+    console.log(`[dispatch-pipeline-async-child] Merging additional inputs from async_call.inputs (${Object.keys(ac.inputs).length} keys)`);
     for (const [k, v] of Object.entries(ac.inputs)) {
       if (v !== undefined && v !== null) inputs[k] = String(v);
     }
   }
+
+  console.log(`[dispatch-pipeline-async-child] Final inputs: ${Object.keys(inputs).length} total keys`);
 
   const payload = buildGithubWorkflowDispatchPayload({
     owner,
@@ -213,10 +247,14 @@ async function main(): Promise<void> {
     inputs,
   });
 
+  console.log(`[dispatch-pipeline-async-child] Workflow dispatch: owner=${owner}, repo=${repo}, workflowId=${workflowFile}, ref=${ref}, inputs count=${Object.keys(inputs).length}`);
+  console.log(`[dispatch-pipeline-async-child] Dispatching workflow...`);
+
   const octokit = new Octokit({ auth: requireEnv('COPILOT_PAT') });
   await dispatchGithubWorkflow(octokit, payload);
 
   console.log(`[dispatch-pipeline-async-child] Dispatched ${workflowFile}@${ref} for ${concurrencyKey}.`);
+  console.log('[dispatch-pipeline-async-child] ======== DISPATCH SUCCESSFUL ========');
   setOutput('dispatched', 'true');
 
   const parentRunUrl = `${requireEnv('GITHUB_SERVER_URL')}/${repoFull}/actions/runs/${requireEnv('GITHUB_RUN_ID')}`;

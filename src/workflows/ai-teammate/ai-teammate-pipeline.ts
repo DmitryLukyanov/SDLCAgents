@@ -461,6 +461,12 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
 
     if (step.async_call) {
       const t0 = Date.now();
+      console.log(`[ai-teammate-pipeline] ======== ASYNC STEP DETECTED ========`);
+      console.log(`[ai-teammate-pipeline] Step runner: ${step.runner}`);
+      console.log(`[ai-teammate-pipeline] Step id: ${step.id}`);
+      console.log(`[ai-teammate-pipeline] Step enabled: ${isStepEnabled(step)}`);
+      console.log(`[ai-teammate-pipeline] async_call: workflowFile="${step.async_call.workflowFile}", workflowRef="${step.async_call.workflowRef ?? ''}", terminal=${step.async_call.terminal ?? false}, inputs keys=[${Object.keys(step.async_call.inputs ?? {}).join(', ')}]`);
+
       if (!isStepEnabled(step)) {
         console.log('   ⏭ Skipped — step.enabled is false in config');
         records.push({
@@ -473,19 +479,25 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         continue;
       }
       if (!step.async_call.workflowFile?.trim()) {
+        console.log(`[ai-teammate-pipeline] ERROR: Step has async_call but no workflowFile!`);
         throw new Error(
           `Step "${step.runner}" (id "${step.id}") has async_call but no async_call.workflowFile. ` +
             'Add async_call.workflowFile or set enabled: false.',
         );
       }
 
+      console.log(`[ai-teammate-pipeline] workflowFile: "${step.async_call.workflowFile.trim()}"`);
+
       if (resumeAfterAsyncChild) {
+        console.log(`[ai-teammate-pipeline] Saving multi-async resume checkpoint...`);
         writeMultiAsyncResumeCheckpoint(issueKey, ctx, records);
       }
 
       // Run the step to prepare input artifacts, then signal handoff.
       ctx.priorStepRecords = records;
+      console.log(`[ai-teammate-pipeline] Running pipeline step to prepare artifacts...`);
       const prepOutcome = await runPipelineStep(ctx, step as PipelineStep, deps);
+      console.log(`[ai-teammate-pipeline] Step preparation outcome: status=${prepOutcome.status}${prepOutcome.status === 'stop' ? `, reason="${prepOutcome.reason}"` : ''}`);
       records.push({ runner: step.runner, status: prepOutcome.status, durationMs: Date.now() - t0 });
       if (prepOutcome.status === 'stop') {
         console.log(`\n🛑 Pipeline halted at ${step.runner}: ${prepOutcome.reason}`);
@@ -496,19 +508,26 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
       // Provide a single structured output so the YAML dispatch step can stay generic.
       // (The dispatch step still reads config to build the full dispatch payload.)
       const triggerStepId = step.id ?? `${step.runner}#${i}`;
-      setGithubActionsOutput('async_handoff', JSON.stringify({
+      const asyncHandoffData = {
         triggerStep: triggerStepId,
         workflowFile: step.async_call.workflowFile.trim(),
         workflowRef: step.async_call.workflowRef?.trim() || '',
         issueKey: ctx.issueKey,
         githubIssueNumber: ctx.githubIssueNumber,
-      }));
+      };
+      console.log(`[ai-teammate-pipeline] Setting async_handoff output:`, JSON.stringify(asyncHandoffData, null, 2));
+      setGithubActionsOutput('async_handoff', JSON.stringify(asyncHandoffData));
       setGithubActionsOutput('needs_async_handoff', 'true');
+      console.log(`[ai-teammate-pipeline] Set needs_async_handoff=true`);
       await writeAiTeammatePipelineSummary(issueKey, `${ctx.owner}/${ctx.repo}`, records, ctx);
 
       if (step.runner === 'async_terminal_operation') {
+        console.log(`[ai-teammate-pipeline] Step is async_terminal_operation — pipeline will stop here (no resume).`);
+        console.log(`[ai-teammate-pipeline] ======== PIPELINE ENDED (TERMINAL ASYNC) ========`);
         return;
       }
+      console.log(`[ai-teammate-pipeline] Step is async_operation (non-terminal) — pipeline will stop and wait for callback.`);
+      console.log(`[ai-teammate-pipeline] ======== PIPELINE PAUSED (WAITING FOR ASYNC CHILD) ========`);
       return;
     }
 

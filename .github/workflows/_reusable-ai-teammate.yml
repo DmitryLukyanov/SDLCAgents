@@ -215,6 +215,7 @@ jobs:
 
       - name: Dispatch async BA child (config async_call)
         if: steps.pipeline.outputs.needs_async_handoff == 'true'
+        id: dispatch_async
         shell: bash
         env:
           ASYNC_HANDOFF: ${{ steps.pipeline.outputs.async_handoff }}
@@ -238,7 +239,16 @@ jobs:
           export AI_TEAMMATE_SKIP_BA_REASON=""
           export AI_TEAMMATE_RUN_CODEX="true"
           export AI_TEAMMATE_ENTRY_WORKFLOW_FILE="${ENTRY_FILE}"
-          .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/dispatch-pipeline-async-child-ci.ts
+          .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/dispatch-pipeline-async-child-ci.ts 2>&1 | tee dispatch-logs.txt
+
+      # Capture dispatch logs for troubleshooting
+      - name: Upload dispatch logs artifact
+        if: always() && steps.pipeline.outputs.needs_async_handoff == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-teammate-${{ inputs.concurrency_key }}-dispatch-logs
+          path: dispatch-logs.txt
+          if-no-files-found: ignore
 
       # Optional dump of async handoff tree (local debug) — not spec-kit step output.
       - name: Upload async handoff tree (optional)
