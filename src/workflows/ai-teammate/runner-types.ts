@@ -87,4 +87,6 @@ export interface PipelineStep {
 export interface AgentLabelParams {
   skipIfLabel?: string;
   addLabel?: string;
+  /** Optional Jira status transition when BA output is incomplete (e.g. "Blocked"). */
+  incompleteStatus?: string;
 }

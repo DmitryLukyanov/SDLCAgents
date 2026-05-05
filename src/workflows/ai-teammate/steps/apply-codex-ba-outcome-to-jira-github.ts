@@ -16,7 +16,7 @@ export async function applyCodexBaOutcomeToJiraAndGithub(
   outcome: BaOutcome,
 ): Promise<StepOutcome> {
   const { issueKey } = ctx;
-  const { addLabel } = agentLabelParams;
+  const { addLabel, incompleteStatus } = agentLabelParams;
 
   if (outcome.status === 'complete') {
     console.log('   ✅ BA analysis complete — all 5 fields extracted');
@@ -39,6 +39,11 @@ export async function applyCodexBaOutcomeToJiraAndGithub(
   }
 
   console.log('\n── BA: Analysis incomplete — blocking ticket ──');
+
+  if (incompleteStatus) {
+    await deps.transitionIssueToStatusName(issueKey, incompleteStatus);
+    console.log(`   ✅ Transitioned ${issueKey} to "${incompleteStatus}"`);
+  }
 
   try {
     await deps.addIssueComment(issueKey, outcome.questions);
