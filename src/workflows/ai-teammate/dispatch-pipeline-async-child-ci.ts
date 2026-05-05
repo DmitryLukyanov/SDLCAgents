@@ -78,27 +78,41 @@ async function main(): Promise<void> {
   console.log(`[dispatch-pipeline-async-child] ASYNC_HANDOFF raw env: ${process.env.ASYNC_HANDOFF?.trim() ?? '(empty)'}`);
   console.log(`[dispatch-pipeline-async-child] handoff parsed:`, JSON.stringify(handoff, null, 2));
 
-  // Check if we're in a resume context — if so, don't dispatch again (prevents cycle)
+  // Check if we're in a resume context — if so, only skip if trying to dispatch the SAME step
+  // (prevents cycle). If it's a NEW async step, we should dispatch it.
   const callerRoot = decodeCallerConfig(callerConfigEncoded);
   console.log(`[dispatch-pipeline-async-child] callerRoot has async_child_run_id: ${!!callerRoot.params?.async_child_run_id}, async_trigger_step: ${callerRoot.params?.async_trigger_step ?? '(none)'}`);
   const isResume = isParentAsyncChildResumeCallerConfig(callerRoot);
   console.log(`[dispatch-pipeline-async-child] isParentAsyncChildResumeCallerConfig result: ${isResume}`);
+
+  // If we're resuming, check if the current triggerStep matches the previous async_trigger_step
+  // If they match, we're trying to re-dispatch the same step (cycle prevention)
+  // If they differ, we're at a NEW async boundary and should dispatch
   if (isResume) {
-    setOutput('dispatched', 'false');
-    console.log('[dispatch-pipeline-async-child] Skipping dispatch — parent is resuming after async child (prevents cycle).');
-    appendJobSummary(
-      [
-        '### AI Teammate — async handoff',
-        '',
-        'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
-        '',
-        `- **Concurrency key:** \`${concurrencyKey}\``,
-        '- **Reason:** Parent is resuming after async child completion (prevents infinite cycle).',
-        '',
-        `_Config file:_ \`${configFile}\``,
-      ].join('\n'),
-    );
-    return;
+    const previousTriggerStep = callerRoot.params?.async_trigger_step?.trim() ?? '';
+    const currentTriggerStep = handoff.triggerStep?.trim() ?? '';
+    console.log(`[dispatch-pipeline-async-child] Comparing steps: previous="${previousTriggerStep}", current="${currentTriggerStep}"`);
+
+    if (currentTriggerStep && previousTriggerStep === currentTriggerStep) {
+      setOutput('dispatched', 'false');
+      console.log('[dispatch-pipeline-async-child] Skipping dispatch — parent is resuming at the SAME async step (prevents cycle).');
+      appendJobSummary(
+        [
+          '### AI Teammate — async handoff',
+          '',
+          'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
+          '',
+          `- **Concurrency key:** \`${concurrencyKey}\``,
+          '- **Reason:** Parent is resuming after async child completion at the same step (prevents infinite cycle).',
+          `- **Step:** \`${currentTriggerStep}\``,
+          '',
+          `_Config file:_ \`${configFile}\``,
+        ].join('\n'),
+      );
+      return;
+    } else {
+      console.log('[dispatch-pipeline-async-child] Parent is resuming but this is a NEW async step — continuing with dispatch.');
+    }
   }
 
   // The pipeline already identified the specific async step and passed it via ASYNC_HANDOFF output.
