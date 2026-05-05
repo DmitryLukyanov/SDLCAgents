@@ -62,10 +62,6 @@ const deps = {
             `(GitHub loads YAML from that commit). Push .github/workflows/${args.workflow_id} to that branch, ` +
             `or set workflowRef / GITHUB_REF_NAME to the branch that already contains it.`,
         );
-        console.error(
-          `   Hint (404): 404 can also happen when the token cannot access Actions workflow dispatch. ` +
-            `Ensure the token used as GITHUB_TOKEN has permission to dispatch workflows (PAT with \`workflow\` scope is recommended).`,
-        );
         try {
           const { data: repoInfo } = await octokit.rest.repos.get({
             owner: args.owner,

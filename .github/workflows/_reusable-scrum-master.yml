@@ -48,6 +48,8 @@ on:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: read
       actions: write
@@ -116,9 +118,6 @@ jobs:
       - name: Run Scrum Master
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/scrum-master/scrum-master.ts
         env:
-          # Use a PAT for workflow_dispatch. GitHub's ephemeral `${{ github.token }}` commonly cannot
-          # trigger downstream workflows, which breaks Scrum Master → AI Teammate dispatch.
-          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}

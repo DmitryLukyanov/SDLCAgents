@@ -61,6 +61,8 @@ jobs:
     name: AI Teammate (config pipeline)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: write
       actions: write
@@ -131,7 +133,7 @@ jobs:
             const parent = (j?.params?.parent_run_id ?? '').toString().trim();
             // Guard: treat unevaluated GHA expression placeholders as absent.
             // When caller_config is assembled at dispatch time the template literal
-            // The placeholder string "$" + "{{ steps.X.outputs.run_id }}" can leak through as a literal string
+            // "$" + "{{ steps.X.outputs.run_id }}" can leak through as a literal string
             // if the upstream step hasn't produced the output yet. Treating that
             // placeholder as a real run-id would mis-detect a resume and attempt
             // artifact downloads / repeated BA dispatch.
@@ -172,8 +174,6 @@ jobs:
         env:
           AI_TEAMMATE_MODE: pipeline_ci
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
-          # Use a PAT for GitHub API calls that may dispatch downstream workflows (async BA / developer agent).
-          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
@@ -193,7 +193,6 @@ jobs:
         if: steps.pipeline.outputs.needs_async_handoff == 'true'
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/verify-invocation-handoff-ci.ts
         env:
-          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           CONFIG_FILE: ${{ inputs.config_file }}
           CALLER_CONFIG: ${{ inputs.caller_config }}
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
@@ -229,7 +228,6 @@ jobs:
           export CONFIG_FILE="${{ inputs.config_file }}"
           export CALLER_CONFIG="${{ inputs.caller_config }}"
           export COPILOT_PAT="${{ secrets.COPILOT_PAT }}"
-          export GITHUB_TOKEN="${{ secrets.COPILOT_PAT }}"
           export GITHUB_REPOSITORY="${{ github.repository }}"
           export GITHUB_SERVER_URL="${{ github.server_url }}"
           export GITHUB_RUN_ID="${{ github.run_id }}"
