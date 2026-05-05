@@ -91,6 +91,14 @@ export function buildAiTeammateDeps(): AiTeammateDeps {
         body,
       });
     },
+    getGithubIssueBody: async (owner, repo, issueNumber) => {
+      const { data: issue } = await octokitRest.rest.issues.get({
+        owner,
+        repo,
+        issue_number: issueNumber,
+      });
+      return issue.body ?? '';
+    },
     dispatchDeveloperAgent: async (owner, repo, workflowFile, ref, inputs) => {
       await octokitRest.rest.actions.createWorkflowDispatch({
         owner,

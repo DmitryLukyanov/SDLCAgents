@@ -175,7 +175,7 @@ function stepLabel(step: SpeckitStep): string {
  */
 function extractPipelineConfig(issueBody: string): PipelineConfig {
   const match = issueBody.match(/<!--sdlc-pipeline-config\s*([\s\S]*?)\s*\/sdlc-pipeline-config-->/);
-  if (!match) throw new Error('Could not find <!--sdlc-pipeline-config ... /sdlc-pipeline-config--> block in issue body');
+  if (!match) throw new Error('Could not find `<!--sdlc-pipeline-config ... /sdlc-pipeline-config-->` block in issue body');
   return JSON.parse(match[1]) as PipelineConfig;
 }
 
