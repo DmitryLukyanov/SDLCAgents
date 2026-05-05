@@ -117,11 +117,18 @@ async function main(): Promise<void> {
   const raw = readFileSync(abs, 'utf8');
   const steps = parseAgentPipelineSteps(raw, configFile);
 
-  // Find the step that matches the workflowFile from handoff
-  const step = steps.find(s => s.async_call?.workflowFile?.trim() === workflowFile);
+  // Find the step by triggerStep id first (stable, avoids ambiguity when multiple steps share the
+  // same workflowFile), then fall back to matching by workflowFile for older pipeline outputs.
+  const triggerStep = handoff.triggerStep?.trim();
+  const step = triggerStep
+    ? steps.find(s => s.id === triggerStep)
+    : steps.find(s => s.async_call?.workflowFile?.trim() === workflowFile);
   if (!step || !step.async_call) {
+    const reason = triggerStep
+      ? `No step with id="${triggerStep}" found in config.`
+      : `No step with async_call.workflowFile="${workflowFile}" found in config.`;
     setOutput('dispatched', 'false');
-    console.log(`[dispatch-pipeline-async-child] No step with async_call.workflowFile="${workflowFile}" found in config — not dispatching.`);
+    console.log(`[dispatch-pipeline-async-child] ${reason} — not dispatching.`);
     appendJobSummary(
       [
         '### AI Teammate — async handoff',
@@ -129,7 +136,7 @@ async function main(): Promise<void> {
         'The pipeline set **async handoff**, but the child workflow was **not** dispatched.',
         '',
         `- **Concurrency key:** \`${concurrencyKey}\``,
-        `- **Reason:** No step with async_call.workflowFile="${workflowFile}" found in config.`,
+        `- **Reason:** ${reason}`,
         '',
         `_Config file:_ \`${configFile}\``,
       ].join('\n'),
