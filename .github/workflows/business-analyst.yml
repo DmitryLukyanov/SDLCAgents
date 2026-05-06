@@ -24,7 +24,12 @@ on:
         required: true
         type: string
       config_file:
-        description: "Same path as AI Teammate (agent JSON in consumer repo)"
+        description: "AI Teammate config path (for backward compatibility, not used by BA)"
+        required: false
+        type: string
+        default: ''
+      ba_config_file:
+        description: "Path to business-analyst.config in consumer repo (e.g. config/workflows/business-analyst/business-analyst.config)"
         required: true
         type: string
       caller_config:
@@ -72,7 +77,7 @@ jobs:
           echo "ba_model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "Resolved BA model: $MODEL"
         env:
-          CONFIG_FILE: ${{ inputs.config_file }}
+          BA_CONFIG_FILE: ${{ inputs.ba_config_file }}
           BA_CODEX_MODEL: ${{ vars.BA_CODEX_MODEL }}
 
       - uses: DmitryLukyanov/SDLCAgents/.github/actions/upload-workflow-dispatch-inputs-artifact@master

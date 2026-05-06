@@ -27,11 +27,12 @@ The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON fi
 ## Consumer setup
 
 1. Copy **`ai-teammate.config`** (and this README if you want) into the same path in your repo, e.g. `config/workflows/ai-teammate/`.
-2. Point **Scrum Master** rules at that path (`configFile` in `scrum-master.config`).
-3. Configure the **`params.baModel`** field in your `ai-teammate.config` (e.g. `"baModel": "o4-mini"`). Fallback: set `BA_CODEX_MODEL` repository variable (for backward compatibility).
-4. Ensure secrets **`COPILOT_PAT`**, **`OPENAI_API_KEY`**, and Jira secrets match what `_reusable-ai-teammate.yml` expects.
-5. Install the consumer workflow from **`.github/consumer-templates/ai-teammate.yml`** (or equivalent) calling the reusable workflow with `secrets: inherit`.
-6. If you use async Codex, keep **`.github/consumer-templates/business-analyst.yml`** in sync with SDLCAgents: Codex paths come only from **`invocation-handoff-manifest.json`** in the prepare artifact (parent dispatch does not send per-file path inputs).
+2. Copy **`config/workflows/business-analyst/business-analyst.config`** to the same path in your repo for BA-specific configuration.
+3. Point **Scrum Master** rules at the AI Teammate config path (`configFile` in `scrum-master.config`).
+4. Configure the **`params.model`** field in your `business-analyst.config` (e.g. `"model": "o4-mini"`). Fallback: set `BA_CODEX_MODEL` repository variable (for backward compatibility).
+5. Ensure secrets **`COPILOT_PAT`**, **`OPENAI_API_KEY`**, and Jira secrets match what `_reusable-ai-teammate.yml` expects.
+6. Install the consumer workflow from **`.github/consumer-templates/ai-teammate.yml`** (or equivalent) calling the reusable workflow with `secrets: inherit`.
+7. If you use async Codex, keep **`.github/consumer-templates/business-analyst.yml`** in sync with SDLCAgents: Codex paths come only from **`invocation-handoff-manifest.json`** in the prepare artifact (parent dispatch does not send per-file path inputs).
 
 ## Async invocation `contract` (artifact-only, agent-agnostic)
 

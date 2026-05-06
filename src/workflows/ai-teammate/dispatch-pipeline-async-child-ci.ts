@@ -274,6 +274,28 @@ async function main(): Promise<void> {
         callerConfigEncoded: mergedCaller,
       }),
     };
+
+    // For business-analyst.yml, add ba_config_file input
+    if (workflowFile === 'business-analyst.yml') {
+      // Derive BA config file path from AI Teammate config path
+      // e.g., config/workflows/ai-teammate/ai-teammate.config -> config/workflows/business-analyst/business-analyst.config
+      const baConfigFile = configFile.replace(
+        /\/ai-teammate\/[^/]+\.config$/,
+        '/business-analyst/business-analyst.config'
+      );
+      if (baConfigFile === configFile) {
+        console.warn(
+          `[dispatch-pipeline-async-child] WARNING: Could not derive business-analyst config path from ` +
+          `AI Teammate config "${configFile}". Expected pattern "/<repo>/ai-teammate/<name>.config" was not matched. ` +
+          `Using "config/workflows/business-analyst/business-analyst.config" as fallback.`
+        );
+        inputs.ba_config_file = 'config/workflows/business-analyst/business-analyst.config';
+      } else {
+        inputs.ba_config_file = baConfigFile;
+      }
+      console.log(`[dispatch-pipeline-async-child]   - ba_config_file: "${inputs.ba_config_file}" (derived from AI Teammate config)`);
+    }
+
     console.log(`[dispatch-pipeline-async-child] AI Teammate inputs built with ${Object.keys(inputs).length} keys: ${Object.keys(inputs).join(', ')}`);
   }
 
