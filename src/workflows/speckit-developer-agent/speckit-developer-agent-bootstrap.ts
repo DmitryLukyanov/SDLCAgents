@@ -1,9 +1,9 @@
 /**
- * Developer Agent — Bootstrap (runs before developer-agent for specify).
+ * SpecKit Developer Agent — Bootstrap (runs before speckit-developer-agent for specify).
  *
  * Ensures a remote feature branch, draft PR linked to the GitHub issue, and an
  * initial `speckit-state.json` under `.specify/features/{ISSUE_KEY}/` exist and
- * are pushed. The developer-agent workflow then only consumes BRANCH_NAME,
+ * are pushed. The speckit-developer-agent workflow then only consumes BRANCH_NAME,
  * PR_NUMBER, and ISSUE_* (no branch/PR/state creation in setup for that path).
  *
  * Environment:
