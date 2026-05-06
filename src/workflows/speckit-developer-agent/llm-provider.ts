@@ -5,7 +5,7 @@
  * fix script path that invokes `codex exec` directly.
  *
  * Environment variables:
- *   DEVELOPER_AGENT_MODEL  — model override (default: o4-mini)
+ *   DEVELOPER_AGENT_MODEL  — required model name (must be provided via config or env var)
  *   OPENAI_API_KEY         — required for Codex CLI
  */
 
@@ -38,7 +38,6 @@ export function parseFileBlocks(response: string): Map<string, string> {
 /*  Codex CLI provider                                                 */
 /* ------------------------------------------------------------------ */
 
-const CODEX_DEFAULT_MODEL = 'o4-mini';
 const CODEX_TIMEOUT_MS = 600_000;
 
 class CodexCliProvider implements LlmProvider {
@@ -90,10 +89,16 @@ class CodexCliProvider implements LlmProvider {
 
 /**
  * Returns the LLM provider for spec-kit steps in the fix workflow.
- * Reads `DEVELOPER_AGENT_MODEL` (default `o4-mini`).
+ * Requires `DEVELOPER_AGENT_MODEL` to be set (via config or env var).
  */
 export function createSpecProvider(): LlmProvider {
-  const model = process.env['DEVELOPER_AGENT_MODEL']?.trim() || CODEX_DEFAULT_MODEL;
+  const model = process.env['DEVELOPER_AGENT_MODEL']?.trim();
+  if (!model) {
+    throw new Error(
+      'DEVELOPER_AGENT_MODEL environment variable must be set. ' +
+      'Configure it in your agent config file (params.model) or set the environment variable explicitly.'
+    );
+  }
   const legacy = process.env['DEVELOPER_AGENT_PROVIDER']?.trim();
   if (legacy && legacy !== 'codex-cli') {
     throw new Error(

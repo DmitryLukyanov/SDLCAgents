@@ -68,7 +68,7 @@ After each speckit step, the **Spec Gate** workflow (`spec-gate.yml`) reviews th
 
 | Repo variable | Default | Description |
 |---------------|---------|-------------|
-| `GATE_CODEX_MODEL` | _(workflow default `o4-mini`)_ | Codex model for spec gate analysis |
+| `GATE_CODEX_MODEL` | _(required - no default)_ | Codex model for spec gate analysis |
 
 ### Responding to HIL
 

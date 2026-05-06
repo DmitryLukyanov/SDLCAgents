@@ -90,7 +90,8 @@ export function loadSpeckitDeveloperAgentConfig(configFilePath: string): Speckit
 }
 
 /**
- * Get the effective model to use, with precedence: env var > config.params > config root > default.
+ * Get the effective model to use, with precedence: env var > config.params > config root.
+ * Throws an error if no model is configured.
  * @param config - Agent configuration
  * @returns Model name to use
  */
@@ -105,8 +106,10 @@ export function getEffectiveModel(config?: SpeckitDeveloperAgentConfig): string 
   // Config root value (legacy)
   if (config?.model) return config.model;
 
-  // Default fallback
-  return 'o4-mini';
+  // No default - require explicit configuration
+  throw new Error(
+    'AI model must be configured. Set params.model in your config file or provide DEVELOPER_AGENT_MODEL environment variable.'
+  );
 }
 
 /**

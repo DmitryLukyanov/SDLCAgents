@@ -9,7 +9,7 @@
 # NOTE: After "implement", the pipeline runs "code_review" automatically when the gate passes.
 #       The "code_review" gate expects human merge / review of review artifacts.
 #
-# Requires secret OPENAI_API_KEY (Codex). Optional repo variable GATE_CODEX_MODEL (default o4-mini).
+# Requires secret OPENAI_API_KEY (Codex). Required repo variable GATE_CODEX_MODEL (no default).
 # Caller job needs contents: write so openai/codex-action can pass its preflight when org caps the token.
 name: Spec Gate
 
