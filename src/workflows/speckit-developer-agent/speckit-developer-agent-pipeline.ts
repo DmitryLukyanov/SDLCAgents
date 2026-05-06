@@ -63,10 +63,14 @@ export async function runPipelineStep(
       return runSpecKitStep(ctx, step, deps);
     }
 
+    case 'validate_spec_kit_output': {
+      return runValidateSpecKitOutput(ctx, step);
+    }
+
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: validate_spec_kit_prerequisites, spec_kit_step.`,
+          `Supported: validate_spec_kit_prerequisites, spec_kit_step, validate_spec_kit_output.`,
       );
   }
 }
@@ -129,6 +133,85 @@ async function runSpecKitStep(
     // Pipeline will pause here for async_call dispatch
   }
 
+  return { status: 'continue' };
+}
+
+/** Validate spec-kit step output artifacts */
+async function runValidateSpecKitOutput(ctx: RunnerContext, step: PipelineStep): Promise<StepOutcome> {
+  const stepName = step.stepName as string;
+  if (!stepName) {
+    throw new Error('validate_spec_kit_output requires stepName parameter');
+  }
+
+  console.log(`[validate_spec_kit_output] Validating ${stepName} outputs...`);
+
+  const featureDir = ctx.featureDir;
+  if (!featureDir) {
+    const reason = `Feature directory not set in context`;
+    console.error(`[validate_spec_kit_output] ❌ ${reason}`);
+    return { status: 'stop', reason };
+  }
+
+  // Get expected artifacts from step config
+  const expectedArtifacts = (step.expectedArtifacts as string[]) ?? [];
+  const minFileSize = (step.minFileSize as number) ?? 0;
+  const validateCodeChanges = (step.validateCodeChanges as boolean) ?? false;
+
+  // Check each expected artifact
+  const missing: string[] = [];
+  const tooSmall: string[] = [];
+
+  for (const artifact of expectedArtifacts) {
+    const artifactPath = join(featureDir, artifact);
+
+    if (!existsSync(artifactPath)) {
+      missing.push(artifact);
+      continue;
+    }
+
+    // Check file size
+    const stats = require('fs').statSync(artifactPath);
+    if (stats.size < minFileSize) {
+      tooSmall.push(`${artifact} (${stats.size} bytes < ${minFileSize} bytes)`);
+    }
+  }
+
+  // For implement step, validate that code changes were made
+  if (validateCodeChanges) {
+    console.log(`[validate_spec_kit_output] Checking for code changes...`);
+    // Check git status to see if there are changes
+    try {
+      const { execSync } = await import('node:child_process');
+      const gitDiff = execSync('git diff --name-only HEAD', { encoding: 'utf8' }).trim();
+      const gitStatus = execSync('git status --short', { encoding: 'utf8' }).trim();
+
+      if (!gitDiff && !gitStatus) {
+        const reason = `No code changes detected after implement step`;
+        console.error(`[validate_spec_kit_output] ❌ ${reason}`);
+        return { status: 'stop', reason };
+      }
+
+      console.log(`[validate_spec_kit_output] ✓ Code changes detected`);
+    } catch (err) {
+      console.warn(`[validate_spec_kit_output] Could not check git status: ${err}`);
+      // Don't fail validation on git errors
+    }
+  }
+
+  // Report validation results
+  if (missing.length > 0) {
+    const reason = `Missing expected artifacts for ${stepName}: ${missing.join(', ')}`;
+    console.error(`[validate_spec_kit_output] ❌ ${reason}`);
+    return { status: 'stop', reason };
+  }
+
+  if (tooSmall.length > 0) {
+    const reason = `Artifacts below minimum size for ${stepName}: ${tooSmall.join(', ')}`;
+    console.error(`[validate_spec_kit_output] ❌ ${reason}`);
+    return { status: 'stop', reason };
+  }
+
+  console.log(`[validate_spec_kit_output] ✅ All validations passed for ${stepName}`);
   return { status: 'continue' };
 }
 
