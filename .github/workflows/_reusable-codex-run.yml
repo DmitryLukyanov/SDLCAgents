@@ -65,8 +65,8 @@ on:
         required: false
         type: string
         default: ignore
-      codex_model:
-        description: "OpenAI model id (validated at runtime - must be non-empty)"
+      model:
+        description: "OpenAI model id (empty defaults to o4-mini in the pick step)"
         required: false
         type: string
         default: ''
@@ -129,12 +129,9 @@ jobs:
       - name: Pick Codex model
         id: pick_model
         run: |
-          M="${{ inputs.codex_model }}"
-          if [ -z "$M" ]; then
-            echo "::error::codex_model input is required. Configure it in your workflow or agent config."
-            exit 1
-          fi
-          echo "codex_model=$M" >> "$GITHUB_OUTPUT"
+          M="${{ inputs.model }}"
+          if [ -z "$M" ]; then M="o4-mini"; fi
+          echo "model=$M" >> "$GITHUB_OUTPUT"
 
       - name: Log model to GitHub Summary
         run: |
@@ -143,7 +140,7 @@ jobs:
             echo ""
             echo "| Parameter | Value |"
             echo "|-----------|-------|"
-            echo "| **Model** | \`${{ steps.pick_model.outputs.codex_model }}\` |"
+            echo "| **Model** | \`${{ steps.pick_model.outputs.model }}\` |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -225,7 +222,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ steps.resolve_prompt.outputs.prompt_path }}
           sandbox: workspace-write
-          model: ${{ steps.pick_model.outputs.codex_model }}
+          model: ${{ steps.pick_model.outputs.model }}
           output-file: ${{ inputs.output_file }}
           allow-bots: true
 

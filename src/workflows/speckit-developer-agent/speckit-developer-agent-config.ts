@@ -90,26 +90,24 @@ export function loadSpeckitDeveloperAgentConfig(configFilePath: string): Speckit
 }
 
 /**
- * Get the effective model to use, with precedence: env var > config.params > config root.
- * Throws an error if no model is configured.
- * @param config - Agent configuration
- * @returns Model name to use
+ * Codex model for the developer agent.
+ * Precedence: `params.model` / root `model` from config, then `DEVELOPER_MODEL`,
+ * legacy `DEVELOPER_AGENT_MODEL`, then `o4-mini`.
  */
 export function getEffectiveModel(config?: SpeckitDeveloperAgentConfig): string {
-  // Environment variable takes precedence (backward compatibility)
-  const envModel = process.env['DEVELOPER_AGENT_MODEL']?.trim();
-  if (envModel) return envModel;
+  const fromParams = config?.params?.model != null ? String(config.params.model).trim() : '';
+  if (fromParams) return fromParams;
 
-  // Config params value (new structure)
-  if (config?.params?.model) return config.params.model;
+  const fromRoot = config?.model != null ? String(config.model).trim() : '';
+  if (fromRoot) return fromRoot;
 
-  // Config root value (legacy)
-  if (config?.model) return config.model;
+  const fromPrimary = process.env['DEVELOPER_MODEL']?.trim();
+  if (fromPrimary) return fromPrimary;
 
-  // No default - require explicit configuration
-  throw new Error(
-    'AI model must be configured. Set params.model in your config file or provide DEVELOPER_AGENT_MODEL environment variable.'
-  );
+  const fromLegacy = process.env['DEVELOPER_AGENT_MODEL']?.trim();
+  if (fromLegacy) return fromLegacy;
+
+  return 'o4-mini';
 }
 
 /**

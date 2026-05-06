@@ -37,6 +37,9 @@ Then customize:
 | File | What to change |
 |------|---------------|
 | `config/workflows/scrum-master/scrum-master.config` | Set your Jira JQL query (replace `{jiraProject}` with your project key, or hardcode it) |
+| `config/workflows/business-analyst/business-analyst.config` | Set `model` for async Business Analyst Codex (optional repo variable `BA_MODEL` or legacy `BA_CODEX_MODEL`; default `o4-mini`) |
+| `config/workflows/spec-gate/spec-gate.config` | Set `model` for Spec Gate Codex (optional `GATE_MODEL` or legacy `GATE_CODEX_MODEL`) |
+| `config/workflows/speckit-developer-agent/speckit-developer-agent.config` | Uses `params.model` for the SpecKit developer agent (optional `DEVELOPER_MODEL` or legacy `DEVELOPER_AGENT_MODEL`; default `o4-mini`) |
 | `config/spec-kit/defaults.json` | Adjust `globalDirective`, `specify`, `plan`, `tasks` prompts for your project |
 | `config/spec-kit/constitution.md` | Replace with your project's coding standards and conventions |
 | `config/workflows/ai-teammate/ai-teammate.config` | No changes needed for standard use |

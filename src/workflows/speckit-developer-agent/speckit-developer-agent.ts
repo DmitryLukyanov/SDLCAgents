@@ -29,7 +29,7 @@
  *   ISSUE_NUMBER                     — GitHub issue number (string)
  *   ISSUE_KEY                        — Jira issue key (e.g. "PROJ-1")
  *   STEP                             — spec-kit step to run
- *   DEVELOPER_AGENT_MODEL            — Codex model for all spec-kit steps (required - must be set via config or env)
+ *   CONFIG_FILE / params.model / DEVELOPER_MODEL / DEVELOPER_AGENT_MODEL — Codex model (see getEffectiveModel)
  */
 
 import { execSync, spawnSync } from 'node:child_process';
@@ -38,6 +38,7 @@ import { dirname, join } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
+import { getEffectiveModel, tryLoadConfig } from './speckit-developer-agent-config.js';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -317,13 +318,7 @@ async function main(): Promise<void> {
   let artifactCommitSha = '';
   const promptSource = `native Codex skill (\`${skillFilePath}\`)`;
 
-  const codexModel = process.env['DEVELOPER_AGENT_MODEL']?.trim();
-  if (!codexModel) {
-    throw new Error(
-      'DEVELOPER_AGENT_MODEL environment variable must be set. ' +
-      'Configure it in your agent config file (params.model) or set the environment variable explicitly.'
-    );
-  }
+  const codexModel = getEffectiveModel(tryLoadConfig());
 
   // `codex exec` is the non-interactive subcommand designed for CI (no TTY needed).
   // `--dangerously-bypass-approvals-and-sandbox` lets Codex write to the workspace

@@ -37,9 +37,37 @@ jobs:
       feature_dir: ${{ steps.paths.outputs.feature_dir }}
       gate_step: ${{ steps.step.outputs.step }}
       run_gate: ${{ steps.step.outputs.run_gate }}
+      model: ${{ steps.gate_codex_model.outputs.model }}
     steps:
       - name: Checkout consumer repo
         uses: actions/checkout@v4
+
+      - name: Resolve spec gate Codex model
+        id: gate_codex_model
+        env:
+          REPO_MODEL: ${{ vars.GATE_MODEL }}
+          REPO_LEGACY: ${{ vars.GATE_CODEX_MODEL }}
+        run: |
+          set -euo pipefail
+          CONFIG="config/workflows/spec-gate/spec-gate.config"
+          M=""
+          if [ -f "$CONFIG" ]; then
+            M=$(jq -r '(.model // .codexModel // .codex_model) // empty' "$CONFIG" 2>/dev/null || true)
+          fi
+          M="${M//$'\r'/}"
+          if [ -z "$M" ]; then
+            M="${REPO_MODEL:-}"
+            M="${M//$'\r'/}"
+          fi
+          if [ -z "$M" ]; then
+            M="${REPO_LEGACY:-}"
+            M="${M//$'\r'/}"
+          fi
+          if [ -z "$M" ]; then
+            M="o4-mini"
+          fi
+          echo "model=$M" >> "$GITHUB_OUTPUT"
+          echo "Resolved spec gate Codex model: $M"
 
       - name: Find PR number
         id: pr
@@ -168,7 +196,7 @@ jobs:
       upload_artifact_name: spec-gate-codex-output-${{ github.run_id }}
       upload_path: spec-gate-codex-artifacts/
       upload_if_no_files_found: ignore
-      codex_model: ${{ vars.GATE_CODEX_MODEL }}
+      model: ${{ needs.prepare.outputs.model }}
       codex_step_name: Spec gate - Codex analysis
       timeout_minutes: 20
 

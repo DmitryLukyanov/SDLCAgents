@@ -4,12 +4,15 @@
  * `openai/codex-action@v1` is used in GitHub Actions; this module supports the
  * fix script path that invokes `codex exec` directly.
  *
+ * Model: `getEffectiveModel(tryLoadConfig())` (config `params.model`, then env — see speckit-developer-agent-config).
+ *
  * Environment variables:
- *   DEVELOPER_AGENT_MODEL  — required model name (must be provided via config or env var)
  *   OPENAI_API_KEY         — required for Codex CLI
  */
 
 import { spawnSync } from 'node:child_process';
+
+import { getEffectiveModel, tryLoadConfig } from './speckit-developer-agent-config.js';
 
 /* ------------------------------------------------------------------ */
 /*  Interface                                                          */
@@ -89,16 +92,9 @@ class CodexCliProvider implements LlmProvider {
 
 /**
  * Returns the LLM provider for spec-kit steps in the fix workflow.
- * Requires `DEVELOPER_AGENT_MODEL` to be set (via config or env var).
  */
 export function createSpecProvider(): LlmProvider {
-  const model = process.env['DEVELOPER_AGENT_MODEL']?.trim();
-  if (!model) {
-    throw new Error(
-      'DEVELOPER_AGENT_MODEL environment variable must be set. ' +
-      'Configure it in your agent config file (params.model) or set the environment variable explicitly.'
-    );
-  }
+  const model = getEffectiveModel(tryLoadConfig());
   const legacy = process.env['DEVELOPER_AGENT_PROVIDER']?.trim();
   if (legacy && legacy !== 'codex-cli') {
     throw new Error(

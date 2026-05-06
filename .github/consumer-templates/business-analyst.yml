@@ -2,6 +2,9 @@
 # Copy to `.github/workflows/business-analyst.yml` in the consumer repo. Set `workflowRef` in agent config
 # to your default branch if it is not `main`.
 #
+# Codex model: `config/workflows/business-analyst/business-analyst.config` (`model`), then optional
+# repo variables `BA_MODEL` (or legacy `BA_CODEX_MODEL`), then default `o4-mini`.
+#
 # **Artifact-only invocation:** paths for Codex come only from `invocation-handoff-manifest.json` inside the
 # prepare-bundle artifact (`async-invocation-handoff/<concurrency_key>/`). Parent dispatch does not pass
 # per-file path inputs — only `concurrency_key`, `config_file`, and `caller_config` (run correlation + Jira JQL).
@@ -40,8 +43,36 @@ jobs:
     outputs:
       prompt_rel: ${{ steps.manifest.outputs.prompt_rel }}
       output_rel: ${{ steps.manifest.outputs.output_rel }}
+      model: ${{ steps.ba_codex_model.outputs.model }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve BA Codex model
+        id: ba_codex_model
+        env:
+          REPO_MODEL: ${{ vars.BA_MODEL }}
+          REPO_LEGACY: ${{ vars.BA_CODEX_MODEL }}
+        run: |
+          set -euo pipefail
+          CONFIG="config/workflows/business-analyst/business-analyst.config"
+          M=""
+          if [ -f "$CONFIG" ]; then
+            M=$(jq -r '(.model // .codexModel // .codex_model) // empty' "$CONFIG" 2>/dev/null || true)
+          fi
+          M="${M//$'\r'/}"
+          if [ -z "$M" ]; then
+            M="${REPO_MODEL:-}"
+            M="${M//$'\r'/}"
+          fi
+          if [ -z "$M" ]; then
+            M="${REPO_LEGACY:-}"
+            M="${M//$'\r'/}"
+          fi
+          if [ -z "$M" ]; then
+            M="o4-mini"
+          fi
+          echo "model=$M" >> "$GITHUB_OUTPUT"
+          echo "Resolved BA Codex model: $M"
 
       - uses: DmitryLukyanov/SDLCAgents/.github/actions/upload-workflow-dispatch-inputs-artifact@master
         with:
@@ -109,7 +140,7 @@ jobs:
       upload_artifact_name: caller-handoff_codex_output
       upload_path: async-invocation-handoff/${{ inputs.concurrency_key }}/
       upload_if_no_files_found: error
-      codex_model: ${{ vars.BA_CODEX_MODEL }}
+      model: ${{ needs.rehydrate_ba_workspace.outputs.model }}
       codex_step_name: Run Codex - Business Analyst
       timeout_minutes: 30
 

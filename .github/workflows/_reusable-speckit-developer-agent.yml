@@ -93,7 +93,7 @@ jobs:
       branch_name: ${{ steps.agent_setup.outputs.branch_name }}
       pr_number: ${{ steps.agent_setup.outputs.pr_number }}
       feature_dir: ${{ steps.agent_setup.outputs.feature_dir }}
-      codex_model: ${{ steps.agent_setup.outputs.codex_model }}
+      model: ${{ steps.agent_setup.outputs.model }}
       issue_key: ${{ inputs.issue_key }}
       codex_step_slug: ${{ inputs.mode == 'fix' && 'fix' || inputs.step }}
       input_prompt: ${{ inputs.prompt }}
@@ -165,6 +165,7 @@ jobs:
           BRANCH_NAME: ${{ inputs.branch_name }}
           PR_NUMBER: ${{ inputs.speckit_pr_number }}
           INPUT_PROMPT: ${{ inputs.prompt }}
+          DEVELOPER_MODEL: ${{ vars.DEVELOPER_MODEL }}
           DEVELOPER_AGENT_MODEL: ${{ vars.DEVELOPER_AGENT_MODEL }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -226,7 +227,7 @@ jobs:
         .sdlc-agents/codex-output.txt
         .sdlc-agents/input_prompt.md
       upload_if_no_files_found: ignore
-      codex_model: ${{ needs.prepare.outputs.codex_model }}
+      model: ${{ needs.prepare.outputs.model }}
       codex_step_name: ${{ needs.prepare.outputs.mode == 'fix' && 'Apply fix via Codex' || format('Run Codex skill — {0}', inputs.step) }}
       timeout_minutes: ${{ needs.prepare.outputs.mode == 'fix' && 15 || 30 }}
       commit_workspace_after_codex: true

@@ -1,13 +1,13 @@
 /**
  * SpecKit Developer Agent — Setup phase (speckit + fix).
  *
- * Branch on `AGENT_MODE` / `DEVELOPER_AGENT_MODEL`:
+ * Branch on `AGENT_MODE` / Codex model (`getEffectiveModel` in speckit-developer-agent-config):
  *   speckit (default) — pipeline config + `$speckit-{step}` → input_prompt.md. Branch/PR/bootstrap state normally come from
  *     `speckit-developer-agent-bootstrap.ts` + checkout; specify reads `speckit-state.json` when present (else legacy branch/PR create).
  *   fix — targeted fix prompt from speckit-state + INPUT_PROMPT → input_prompt.md
  *
  * Environment — common:
- *   GITHUB_TOKEN or COPILOT_PAT, GITHUB_REPOSITORY, DEVELOPER_AGENT_MODEL
+ *   GITHUB_TOKEN or COPILOT_PAT, GITHUB_REPOSITORY, CONFIG_FILE, DEVELOPER_MODEL (legacy: DEVELOPER_AGENT_MODEL)
  *
  * Environment — speckit:
  *   ISSUE_NUMBER, ISSUE_KEY, STEP, BRANCH_NAME — same ref the workflow checked out; optional PR_NUMBER must match state when set
@@ -302,7 +302,7 @@ async function runSpeckitSetup(): Promise<void> {
   setOutput('branch_name', branchName);
   setOutput('pr_number', String(prNumber));
   setOutput('feature_dir', featureDir);
-  setOutput('codex_model', codexModel);
+  setOutput('model', codexModel);
 
   console.log(`[dev-agent-setup] Setup complete — step=${step} branch=${branchName} pr=#${prNumber}`);
 }
@@ -341,7 +341,7 @@ async function runFixSetup(): Promise<void> {
     writeFileSync('.sdlc-agents/input_prompt.md', body.endsWith('\n') ? body : `${body}\n`);
     console.log(`[dev-agent-setup] fix: copied prompt from file ${pathCandidate}`);
     setOutput('feature_dir', featureDir);
-    setOutput('codex_model', codexModel);
+    setOutput('model', codexModel);
     console.log('[dev-agent-setup] fix: setup complete (raw prompt file)');
     return;
   }
@@ -397,7 +397,7 @@ async function runFixSetup(): Promise<void> {
   );
 
   setOutput('feature_dir', featureDir);
-  setOutput('codex_model', codexModel);
+  setOutput('model', codexModel);
 
   console.log('[dev-agent-setup] fix: setup complete');
 }

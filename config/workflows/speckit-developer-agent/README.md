@@ -12,7 +12,7 @@ The `speckit-developer-agent.config` file uses the following top-level structure
   "description": "<required> short description",
   "params": {
     "runner": "pipeline",
-    "model": "<required> AI model name (e.g., o4-mini, claude-sonnet-4-5)",
+    "model": "o4-mini",
     "ticketContextDepth": 1,
     "branchNamePattern": "feature/{issueKey}-{timestamp}",
     "featureDirPattern": ".specify/features/{issueKey}",
@@ -33,7 +33,7 @@ The `speckit-developer-agent.config` file uses the following top-level structure
 All agent behaviour is configured inside `params`:
 
 - **`runner`** — Must be `"pipeline"` to use the step-based runner
-- **`model`** — **(Required)** AI model for all spec-kit steps (e.g., `"o4-mini"`, `"claude-sonnet-4-5"`, `"gpt-4o"`)
+- **`model`** — AI model for all spec-kit steps (e.g., `"o4-mini"`); defaults to `o4-mini` when omitted everywhere
 - **`ticketContextDepth`** — Depth of related Jira tickets to include in context (default: `1`, must be a non-negative integer)
 - **`branchNamePattern`** — Template for feature branch names. Supports placeholders:
   - `{issueKey}` — Jira issue key (e.g., `PROJ-123`)
@@ -61,9 +61,8 @@ All agent behaviour is configured inside `params`:
 When the SpecKit Developer Agent runs:
 
 1. **Setup phase** (`speckit-developer-agent-setup.ts`):
-   - Reads the config file from `CONFIG_FILE` environment variable
-   - Merges config values with environment variables (env vars take precedence for backward compatibility)
-   - Uses `params.model` / `DEVELOPER_AGENT_MODEL` env var to select the Codex model
+   - Reads the config file from `CONFIG_FILE` environment variable when set
+   - Resolves Codex model via `getEffectiveModel`: `params.model` (or root `model`), then `DEVELOPER_MODEL`, legacy `DEVELOPER_AGENT_MODEL`, then `o4-mini`
    - Uses `params.ticketContextDepth` / `TICKET_CONTEXT_DEPTH` env var for Jira context depth
    - Branch name, PR, and feature directory are derived from existing state/bootstrap logic and the `BRANCH_NAME` env var; they are **not** read from `branchNamePattern`/`featureDirPattern` in the config at runtime
    - Step prompts are driven by the `<!--sdlc-pipeline-config ...-->` block in the GitHub issue body; `params.defaultStepInputs` is informational and does **not** currently override them
@@ -80,13 +79,12 @@ When the SpecKit Developer Agent runs:
 
 The config file supports the following environment variable overrides:
 
-- **`DEVELOPER_AGENT_MODEL`** — Overrides `model` from config (required if not in config)
+- **`DEVELOPER_MODEL`** — Used when `params.model` / root `model` are unset in config
+- **`DEVELOPER_AGENT_MODEL`** — Legacy alias for `DEVELOPER_MODEL`
 - **`TICKET_CONTEXT_DEPTH`** — Overrides `ticketContextDepth` from config
 - **`BRANCH_NAME`** — Overrides dynamic branch name generation (for reuse scenarios)
 
-When both config and env var are present, **env var takes precedence** to support existing workflows.
-
-**Note:** The `model` field is now required and must be set either in the config file or via the `DEVELOPER_AGENT_MODEL` environment variable. There is no default fallback.
+When `params.model` (or root `model`) is set in the config file, that value is used before repository variables `DEVELOPER_MODEL` / `DEVELOPER_AGENT_MODEL`. If none are set, the default is **`o4-mini`**.
 
 ## Consumer Setup
 

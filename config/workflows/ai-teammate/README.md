@@ -30,7 +30,7 @@ The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON fi
 2. Point **Scrum Master** rules at that path (`configFile` in `scrum-master.config`).
 3. Ensure secrets **`COPILOT_PAT`**, **`OPENAI_API_KEY`**, and Jira secrets match what `_reusable-ai-teammate.yml` expects.
 4. Install the consumer workflow from **`.github/consumer-templates/ai-teammate.yml`** (or equivalent) calling the reusable workflow with `secrets: inherit`.
-5. If you use async Codex, keep **`.github/consumer-templates/business-analyst.yml`** in sync with SDLCAgents: Codex paths come only from **`invocation-handoff-manifest.json`** in the prepare artifact (parent dispatch does not send per-file path inputs).
+5. If you use async Codex, keep **`.github/consumer-templates/business-analyst.yml`** in sync with SDLCAgents: Codex paths come only from **`invocation-handoff-manifest.json`** in the prepare artifact (parent dispatch does not send per-file path inputs). The Codex model is read from **`config/workflows/business-analyst/business-analyst.config`** (`model`), then optional **`BA_MODEL`** (legacy **`BA_CODEX_MODEL`**), then **`o4-mini`**.
 
 ## Async invocation `contract` (artifact-only, agent-agnostic)
 
