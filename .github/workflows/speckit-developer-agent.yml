@@ -51,6 +51,11 @@ on:
         required: false
         type: string
         default: ''
+      config_file:
+        description: "Path to agent config JSON in consumer repo (e.g. config/workflows/speckit-developer-agent/speckit-developer-agent.config). Optional; when omitted, uses env vars only."
+        required: false
+        type: string
+        default: ''
 
 jobs:
   bootstrap:
@@ -85,4 +90,5 @@ jobs:
       fix_pr_number: ${{ inputs.pr_number }}
       prompt: ${{ inputs.prompt }}
       speckit_pr_number: ${{ needs.bootstrap.outputs.pr_number || inputs.pr_number }}
+      config_file: ${{ inputs.config_file }}
     secrets: inherit
