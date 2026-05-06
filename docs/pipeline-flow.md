@@ -212,7 +212,7 @@
 │  - Fetched Jira ticket; verified description is non-empty                             │
 │  - (No description → transition to "In Review" + comment → stop)                     │
 │                                                                                       │
-│  Optional: developer-agent setup may write spec-output/{KEY}/issueContext.md          │
+│  Optional: speckit-developer-agent setup may write spec-output/{KEY}/issueContext.md  │
 │  when Jira secrets are configured (spec-kit-context/issue-context.ts).               │
 │                                                                                       │
 │  Step: create_github_issue                                                            │

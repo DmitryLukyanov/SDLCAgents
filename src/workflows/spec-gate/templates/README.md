@@ -135,7 +135,7 @@ what to do next.
 ### `pr-comment-proceed.md`
 
 **Purpose:** Posted to the PR when the gate passes (after a successful
-`workflow_dispatch` of `developer-agent-proceed.yml`). The hidden HTML comment
+`workflow_dispatch` of `speckit-developer-agent-proceed.yml`). The hidden HTML comment
 (`<!-- speckit-gate: proceed -->`) is for downstream tooling that scans PR bodies.
 
 **Placeholders:** `{{STEP_LABEL}}`, `{{SUMMARY_BLOCK}}`

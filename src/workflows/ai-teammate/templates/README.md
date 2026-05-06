@@ -26,7 +26,7 @@ The Jira issue key that triggered the workflow.
 
 Reserved for prepending text to every pipeline step input in the GitHub issue
 JSON block. AI Teammate always fills this with an **empty string**; use
-`config/spec-kit/defaults.json` and developer-agent setup if you need a
+`config/spec-kit/defaults.json` and speckit-developer-agent setup if you need a
 merged `issueContext.md` on the branch.
 
 - **Used in:** `github-issue-with-copilot.md`, `github-issue.md`
