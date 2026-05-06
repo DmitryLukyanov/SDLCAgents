@@ -28,8 +28,8 @@ The reusable workflow sets `AI_TEAMMATE_MODE`; you do not set it in this JSON fi
 
 1. Copy **`ai-teammate.config`** (and this README if you want) into the same path in your repo, e.g. `config/workflows/ai-teammate/`.
 2. Point **Scrum Master** rules at that path (`configFile` in `scrum-master.config`).
-3. Ensure secrets **`COPILOT_PAT`**, **`OPENAI_API_KEY`**, and Jira secrets match what `_reusable-ai-teammate.yml` expects.
-4. Configure the **`BA_CODEX_MODEL`** repository variable (required - no default). Example values: `o4-mini`, `claude-sonnet-4-5`, `gpt-4o`.
+3. Configure the **`params.baModel`** field in your `ai-teammate.config` (e.g. `"baModel": "o4-mini"`). Fallback: set `BA_CODEX_MODEL` repository variable (for backward compatibility).
+4. Ensure secrets **`COPILOT_PAT`**, **`OPENAI_API_KEY`**, and Jira secrets match what `_reusable-ai-teammate.yml` expects.
 5. Install the consumer workflow from **`.github/consumer-templates/ai-teammate.yml`** (or equivalent) calling the reusable workflow with `secrets: inherit`.
 6. If you use async Codex, keep **`.github/consumer-templates/business-analyst.yml`** in sync with SDLCAgents: Codex paths come only from **`invocation-handoff-manifest.json`** in the prepare artifact (parent dispatch does not send per-file path inputs).
 
