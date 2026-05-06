@@ -12,7 +12,7 @@ The `speckit-developer-agent.config` file uses the following top-level structure
   "description": "<required> short description",
   "params": {
     "runner": "pipeline",
-    "model": "o4-mini",
+    "model": "<required> AI model name (e.g., o4-mini, claude-sonnet-4-5)",
     "ticketContextDepth": 1,
     "branchNamePattern": "feature/{issueKey}-{timestamp}",
     "featureDirPattern": ".specify/features/{issueKey}",
@@ -33,7 +33,7 @@ The `speckit-developer-agent.config` file uses the following top-level structure
 All agent behaviour is configured inside `params`:
 
 - **`runner`** — Must be `"pipeline"` to use the step-based runner
-- **`model`** — Default Codex model for all spec-kit steps (e.g., `"o4-mini"`, `"claude-sonnet-4-5"`)
+- **`model`** — **(Required)** AI model for all spec-kit steps (e.g., `"o4-mini"`, `"claude-sonnet-4-5"`, `"gpt-4o"`)
 - **`ticketContextDepth`** — Depth of related Jira tickets to include in context (default: `1`, must be a non-negative integer)
 - **`branchNamePattern`** — Template for feature branch names. Supports placeholders:
   - `{issueKey}` — Jira issue key (e.g., `PROJ-123`)
@@ -80,11 +80,13 @@ When the SpecKit Developer Agent runs:
 
 The config file supports the following environment variable overrides:
 
-- **`DEVELOPER_AGENT_MODEL`** — Overrides `model` from config
+- **`DEVELOPER_AGENT_MODEL`** — Overrides `model` from config (required if not in config)
 - **`TICKET_CONTEXT_DEPTH`** — Overrides `ticketContextDepth` from config
 - **`BRANCH_NAME`** — Overrides dynamic branch name generation (for reuse scenarios)
 
 When both config and env var are present, **env var takes precedence** to support existing workflows.
+
+**Note:** The `model` field is now required and must be set either in the config file or via the `DEVELOPER_AGENT_MODEL` environment variable. There is no default fallback.
 
 ## Consumer Setup
 

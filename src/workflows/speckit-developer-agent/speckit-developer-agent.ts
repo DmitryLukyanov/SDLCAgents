@@ -29,7 +29,7 @@
  *   ISSUE_NUMBER                     — GitHub issue number (string)
  *   ISSUE_KEY                        — Jira issue key (e.g. "PROJ-1")
  *   STEP                             — spec-kit step to run
- *   DEVELOPER_AGENT_MODEL            — Codex model for all spec-kit steps (default: o4-mini)
+ *   DEVELOPER_AGENT_MODEL            — Codex model for all spec-kit steps (required - must be set via config or env)
  */
 
 import { execSync, spawnSync } from 'node:child_process';
@@ -317,7 +317,13 @@ async function main(): Promise<void> {
   let artifactCommitSha = '';
   const promptSource = `native Codex skill (\`${skillFilePath}\`)`;
 
-  const codexModel = process.env['DEVELOPER_AGENT_MODEL']?.trim() || 'o4-mini';
+  const codexModel = process.env['DEVELOPER_AGENT_MODEL']?.trim();
+  if (!codexModel) {
+    throw new Error(
+      'DEVELOPER_AGENT_MODEL environment variable must be set. ' +
+      'Configure it in your agent config file (params.model) or set the environment variable explicitly.'
+    );
+  }
 
   // `codex exec` is the non-interactive subcommand designed for CI (no TTY needed).
   // `--dangerously-bypass-approvals-and-sandbox` lets Codex write to the workspace

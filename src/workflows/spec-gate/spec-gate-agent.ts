@@ -201,7 +201,7 @@ async function postGateResults(result: GateAnalysisResult, ctx: GatePostContext)
   const sha = process.env['GITHUB_SHA'] ?? '—';
   const shaShort = sha.length > 7 ? sha.slice(0, 7) : sha;
   const eventName = process.env['GITHUB_EVENT_NAME'] ?? '—';
-  const modelShown = '_(repo variable GATE_CODEX_MODEL, default o4-mini in workflow)_';
+  const modelShown = '_(repo variable GATE_CODEX_MODEL, required - no default)_';
 
   appendStepSummary('## Spec gate');
   appendStepSummary('');
