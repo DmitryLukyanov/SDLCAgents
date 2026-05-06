@@ -6,23 +6,51 @@
  */
 
 import { readFileSync } from 'node:fs';
+import type { PipelineStepConfig } from '../../lib/pipeline-config.js';
 
 export interface SpeckitDeveloperAgentConfig {
   /** Agent identifier */
   name: string;
   /** Agent description */
   description: string;
-  /** Default Codex model for all spec-kit steps (e.g., "o4-mini", "claude-sonnet-4-5") */
+  /** Pipeline parameters (when using pipeline mode) */
+  params?: {
+    /** Runner type - "pipeline" for pipeline mode */
+    runner?: string;
+    /** Default Codex model for all spec-kit steps */
+    model?: string;
+    /** Depth of related Jira tickets to include in context */
+    ticketContextDepth?: number;
+    /** Template for feature branch names. Placeholders: {issueKey}, {timestamp} */
+    branchNamePattern?: string;
+    /** Template for feature artifact directory. Placeholders: {issueKey} */
+    featureDirPattern?: string;
+    /** Whether to create PRs as drafts initially */
+    draftPR?: boolean;
+    /** Default prompts for each spec-kit step */
+    defaultStepInputs?: {
+      specify?: string;
+      clarify?: string;
+      plan?: string;
+      tasks?: string;
+      implement?: string;
+      code_review?: string;
+    };
+    /** Pipeline steps (for pipeline mode) */
+    steps?: PipelineStepConfig[];
+    [key: string]: unknown;
+  };
+  /** Legacy: model at root level (backward compatibility) */
   model?: string;
-  /** Depth of related Jira tickets to include in context */
+  /** Legacy: ticketContextDepth at root level (backward compatibility) */
   ticketContextDepth?: number;
-  /** Template for feature branch names. Placeholders: {issueKey}, {timestamp} */
+  /** Legacy: branchNamePattern at root level (backward compatibility) */
   branchNamePattern?: string;
-  /** Template for feature artifact directory. Placeholders: {issueKey} */
+  /** Legacy: featureDirPattern at root level (backward compatibility) */
   featureDirPattern?: string;
-  /** Whether to create PRs as drafts initially */
+  /** Legacy: draftPR at root level (backward compatibility) */
   draftPR?: boolean;
-  /** Default prompts for each spec-kit step */
+  /** Legacy: defaultStepInputs at root level (backward compatibility) */
   defaultStepInputs?: {
     specify?: string;
     clarify?: string;
@@ -62,7 +90,7 @@ export function loadSpeckitDeveloperAgentConfig(configFilePath: string): Speckit
 }
 
 /**
- * Get the effective model to use, with precedence: env var > config > default.
+ * Get the effective model to use, with precedence: env var > config.params > config root > default.
  * @param config - Agent configuration
  * @returns Model name to use
  */
@@ -71,7 +99,10 @@ export function getEffectiveModel(config?: SpeckitDeveloperAgentConfig): string 
   const envModel = process.env['DEVELOPER_AGENT_MODEL']?.trim();
   if (envModel) return envModel;
 
-  // Config value
+  // Config params value (new structure)
+  if (config?.params?.model) return config.params.model;
+
+  // Config root value (legacy)
   if (config?.model) return config.model;
 
   // Default fallback
@@ -79,7 +110,7 @@ export function getEffectiveModel(config?: SpeckitDeveloperAgentConfig): string 
 }
 
 /**
- * Get the effective ticket context depth, with precedence: env var > config > default.
+ * Get the effective ticket context depth, with precedence: env var > config.params > config root > default.
  * @param config - Agent configuration
  * @returns Context depth to use
  */
@@ -91,7 +122,10 @@ export function getEffectiveTicketContextDepth(config?: SpeckitDeveloperAgentCon
     if (!isNaN(parsed) && parsed >= 0) return parsed;
   }
 
-  // Config value
+  // Config params value (new structure)
+  if (config?.params?.ticketContextDepth !== undefined) return config.params.ticketContextDepth;
+
+  // Config root value (legacy)
   if (config?.ticketContextDepth !== undefined) return config.ticketContextDepth;
 
   // Default fallback
@@ -104,7 +138,7 @@ export function getEffectiveTicketContextDepth(config?: SpeckitDeveloperAgentCon
  * @returns Branch name pattern
  */
 export function getBranchNamePattern(config?: SpeckitDeveloperAgentConfig): string {
-  return config?.branchNamePattern ?? 'feature/{issueKey}-{timestamp}';
+  return config?.params?.branchNamePattern ?? config?.branchNamePattern ?? 'feature/{issueKey}-{timestamp}';
 }
 
 /**
@@ -113,7 +147,7 @@ export function getBranchNamePattern(config?: SpeckitDeveloperAgentConfig): stri
  * @returns Feature directory pattern
  */
 export function getFeatureDirPattern(config?: SpeckitDeveloperAgentConfig): string {
-  return config?.featureDirPattern ?? '.specify/features/{issueKey}';
+  return config?.params?.featureDirPattern ?? config?.featureDirPattern ?? '.specify/features/{issueKey}';
 }
 
 /**
@@ -122,7 +156,7 @@ export function getFeatureDirPattern(config?: SpeckitDeveloperAgentConfig): stri
  * @returns true if PRs should be drafts
  */
 export function shouldCreateDraftPR(config?: SpeckitDeveloperAgentConfig): boolean {
-  return config?.draftPR ?? true;
+  return config?.params?.draftPR ?? config?.draftPR ?? true;
 }
 
 /**
@@ -135,9 +169,12 @@ export function getDefaultStepInput(
   config: SpeckitDeveloperAgentConfig | undefined,
   step: string,
 ): string {
-  if (!config?.defaultStepInputs) return '';
+  if (!config) return '';
 
-  const inputs = config.defaultStepInputs;
+  // Try params.defaultStepInputs first (new structure), then root defaultStepInputs (legacy)
+  const inputs = config.params?.defaultStepInputs ?? config.defaultStepInputs;
+  if (!inputs) return '';
+
   switch (step) {
     case 'specify':
       return inputs.specify ?? '';
