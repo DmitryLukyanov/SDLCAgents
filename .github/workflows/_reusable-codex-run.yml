@@ -126,6 +126,27 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Pick Codex model
+        id: pick_model
+        run: |
+          M="${{ inputs.codex_model }}"
+          if [ -z "$M" ]; then
+            echo "::error::codex_model input is required. Configure it in your workflow or agent config."
+            exit 1
+          fi
+          echo "codex_model=$M" >> "$GITHUB_OUTPUT"
+
+      - name: Log model to GitHub Summary
+        run: |
+          {
+            echo "## Codex Configuration"
+            echo ""
+            echo "| Parameter | Value |"
+            echo "|-----------|-------|"
+            echo "| **Model** | \`${{ steps.pick_model.outputs.codex_model }}\` |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout consumer repo
         if: ${{ inputs.checkout_ref == '' }}
         uses: actions/checkout@v4
@@ -196,27 +217,6 @@ jobs:
             echo "::error::Prompt file missing: $PROMPT_PATH"
             exit 1
           fi
-
-      - name: Pick Codex model
-        id: pick_model
-        run: |
-          M="${{ inputs.codex_model }}"
-          if [ -z "$M" ]; then
-            echo "::error::codex_model input is required. Configure it in your workflow or agent config."
-            exit 1
-          fi
-          echo "codex_model=$M" >> "$GITHUB_OUTPUT"
-
-      - name: Log model to GitHub Summary
-        run: |
-          {
-            echo "## Codex Configuration"
-            echo ""
-            echo "| Parameter | Value |"
-            echo "|-----------|-------|"
-            echo "| **Model** | \`${{ steps.pick_model.outputs.codex_model }}\` |"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: ${{ inputs.codex_step_name }}
         id: run_codex
