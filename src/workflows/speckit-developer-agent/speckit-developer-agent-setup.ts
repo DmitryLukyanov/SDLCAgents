@@ -25,6 +25,11 @@ import { Octokit } from '@octokit/rest';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
 import { tryWriteSpecKitIssueContextFile } from './spec-kit-context/issue-context.js';
+import {
+  tryLoadConfig,
+  getEffectiveModel,
+  getEffectiveTicketContextDepth,
+} from './speckit-developer-agent-config.js';
 
 /* ------------------------------------------------------------------ */
 /*  Mode                                                               */
@@ -135,6 +140,9 @@ function parseSpeckitStep(raw: string): SpeckitStep {
 /* ------------------------------------------------------------------ */
 
 async function runSpeckitSetup(): Promise<void> {
+  // Load config if available
+  const config = tryLoadConfig();
+
   const token = process.env['COPILOT_PAT'] ?? requireEnv('GITHUB_TOKEN');
   const repository = requireEnv('GITHUB_REPOSITORY');
   const issueNumber = parseInt(requireEnv('ISSUE_NUMBER'), 10);
@@ -251,8 +259,7 @@ async function runSpeckitSetup(): Promise<void> {
     console.log(`[dev-agent-setup] Continuing on PR #${prNumber} (branch: ${branchName})`);
   }
 
-  const depthRaw = parseInt(process.env['TICKET_CONTEXT_DEPTH'] ?? '1', 10);
-  const ticketContextDepth = !Number.isNaN(depthRaw) && depthRaw >= 0 ? depthRaw : 1;
+  const ticketContextDepth = getEffectiveTicketContextDepth(config);
   await tryWriteSpecKitIssueContextFile({
     issueKey,
     cwd: process.cwd(),
@@ -260,7 +267,7 @@ async function runSpeckitSetup(): Promise<void> {
   });
 
   const { data: issue } = await octokit.rest.issues.get({ owner, repo, issue_number: issueNumber });
-  const config = extractPipelineConfig(issue.body ?? '');
+  const pipelineConfig = extractPipelineConfig(issue.body ?? '');
   const defaultCodeReviewPrompt = loadTemplate(
     import.meta.url,
     'prompts',
@@ -268,12 +275,12 @@ async function runSpeckitSetup(): Promise<void> {
   );
 
   const stepInputMap: Record<SpeckitStep, string> = {
-    specify: config.specifyInput,
-    clarify: config.clarifyInput,
-    plan: config.planInput,
-    tasks: config.tasksInput,
-    implement: config.implementInput,
-    code_review: config.codeReviewInput?.trim() || defaultCodeReviewPrompt,
+    specify: pipelineConfig.specifyInput,
+    clarify: pipelineConfig.clarifyInput,
+    plan: pipelineConfig.planInput,
+    tasks: pipelineConfig.tasksInput,
+    implement: pipelineConfig.implementInput,
+    code_review: pipelineConfig.codeReviewInput?.trim() || defaultCodeReviewPrompt,
   };
   const input = stepInputMap[step];
 
@@ -285,7 +292,7 @@ async function runSpeckitSetup(): Promise<void> {
     );
   }
 
-  const codexModel = process.env['DEVELOPER_AGENT_MODEL']?.trim() || 'o4-mini';
+  const codexModel = getEffectiveModel(config);
   const promptContent = `$speckit-${step} ${input}`;
 
   mkdirSync('.sdlc-agents', { recursive: true });
@@ -305,11 +312,14 @@ async function runSpeckitSetup(): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 async function runFixSetup(): Promise<void> {
+  // Load config if available
+  const config = tryLoadConfig();
+
   const token = process.env['COPILOT_PAT'] ?? process.env['GITHUB_TOKEN'] ?? '';
   const repository = process.env['GITHUB_REPOSITORY'] ?? '';
   const issueKey = requireEnv('ISSUE_KEY');
   let fixInstructions = requireEnv('INPUT_PROMPT').replace(/^\s*\/fix\s*/, '');
-  const codexModel = process.env['DEVELOPER_AGENT_MODEL']?.trim() || 'o4-mini';
+  const codexModel = getEffectiveModel(config);
 
   const statePath = findSpeckitStateFilePath(issueKey);
   if (!existsSync(statePath)) {
