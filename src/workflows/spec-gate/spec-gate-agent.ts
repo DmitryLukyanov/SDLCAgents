@@ -26,7 +26,7 @@ import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 const PROCEED_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'pr-comment-proceed.md');
 const HIL_TEMPLATE     = loadTemplate(import.meta.url, 'templates', 'pr-comment-hil.md');
 
-const PROCEED_WORKFLOW_ID = 'developer-agent-proceed.yml';
+const PROCEED_WORKFLOW_ID = 'speckit-developer-agent-proceed.yml';
 
 /** Repo-root folder (small) passed between jobs via artifacts — not under `.sdlc-agents/node_modules`. */
 const CODEX_ARTIFACT_DIR = 'spec-gate-codex-artifacts';
@@ -172,7 +172,7 @@ async function postGateResults(result: GateAnalysisResult, ctx: GatePostContext)
       ref: defaultBranch,
       inputs: { pr_number: String(prNumber) },
     });
-    console.log('[gate] developer-agent-proceed workflow_dispatch succeeded');
+    console.log('[gate] speckit-developer-agent-proceed workflow_dispatch succeeded');
     dispatchedProceed = true;
   }
 

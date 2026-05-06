@@ -46,7 +46,7 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
     |       apply BA outcome (Jira comment/transition/labels; GitHub on incomplete)
     |       if BA complete -> pipeline continues
     |             -> update GitHub issue body (BA + Jira template)
-    |             -> workflow_dispatch developer-agent.yml (step specify)
+    |             -> workflow_dispatch speckit-developer-agent.yml (step specify)
     |       if incomplete -> e.g. Jira Blocked, close GitHub issue not_planned
     v
 Developer Agent (consumer)  -->  branch, draft PR, spec-kit steps, Copilot/Codex per config
@@ -63,7 +63,7 @@ PR merge flow (consumer pr-merged / Jira Done)  [optional, separate workflow]
 | **GitHub Issues** | Placeholder issue → comment → body update after BA; may close on incomplete BA. |
 | **GitHub Actions + tsx** | `create_github_issue_and_prepare_ba` and `finish` jobs run the TypeScript agent. |
 | **Codex** | Only in `ba_codex` (`openai/codex-action`). |
-| **Developer agent + Copilot** | Optional terminal `async_call` can dispatch consumer `developer-agent.yml`. |
+| **SpecKit Developer Agent + Copilot** | Optional terminal `async_call` can dispatch consumer `speckit-developer-agent.yml`. |
 
 For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
 

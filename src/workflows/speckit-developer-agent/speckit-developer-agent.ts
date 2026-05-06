@@ -1,14 +1,14 @@
 /**
- * Developer Agent — legacy monolithic entry point (SUPERSEDED).
+ * SpecKit Developer Agent — legacy monolithic entry point (SUPERSEDED).
  *
- * ⚠️  This file is no longer called by _reusable-developer-agent.yml.
+ * ⚠️  This file is no longer called by _reusable-speckit-developer-agent.yml.
  *     The workflow uses prepare / dedicated Codex job / teardown:
- *       developer-agent-setup.ts    → creates branch/PR, writes prompt file
- *       _reusable-codex-run.yml     → runs Codex skill
- *       developer-agent-teardown.ts → stages files, commits, pushes, comments
+ *       speckit-developer-agent-setup.ts    → creates branch/PR, writes prompt file
+ *       _reusable-codex-run.yml             → runs Codex skill
+ *       speckit-developer-agent-teardown.ts → stages files, commits, pushes, comments
  *     Kept for reference only.
  *
- * Executes a single spec-kit step on behalf of the developer agent workflow.
+ * Executes a single spec-kit step on behalf of the speckit developer agent workflow.
  * Runs after AI Teammate dispatches the first step ("specify"), and is
  * re-dispatched by the proceed workflow after each subsequent step.
  *
@@ -23,7 +23,7 @@
  *   6. Post a summary comment on the PR
  *   7. On "implement": mark PR ready for review
  *
- * Environment variables (set by _reusable-developer-agent.yml):
+ * Environment variables (set by _reusable-speckit-developer-agent.yml):
  *   GITHUB_TOKEN or COPILOT_PAT      — GitHub API token
  *   GITHUB_REPOSITORY                — "owner/repo"
  *   ISSUE_NUMBER                     — GitHub issue number (string)

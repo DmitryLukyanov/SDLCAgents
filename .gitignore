@@ -4,5 +4,5 @@ node_modules/
 
 # AI Teammate async Codex handoff (cwd-relative, e.g. npm run ai-teammate:debug)
 async-invocation-handoff/
-# Legacy / developer-agent local paths
+# Legacy / speckit-developer-agent local paths
 spec-output/

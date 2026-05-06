@@ -164,7 +164,7 @@ async function markPullRequestReadyGraphql(
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      'User-Agent': 'SDLCAgents-developer-agent-teardown',
+      'User-Agent': 'SDLCAgents-speckit-developer-agent-teardown',
     },
     body: JSON.stringify({
       query: `

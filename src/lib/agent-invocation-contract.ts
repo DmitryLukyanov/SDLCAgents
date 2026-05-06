@@ -23,7 +23,7 @@ import {
   type PipelineStepConfig,
 } from './pipeline-config.js';
 
-/** Repo-relative directory for async parent/child handoff (not `spec-output`; developer-agent may still use that). */
+/** Repo-relative directory for async parent/child handoff (not `spec-output`; speckit-developer-agent may still use that). */
 export const ASYNC_INVOCATION_HANDOFF_ROOT_DIR = 'async-invocation-handoff' as const;
 
 /**

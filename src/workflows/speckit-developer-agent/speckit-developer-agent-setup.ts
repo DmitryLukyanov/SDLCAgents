@@ -1,9 +1,9 @@
 /**
- * Developer Agent — Setup phase (speckit + fix).
+ * SpecKit Developer Agent — Setup phase (speckit + fix).
  *
- * Branch on `AGENT_MODE` / `DEVELOPER_AGENT_MODE`:
+ * Branch on `AGENT_MODE` / `DEVELOPER_AGENT_MODEL`:
  *   speckit (default) — pipeline config + `$speckit-{step}` → input_prompt.md. Branch/PR/bootstrap state normally come from
- *     `developer-agent-bootstrap.ts` + checkout; specify reads `speckit-state.json` when present (else legacy branch/PR create).
+ *     `speckit-developer-agent-bootstrap.ts` + checkout; specify reads `speckit-state.json` when present (else legacy branch/PR create).
  *   fix — targeted fix prompt from speckit-state + INPUT_PROMPT → input_prompt.md
  *
  * Environment — common:

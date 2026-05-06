@@ -3,8 +3,8 @@
 # Checks out SDLCAgents and runs the TypeScript router which dispatches
 # the appropriate consumer workflow based on the slash command in the comment:
 #
-#   /proceed   → developer-agent-proceed.yml
-#   /fix <…>   → developer-agent.yml (mode=fix)
+#   /proceed   → speckit-developer-agent-proceed.yml
+#   /fix <…>   → speckit-developer-agent.yml (mode=fix)
 #
 # Triggered by: pr-comment-handler.yml (consumer) on PR issue_comment events
 name: "[Reusable] PR Comment Handler"

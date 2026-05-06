@@ -1,5 +1,5 @@
 /**
- * LLM provider for the developer-agent **fix** workflow (local Codex CLI).
+ * LLM provider for the speckit-developer-agent **fix** workflow (local Codex CLI).
  *
  * `openai/codex-action@v1` is used in GitHub Actions; this module supports the
  * fix script path that invokes `codex exec` directly.

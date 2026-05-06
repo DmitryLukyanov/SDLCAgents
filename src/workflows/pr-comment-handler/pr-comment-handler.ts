@@ -4,8 +4,8 @@
  * Reads a PR comment body and dispatches the appropriate consumer workflow
  * based on the slash command:
  *
- *   /proceed   → developer-agent-proceed.yml
- *   /fix <…>   → developer-agent.yml (mode=fix, issue_key, pr_number, prompt, branch_name)
+ *   /proceed   → speckit-developer-agent-proceed.yml
+ *   /fix <…>   → speckit-developer-agent.yml (mode=fix, issue_key, pr_number, prompt, branch_name)
  *
  * Environment variables (set by _reusable-pr-comment-handler.yml):
  *   GITHUB_TOKEN or COPILOT_PAT  — GitHub API token
@@ -113,7 +113,7 @@ async function main(): Promise<void> {
   const command        = commandLine.split(/\s+/)[0] ?? '';
 
   // For /fix: pass only from the command line onwards so `prompt` still starts with /fix;
-  // developer-agent-setup strips the /fix prefix when building the fix template.
+  // speckit-developer-agent-setup strips the /fix prefix when building the fix template.
   const commandBody = commandLineIdx >= 0
     ? lines.slice(commandLineIdx).join('\n').trimStart()
     : body;
@@ -126,12 +126,12 @@ async function main(): Promise<void> {
     case '/proceed':
       await octokit.rest.actions.createWorkflowDispatch({
         owner, repo,
-        workflow_id: 'developer-agent-proceed.yml',
+        workflow_id: 'speckit-developer-agent-proceed.yml',
         ref,
         inputs: { pr_number: prNumber },
       });
-      console.log(`[pr-comment-handler] Dispatched developer-agent-proceed.yml`);
-      outcome = `Dispatched **developer-agent-proceed.yml** with \`pr_number=${prNumber}\`.`;
+      console.log(`[pr-comment-handler] Dispatched speckit-developer-agent-proceed.yml`);
+      outcome = `Dispatched **speckit-developer-agent-proceed.yml** with \`pr_number=${prNumber}\`.`;
       break;
 
     case '/fix': {
@@ -169,7 +169,7 @@ async function main(): Promise<void> {
 
       await octokit.rest.actions.createWorkflowDispatch({
         owner, repo,
-        workflow_id: 'developer-agent.yml',
+        workflow_id: 'speckit-developer-agent.yml',
         ref,
         inputs: {
           mode:         'fix',
@@ -181,8 +181,8 @@ async function main(): Promise<void> {
           prompt:       commandBody + hilContext,
         },
       });
-      console.log(`[pr-comment-handler] Dispatched developer-agent.yml (mode=fix)`);
-      outcome = 'Dispatched **developer-agent.yml** (`mode=fix`; includes HIL context when found).';
+      console.log(`[pr-comment-handler] Dispatched speckit-developer-agent.yml (mode=fix)`);
+      outcome = 'Dispatched **speckit-developer-agent.yml** (`mode=fix`; includes HIL context when found).';
       break;
     }
 
