@@ -67,6 +67,11 @@ on:
         required: false
         type: string
         default: ''
+      config_file:
+        description: "Path to agent config JSON in consumer repo (e.g. config/workflows/speckit-developer-agent/speckit-developer-agent.config). Optional; when omitted, uses env vars only."
+        required: false
+        type: string
+        default: ''
     secrets:
       COPILOT_PAT:
         required: true
@@ -165,6 +170,7 @@ jobs:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           TICKET_CONTEXT_DEPTH: ${{ vars.TICKET_CONTEXT_DEPTH }}
+          CONFIG_FILE: ${{ inputs.config_file }}
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-setup.ts
 
       - name: Materialize prompt into input_prompt.md
