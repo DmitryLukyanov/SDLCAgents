@@ -7,6 +7,8 @@
 # per-file path inputs — only `concurrency_key`, `config_file`, and `caller_config` (run correlation + Jira JQL).
 #
 # Extra artifact: business-analyst_input_configuration — single JSON (embedded config + decoded caller_config).
+#
+# Requires secret OPENAI_API_KEY (Codex). Required repo variable BA_CODEX_MODEL (no default).
 name: Business Analyst (async Codex)
 run-name: "${{ inputs.concurrency_key }} · BA Codex"
 
@@ -22,7 +24,12 @@ on:
         required: true
         type: string
       config_file:
-        description: "Same path as AI Teammate (agent JSON in consumer repo)"
+        description: "AI Teammate config path (for backward compatibility, not used by BA)"
+        required: false
+        type: string
+        default: ''
+      ba_config_file:
+        description: "Path to business-analyst.config in consumer repo (e.g. config/workflows/business-analyst/business-analyst.config)"
         required: true
         type: string
       caller_config:
@@ -40,8 +47,38 @@ jobs:
     outputs:
       prompt_rel: ${{ steps.manifest.outputs.prompt_rel }}
       output_rel: ${{ steps.manifest.outputs.output_rel }}
+      ba_model: ${{ steps.resolve_model.outputs.ba_model }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout SDLCAgents (for model extraction script)
+        uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: master
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Resolve BA model from config
+        id: resolve_model
+        run: |
+          set -euo pipefail
+          MODEL=$(.sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/business-analyst/extract-ba-model-from-config.ts)
+          echo "ba_model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "Resolved BA model: $MODEL"
+        env:
+          BA_CONFIG_FILE: ${{ inputs.ba_config_file }}
+          BA_CODEX_MODEL: ${{ vars.BA_CODEX_MODEL }}
 
       - uses: DmitryLukyanov/SDLCAgents/.github/actions/upload-workflow-dispatch-inputs-artifact@master
         with:
@@ -109,7 +146,7 @@ jobs:
       upload_artifact_name: caller-handoff_codex_output
       upload_path: async-invocation-handoff/${{ inputs.concurrency_key }}/
       upload_if_no_files_found: error
-      codex_model: ${{ vars.BA_CODEX_MODEL }}
+      codex_model: ${{ needs.rehydrate_ba_workspace.outputs.ba_model }}
       codex_step_name: Run Codex - Business Analyst
       timeout_minutes: 30
 

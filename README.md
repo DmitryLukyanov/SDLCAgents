@@ -69,6 +69,7 @@ After each speckit step, the **Spec Gate** workflow (`spec-gate.yml`) reviews th
 | Repo variable | Default | Description |
 |---------------|---------|-------------|
 | `GATE_CODEX_MODEL` | _(required - no default)_ | Codex model for spec gate analysis |
+| `BA_CODEX_MODEL` | _(optional - fallback)_ | Codex model for Business Analyst workflow. **Prefer** setting `params.model` in `config/workflows/business-analyst/business-analyst.config` instead. |
 
 ### Responding to HIL
 
