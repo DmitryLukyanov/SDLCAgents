@@ -66,7 +66,7 @@ on:
         type: string
         default: ignore
       codex_model:
-        description: "OpenAI model id (required - must be provided)"
+        description: "OpenAI model id (validated at runtime - must be non-empty)"
         required: false
         type: string
         default: ''
