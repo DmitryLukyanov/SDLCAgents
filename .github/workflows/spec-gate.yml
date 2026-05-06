@@ -3,7 +3,7 @@
 # HOW IT WORKS:
 #   1. Triggers when speckit-state.json is pushed to a feature branch.
 #   2. Runs an LLM analysis on the spec artifacts for the completed step.
-#   3. If clean: dispatches developer-agent-proceed (PAT), then posts a status PR comment.
+#   3. If clean: dispatches speckit-developer-agent-proceed (PAT), then posts a status PR comment.
 #      If HIL: posts the review comment → human fixes and comments /proceed or @codex…
 #
 # NOTE: After "implement", the pipeline runs "code_review" automatically when the gate passes.

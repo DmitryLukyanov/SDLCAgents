@@ -222,9 +222,9 @@ async function main(): Promise<void> {
   // Build inputs based on the target workflow
   let inputs: Record<string, string> = {};
 
-  // For developer-agent.yml (terminal operation), build developer agent inputs
-  console.log(`[dispatch-pipeline-async-child] Checking if terminal && workflowFile === 'developer-agent.yml': terminal=${terminal}, workflowFile="${workflowFile}"`);
-  if (terminal && workflowFile === 'developer-agent.yml') {
+  // For speckit-developer-agent.yml (terminal operation), build developer agent inputs
+  console.log(`[dispatch-pipeline-async-child] Checking if terminal && workflowFile === 'speckit-developer-agent.yml': terminal=${terminal}, workflowFile="${workflowFile}"`);
+  if (terminal && workflowFile === 'speckit-developer-agent.yml') {
     const issueKey = handoff.issueKey || concurrencyKey;
     const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
     // Allow step to be configured via async_call.inputs.step, default to 'specify'
@@ -248,7 +248,7 @@ async function main(): Promise<void> {
     console.log(`[dispatch-pipeline-async-child] Developer agent inputs built: mode=${inputs.mode}, issue_key=${inputs.issue_key}, issue_number=${inputs.issue_number}, step=${inputs.step}`);
   } else {
     // For other workflows (like business-analyst.yml), use AI Teammate inputs
-    console.log(`[dispatch-pipeline-async-child] Building AI Teammate inputs (not developer-agent.yml)...`);
+    console.log(`[dispatch-pipeline-async-child] Building AI Teammate inputs (not speckit-developer-agent.yml)...`);
     inputs = {
       ...buildAiTeammateWorkflowDispatchInputsWithCaller({
         concurrencyKey,

@@ -99,12 +99,12 @@ on:
         description: "Author email for workspace_commit step"
         required: false
         type: string
-        default: 'developer-agent@sdlc-agents.bot'
+        default: 'speckit-developer-agent@sdlc-agents.bot'
       git_commit_user_name:
         description: "Author name for workspace_commit step"
         required: false
         type: string
-        default: 'SDLC Developer Agent'
+        default: 'SDLC SpecKit Developer Agent'
       extra_git_add_paths:
         description: "Optional newline-separated paths to `git add -f` after the main add (e.g. Codex log under .sdlc-agents)"
         required: false
