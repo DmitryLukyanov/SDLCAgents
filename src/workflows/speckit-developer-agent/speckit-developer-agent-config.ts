@@ -122,11 +122,17 @@ export function getEffectiveTicketContextDepth(config?: SpeckitDeveloperAgentCon
     if (!isNaN(parsed) && parsed >= 0) return parsed;
   }
 
-  // Config params value (new structure)
-  if (config?.params?.ticketContextDepth !== undefined) return config.params.ticketContextDepth;
+  // Config params value (new structure) — validate it is a finite integer >= 0
+  if (config?.params?.ticketContextDepth !== undefined) {
+    const v = config.params.ticketContextDepth;
+    if (Number.isFinite(v) && Number.isInteger(v) && v >= 0) return v;
+  }
 
-  // Config root value (legacy)
-  if (config?.ticketContextDepth !== undefined) return config.ticketContextDepth;
+  // Config root value (legacy) — same validation
+  if (config?.ticketContextDepth !== undefined) {
+    const v = config.ticketContextDepth;
+    if (Number.isFinite(v) && Number.isInteger(v) && v >= 0) return v;
+  }
 
   // Default fallback
   return 1;

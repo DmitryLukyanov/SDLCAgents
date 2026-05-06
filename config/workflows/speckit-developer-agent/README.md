@@ -4,12 +4,37 @@ This folder holds the **agent JSON** consumed by `speckit-developer-agent-setup.
 
 ## Configuration Structure
 
-The `speckit-developer-agent.config` file contains:
+The `speckit-developer-agent.config` file uses the following top-level structure:
+
+```json
+{
+  "name": "<required> agent identifier",
+  "description": "<required> short description",
+  "params": {
+    "runner": "pipeline",
+    "model": "o4-mini",
+    "ticketContextDepth": 1,
+    "branchNamePattern": "feature/{issueKey}-{timestamp}",
+    "featureDirPattern": ".specify/features/{issueKey}",
+    "draftPR": true,
+    "defaultStepInputs": { ... },
+    "steps": [ ... ]
+  }
+}
+```
+
+### Required fields
 
 - **`name`** — Agent identifier (used for logging and tracking)
 - **`description`** — Brief description of the agent's purpose
+
+### `params` object (pipeline mode)
+
+All agent behaviour is configured inside `params`:
+
+- **`runner`** — Must be `"pipeline"` to use the step-based runner
 - **`model`** — Default Codex model for all spec-kit steps (e.g., `"o4-mini"`, `"claude-sonnet-4-5"`)
-- **`ticketContextDepth`** — Depth of related Jira tickets to include in context (default: `1`)
+- **`ticketContextDepth`** — Depth of related Jira tickets to include in context (default: `1`, must be a non-negative integer)
 - **`branchNamePattern`** — Template for feature branch names. Supports placeholders:
   - `{issueKey}` — Jira issue key (e.g., `PROJ-123`)
   - `{timestamp}` — Current timestamp in milliseconds
@@ -18,13 +43,18 @@ The `speckit-developer-agent.config` file contains:
   - `{issueKey}` — Jira issue key
   - Example: `".specify/features/{issueKey}"` → `.specify/features/PROJ-123`
 - **`draftPR`** — Whether to create PRs as drafts initially (`true`/`false`)
-- **`defaultStepInputs`** — Default prompts for each spec-kit step:
+- **`defaultStepInputs`** — Default prompts for each spec-kit step (currently informational; step prompts are driven by the `<!--sdlc-pipeline-config ...-->` block in the GitHub issue body):
   - `specify` — Initial specification creation
   - `clarify` — Clarification and refinement
   - `plan` — High-level implementation planning
   - `tasks` — Task breakdown
   - `implement` — Implementation execution
   - `code_review` — Code review and validation
+- **`steps`** — Array of pipeline step definitions (required in pipeline mode)
+
+### Legacy root-level fields (backward compatibility)
+
+`model`, `ticketContextDepth`, `branchNamePattern`, `featureDirPattern`, `draftPR`, and `defaultStepInputs` may also appear at the root level (outside `params`) for backward compatibility with older configs. When the same field exists in both places, `params` takes precedence.
 
 ## How It Works
 
@@ -33,12 +63,13 @@ When the SpecKit Developer Agent runs:
 1. **Setup phase** (`speckit-developer-agent-setup.ts`):
    - Reads the config file from `CONFIG_FILE` environment variable
    - Merges config values with environment variables (env vars take precedence for backward compatibility)
-   - Uses config to determine model, context depth, and default prompts
-   - Creates/updates speckit-state.json with branch and PR information
+   - Uses `params.model` / `DEVELOPER_AGENT_MODEL` env var to select the Codex model
+   - Uses `params.ticketContextDepth` / `TICKET_CONTEXT_DEPTH` env var for Jira context depth
+   - Branch name, PR, and feature directory are derived from existing state/bootstrap logic and the `BRANCH_NAME` env var; they are **not** read from `branchNamePattern`/`featureDirPattern` in the config at runtime
+   - Step prompts are driven by the `<!--sdlc-pipeline-config ...-->` block in the GitHub issue body; `params.defaultStepInputs` is informational and does **not** currently override them
 
 2. **Codex execution** (`_reusable-codex-run.yml`):
    - Runs the spec-kit skill with the configured model
-   - Uses input prompt from setup phase (combines config defaults with step-specific customization)
 
 3. **Teardown phase** (`speckit-developer-agent-teardown.ts`):
    - Commits artifacts
@@ -87,16 +118,28 @@ When both config and env var are present, **env var takes precedence** to suppor
 ### Use a different model for all steps
 ```json
 {
-  "model": "claude-sonnet-4-5"
+  "name": "speckit_developer_agent",
+  "description": "SpecKit Developer Agent with custom model",
+  "params": {
+    "runner": "pipeline",
+    "model": "claude-sonnet-4-5",
+    "steps": []
+  }
 }
 ```
 
 ### Customize step prompts
 ```json
 {
-  "defaultStepInputs": {
-    "specify": "Create a detailed spec focusing on API design and data models",
-    "implement": "Implement with emphasis on test coverage and documentation"
+  "name": "speckit_developer_agent",
+  "description": "SpecKit Developer Agent with custom prompts",
+  "params": {
+    "runner": "pipeline",
+    "defaultStepInputs": {
+      "specify": "Create a detailed spec focusing on API design and data models",
+      "implement": "Implement with emphasis on test coverage and documentation"
+    },
+    "steps": []
   }
 }
 ```
@@ -104,8 +147,14 @@ When both config and env var are present, **env var takes precedence** to suppor
 ### Change directory structure
 ```json
 {
-  "featureDirPattern": "specs/{issueKey}",
-  "branchNamePattern": "dev/{issueKey}"
+  "name": "speckit_developer_agent",
+  "description": "SpecKit Developer Agent with custom paths",
+  "params": {
+    "runner": "pipeline",
+    "featureDirPattern": "specs/{issueKey}",
+    "branchNamePattern": "dev/{issueKey}",
+    "steps": []
+  }
 }
 ```
 
@@ -124,8 +173,14 @@ env:
 Create `config/workflows/speckit-developer-agent/speckit-developer-agent.config`:
 ```json
 {
-  "model": "claude-sonnet-4-5",
-  "ticketContextDepth": 2
+  "name": "speckit_developer_agent",
+  "description": "SpecKit Developer Agent",
+  "params": {
+    "runner": "pipeline",
+    "model": "claude-sonnet-4-5",
+    "ticketContextDepth": 2,
+    "steps": []
+  }
 }
 ```
 
