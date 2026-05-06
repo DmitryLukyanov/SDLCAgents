@@ -100,6 +100,8 @@ export interface SpeckitState {
   featureDir?: string;
   /** Pipeline step records for resume capability */
   pipelineRecords?: StepRecord[];
+  /** Commit SHA recorded just before dispatching an async step; used to detect new commits on resume */
+  baseCommitSha?: string;
   /** State version for compatibility */
   version?: number;
 }

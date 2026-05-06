@@ -26,10 +26,9 @@ import {
 import { normalizePipelineStepIds, type PipelineStepConfig } from '../../lib/pipeline-config.js';
 import {
   findPipelineStepIndexById,
-  getPipelineStartIndexFromCallerRoot,
   isStepEnabled,
 } from '../../lib/pipeline-expected-step-helper.js';
-import { loadSpeckitDeveloperAgentConfig, getEffectiveModel } from './speckit-developer-agent-config.js';
+import { loadSpeckitDeveloperAgentConfig } from './speckit-developer-agent-config.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
 import type {
   RunnerContext,
@@ -46,6 +45,11 @@ function setOutput(name: string, value: string): void {
   const out = process.env.GITHUB_OUTPUT;
   if (out) appendFileSync(out, `${name}=${value}\n`, 'utf8');
   console.log(`[speckit-pipeline] output: ${name}=${value}`);
+}
+
+/** Truncate a commit SHA to a short display form */
+function shortSha(sha: string): string {
+  return sha.substring(0, 8);
 }
 
 /** Run a single pipeline step */
@@ -179,21 +183,46 @@ async function runValidateSpecKitOutput(ctx: RunnerContext, step: PipelineStep):
   // For implement step, validate that code changes were made
   if (validateCodeChanges) {
     console.log(`[validate_spec_kit_output] Checking for code changes...`);
-    // Check git status to see if there are changes
+
+    // Load the base commit SHA that was recorded just before the async Codex dispatch.
+    // In an async pipeline the Codex job commits & pushes on a remote runner, so the
+    // local working tree is clean on resume — we must compare commit SHAs instead.
+    const statePath = findSpeckitStateFilePath(ctx.issueKey);
+    let baseCommitSha: string | undefined;
+    if (existsSync(statePath)) {
+      const state = JSON.parse(readFileSync(statePath, 'utf8')) as SpeckitState;
+      baseCommitSha = state.baseCommitSha;
+    }
+
     try {
       const { execSync } = await import('node:child_process');
-      const gitDiff = execSync('git diff --name-only HEAD', { encoding: 'utf8' }).trim();
-      const gitStatus = execSync('git status --short', { encoding: 'utf8' }).trim();
+      const currentSha = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
 
-      if (!gitDiff && !gitStatus) {
-        const reason = `No code changes detected after implement step`;
-        console.error(`[validate_spec_kit_output] ❌ ${reason}`);
-        return { status: 'stop', reason };
+      if (baseCommitSha) {
+        // Compare persisted base SHA to current HEAD
+        if (currentSha === baseCommitSha) {
+          const reason = `No code changes detected after implement step (HEAD is still ${shortSha(currentSha)})`;
+          console.error(`[validate_spec_kit_output] ❌ ${reason}`);
+          return { status: 'stop', reason };
+        }
+        console.log(
+          `[validate_spec_kit_output] ✓ New commits detected: ${shortSha(baseCommitSha)} → ${shortSha(currentSha)}`,
+        );
+      } else {
+        // No base SHA recorded (non-pipeline or old state): fall back to working-tree check
+        const gitDiff = execSync('git diff --name-only HEAD', { encoding: 'utf8' }).trim();
+        const gitStatus = execSync('git status --short', { encoding: 'utf8' }).trim();
+
+        if (!gitDiff && !gitStatus) {
+          const reason = `No code changes detected after implement step`;
+          console.error(`[validate_spec_kit_output] ❌ ${reason}`);
+          return { status: 'stop', reason };
+        }
+
+        console.log(`[validate_spec_kit_output] ✓ Code changes detected`);
       }
-
-      console.log(`[validate_spec_kit_output] ✓ Code changes detected`);
     } catch (err) {
-      console.warn(`[validate_spec_kit_output] Could not check git status: ${err}`);
+      console.warn(`[validate_spec_kit_output] Could not check code changes: ${err}`);
       // Don't fail validation on git errors
     }
   }
@@ -347,14 +376,12 @@ export async function runPipeline(
   // Execute pipeline steps
   for (let i = startIndex; i < steps.length; i++) {
     const step = steps[i];
-    console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} ${step.stepName ? `(${step.stepName})` : ''} ──`);
+    // On resume this is the step that originally triggered the async dispatch.
+    // We run it so that its resume-mode logic (e.g. updateSpeckitStateAfterStep) fires,
+    // but we must NOT re-dispatch its async_call.
+    const isResumeTriggerStep = isResume && step.id === resumeTriggerStepId;
 
-    // If resuming and this is the trigger step, complete it from checkpoint
-    if (isResume && step.id === resumeTriggerStepId) {
-      console.log(`[speckit-pipeline] Completing trigger step "${step.id}" from checkpoint`);
-      // The step was already executed before async call, just mark it complete and continue
-      continue;
-    }
+    console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} ${step.stepName ? `(${step.stepName})` : ''} ──`);
 
     const stepEnabled = isStepEnabled(step);
     const t0 = Date.now();
@@ -386,7 +413,8 @@ export async function runPipeline(
 
     // If this step has an async_call, the pipeline will pause here
     // The workflow will dispatch the async operation and wait for callback
-    if (step.async_call) {
+    // On resume we skip re-dispatch for the trigger step (already dispatched)
+    if (step.async_call && !isResumeTriggerStep) {
       console.log(`[speckit-pipeline] Step has async_call: pausing for dispatch to ${step.async_call.workflowFile}`);
       // Set outputs for workflow to use
       setOutput('async_step_id', step.id ?? `${step.runner}#${i}`);
@@ -428,6 +456,15 @@ async function saveCheckpoint(ctx: RunnerContext, records: StepRecord[]): Promis
   // Save pipeline records for resume
   state.pipelineRecords = records;
   state.lastUpdated = new Date().toISOString();
+
+  // Record current commit SHA so the post-async validate step can detect new commits
+  try {
+    const { execSync } = await import('node:child_process');
+    state.baseCommitSha = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+    console.log(`[speckit-pipeline] Checkpoint base SHA: ${shortSha(state.baseCommitSha)}`);
+  } catch {
+    // Non-fatal: SHA recording is best-effort
+  }
 
   mkdirSync(dirname(statePath), { recursive: true });
   writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n');
