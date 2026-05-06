@@ -1,8 +1,8 @@
-# Reusable Developer Agent — Proceed handler.
+# Reusable SpecKit Developer Agent — Proceed handler.
 #
 # Triggered when "/proceed" is commented on a PR. Reads speckit-state.json
 # from the PR's feature branch to determine the next step, then dispatches
-# the developer agent for that step.
+# the speckit developer agent for that step.
 #
 # Used for BOTH auto-proceed (spec gate posts /proceed after clean artifacts)
 # AND manual proceed (human posts /proceed after resolving HIL issues).
@@ -11,7 +11,7 @@
 # `code_review`. The final `code_review` gate requires human merge (no further step).
 #
 # Consumer usage: see .github/consumer-templates/pr-comment-handler.yml
-name: "[Reusable] Developer Agent — Proceed"
+name: "[Reusable] SpecKit Developer Agent — Proceed"
 
 on:
   workflow_call:
@@ -118,7 +118,7 @@ jobs:
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'developer-agent.yml',
+              workflow_id: 'speckit-developer-agent.yml',
               ref: context.ref || 'master',
               inputs: {
                 issue_number: issueNumber,
@@ -128,7 +128,7 @@ jobs:
               },
             });
 
-            console.log(`Dispatched developer-agent.yml: step=${nextStep} issue=#${issueNumber}`);
+            console.log(`Dispatched speckit-developer-agent.yml: step=${nextStep} issue=#${issueNumber}`);
 
       # ── 5. No-op when all steps done ─────────────────────────────────────────
       - name: All steps complete

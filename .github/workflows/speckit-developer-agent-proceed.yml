@@ -1,11 +1,11 @@
-# Developer Agent — Proceed.
+# SpecKit Developer Agent — Proceed.
 # Triggered by PR Comment Handler when /proceed is posted on a spec-kit PR.
 # Delegates all logic to the shared SDLCAgents reusable workflow.
 #
 # Required secrets (Settings > Secrets and variables > Actions):
 #   COPILOT_PAT — GitHub Classic PAT with repo + workflow + pull-requests scopes
-name: Developer Agent — Proceed
-run-name: "Developer Agent — Proceed (PR #${{ inputs.pr_number }})"
+name: SpecKit Developer Agent — Proceed
+run-name: "SpecKit Developer Agent — Proceed (PR #${{ inputs.pr_number }})"
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ jobs:
       contents: read
       pull-requests: read
       actions: write
-    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-developer-agent-proceed.yml@master
+    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-speckit-developer-agent-proceed.yml@master
     with:
       pr_number: ${{ fromJson(inputs.pr_number) }}
     secrets: inherit

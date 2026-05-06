@@ -1,14 +1,14 @@
-# Reusable — Bootstrap spec-kit workspace before Developer Agent (specify only).
+# Reusable — Bootstrap spec-kit workspace before SpecKit Developer Agent (specify only).
 #
 # Creates or reuses the feature branch, opens a draft PR when missing, and writes
-# `.specify/features/{ISSUE_KEY}/speckit-state.json` so developer-agent setup only
+# `.specify/features/{ISSUE_KEY}/speckit-state.json` so speckit-developer-agent setup only
 # reads state + builds the Codex prompt.
 #
-# Consumer: chain a job that `needs` this workflow, then call `_reusable-developer-agent.yml`
+# Consumer: chain a job that `needs` this workflow, then call `_reusable-speckit-developer-agent.yml`
 # with `branch_name` / `speckit_pr_number` from this workflow's outputs.
 #
 # Secrets: COPILOT_PAT (contents + PRs + issues)
-name: "[Reusable] Developer Agent — Bootstrap"
+name: "[Reusable] SpecKit Developer Agent — Bootstrap"
 
 on:
   workflow_call:
@@ -41,10 +41,10 @@ on:
         required: true
     outputs:
       branch_name:
-        description: "Feature branch to pass to developer-agent"
+        description: "Feature branch to pass to speckit-developer-agent"
         value: ${{ jobs.bootstrap.outputs.branch_name }}
       pr_number:
-        description: "Draft PR number to pass to developer-agent"
+        description: "Draft PR number to pass to speckit-developer-agent"
         value: ${{ jobs.bootstrap.outputs.pr_number }}
       feature_dir:
         description: "Feature directory containing speckit-state.json"
@@ -91,10 +91,10 @@ jobs:
 
       - name: Configure git
         run: |
-          git config user.email "developer-agent@sdlc-agents.bot"
-          git config user.name "SDLC Developer Agent"
+          git config user.email "speckit-developer-agent@sdlc-agents.bot"
+          git config user.name "SDLC SpecKit Developer Agent"
 
-      - name: Run developer-agent bootstrap
+      - name: Run speckit-developer-agent bootstrap
         id: run
         env:
           GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
@@ -103,4 +103,4 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           ISSUE_KEY: ${{ inputs.issue_key }}
           BRANCH_NAME: ${{ inputs.branch_name }}
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/developer-agent/developer-agent-bootstrap.ts
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-bootstrap.ts
