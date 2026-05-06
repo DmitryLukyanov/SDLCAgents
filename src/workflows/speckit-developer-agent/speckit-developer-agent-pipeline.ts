@@ -16,7 +16,7 @@
  *   spec_kit_step                   — executes a spec-kit step (specify, clarify, etc.) via Codex
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   decodeCallerConfig,
@@ -170,7 +170,7 @@ async function runValidateSpecKitOutput(ctx: RunnerContext, step: PipelineStep):
     }
 
     // Check file size
-    const stats = require('fs').statSync(artifactPath);
+    const stats = statSync(artifactPath);
     if (stats.size < minFileSize) {
       tooSmall.push(`${artifact} (${stats.size} bytes < ${minFileSize} bytes)`);
     }
