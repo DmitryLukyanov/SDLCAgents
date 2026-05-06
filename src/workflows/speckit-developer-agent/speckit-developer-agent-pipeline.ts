@@ -150,23 +150,28 @@ async function runValidateSpecKitOutput(ctx: RunnerContext, step: PipelineStep):
   console.log(`[validate_spec_kit_output] Validating ${stepName} outputs...`);
 
   const featureDir = ctx.featureDir;
-  if (!featureDir) {
-    const reason = `Feature directory not set in context`;
-    console.error(`[validate_spec_kit_output] ❌ ${reason}`);
-    return { status: 'stop', reason };
-  }
 
   // Get expected artifacts from step config
   const expectedArtifacts = (step.expectedArtifacts as string[]) ?? [];
   const minFileSize = (step.minFileSize as number) ?? 0;
   const validateCodeChanges = (step.validateCodeChanges as boolean) ?? false;
+  // When artifactsBase === 'repo_root', artifacts are resolved relative to the repo root (cwd)
+  // rather than the feature directory. Use this for steps that write to repo root (e.g. code_review).
+  const artifactsBase = (step.artifactsBase as string | undefined) ?? 'feature_dir';
+
+  if (artifactsBase === 'feature_dir' && !featureDir) {
+    const reason = `Feature directory not set in context`;
+    console.error(`[validate_spec_kit_output] ❌ ${reason}`);
+    return { status: 'stop', reason };
+  }
 
   // Check each expected artifact
   const missing: string[] = [];
   const tooSmall: string[] = [];
 
   for (const artifact of expectedArtifacts) {
-    const artifactPath = join(featureDir, artifact);
+    const baseDir = artifactsBase === 'repo_root' ? process.cwd() : (featureDir ?? process.cwd());
+    const artifactPath = join(baseDir, artifact);
 
     if (!existsSync(artifactPath)) {
       missing.push(artifact);

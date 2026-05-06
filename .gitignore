@@ -6,3 +6,8 @@ node_modules/
 async-invocation-handoff/
 # Legacy / speckit-developer-agent local paths
 spec-output/
+
+# Code review artifacts (written by speckit-code_review skill)
+code-review-summary.md
+.code-review-verdict
+code-review-comments.json

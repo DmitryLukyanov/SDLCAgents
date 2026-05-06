@@ -241,6 +241,15 @@ async function main(): Promise<void> {
       /\/ai-teammate\/[^/]+\.config$/,
       '/speckit-developer-agent/speckit-developer-agent.config'
     );
+    if (speckitConfigFile === configFile) {
+      // Pattern did not match — configFile is not in the expected ai-teammate directory structure.
+      // Log a clear warning so the failure is easy to diagnose when the downstream workflow rejects the path.
+      console.warn(
+        `[dispatch-pipeline-async-child] WARNING: Could not derive speckit-developer-agent config path from ` +
+        `AI Teammate config "${configFile}". Expected pattern "/<repo>/ai-teammate/<name>.config" was not matched. ` +
+        `Using the original configFile path as a fallback — this will likely fail if the format is unexpected.`
+      );
+    }
     console.log(`[dispatch-pipeline-async-child]   - config_file: "${speckitConfigFile}" (derived from AI Teammate config)`);
 
     inputs = {
