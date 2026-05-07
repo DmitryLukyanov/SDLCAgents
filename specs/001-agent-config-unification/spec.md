@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "Unify agent configuration and cross-agent contracts; use GitHub issues as memory; enforce model-in-config for AI steps; standardize artifacts and issue updates; make new agents config-first; fix AI-teammate resume error: unexpected workflow_dispatch inputs [\"config_file\"]."
 
+## Clarifications
+
+### Session 2026-05-07
+
+- Q: Canonical artifact naming (Invocation Inputs) → A: Issue + step: `invocation-inputs_<issueKey>_<stepId>`
+- Q: “Model value in config” scope → A: Per-agent only (single agent-level `model`; no per-step overrides)
+- Q: Where should agents write “updates” in the GitHub issue? → A: Body + comments (body = latest snapshot; comments = timeline)
+- Q: How should “contract configuration in config files” be scoped? → A: Reusable named contracts + step reference
+- Q: If GitHub issue updates fail, what should the agent do? → A: Hard fail the run
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Configure an agent consistently (Priority: P1)
@@ -93,12 +103,13 @@ As an operator, I want AI Teammate to reliably dispatch the Developer Agent duri
 
 - **FR-001**: System MUST define a unified, documented configuration approach for all agents (rules, steps, contracts, and per-agent knobs) that is consistent across existing agents and future additions.
 - **FR-002**: System MUST support configuring each agent’s routing rules via config (for example “which tickets to pick up” and “which workflow/config to dispatch next”), with consistent field names and validation rules.
-- **FR-003**: System MUST store run history and progress updates in the GitHub issue for the ticket, including links/identifiers to any artifacts produced.
-- **FR-004**: System MUST support cross-agent communication via GitHub artifacts plus a declarative contract defined in config (inputs/outputs), and MUST validate the contract at handoff and resume boundaries.
-- **FR-005**: Each agent step that uses an AI model MUST have a model value in config (directly or via a consistent override mechanism), and the effective model used MUST be recorded in the issue history.
-- **FR-006**: System MUST upload the agent’s input arguments (the canonical “invocation inputs” for a run/step) into a GitHub artifact with a canonical name that uniquely identifies it for the run and step.
+- **FR-003**: System MUST use the GitHub issue as durable memory by writing (a) a latest structured snapshot in the issue **body** and (b) chronological run history as issue **comments**, including links/identifiers to any artifacts produced.
+- **FR-004**: System MUST support cross-agent communication via GitHub artifacts plus a declarative, reusable contract defined in config (named contracts referenced by steps), and MUST validate the contract at handoff and resume boundaries.
+- **FR-005**: Each agent that uses an AI model MUST define a single agent-level `model` value in its config (no per-step overrides), and the effective model used MUST be recorded in the issue history.
+- **FR-006**: System MUST upload the agent’s input arguments (the canonical “invocation inputs” for a run/step) into a GitHub artifact with canonical name `invocation-inputs_<issueKey>_<stepId>`.
 - **FR-007**: System MUST make creating a new agent “config-first”: a new config can be introduced without changing unrelated code; missing step runners MUST be surfaced as explicit, actionable errors.
 - **FR-008**: System MUST prevent dispatching GitHub workflows with unexpected `workflow_dispatch` inputs; dispatch payloads MUST match the target workflow input schema.
+- **FR-009**: If the agent cannot write required GitHub issue updates (body snapshot or timeline comment), the run MUST fail with an actionable error explaining what operation failed and why.
 
 ### Key Entities *(include if feature involves data)*
 
