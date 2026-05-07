@@ -7,6 +7,11 @@ import { Octokit } from '@octokit/rest';
 import type { CallerConfigParams } from './caller-config.js';
 import { encodeCallerConfig } from './caller-config.js';
 import { assertWorkflowDispatchInputsAllowed } from './workflow-dispatch-validate.js';
+import {
+  assertTerminalMatchesPipelineChildWorkflow,
+  getAllowedDispatchInputKeys,
+  getPipelineChildAsyncDispatchShape,
+} from './workflow-dispatch-inputs-registry.js';
 
 /**
  * Payload for `POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches`
@@ -93,6 +98,100 @@ export function buildAiTeammateWorkflowDispatchInputsWithCaller(params: {
     config_file: params.configFile,
     caller_config: params.callerConfigEncoded,
   };
+}
+
+/** Baseline inputs for `standalone` child workflows (extend registry + this switch when adding targets). */
+function buildStandaloneChildDispatchBaseline(
+  workflowFile: string,
+  handoff: { issueKey: string; githubIssueNumber: string; step: string },
+): Record<string, string> {
+  const wf = workflowFile.trim();
+  if (wf === 'speckit-developer-agent.yml') {
+    return {
+      mode: 'speckit',
+      issue_number: handoff.githubIssueNumber,
+      issue_key: handoff.issueKey,
+      step: handoff.step,
+      branch_name: '',
+      pr_number: '',
+      prompt: '',
+    };
+  }
+  if (wf === 'speckit-developer-agent-proceed.yml') {
+    return { pr_number: '' };
+  }
+  throw new Error(
+    `[routing_helper] No standalone dispatch baseline for "${workflowFile}". ` +
+      'Add defaults in buildStandaloneChildDispatchBaseline.',
+  );
+}
+
+/**
+ * Merge `async_call.inputs` into dispatch inputs; reject keys not declared on the target workflow.
+ */
+export function mergeAsyncCallInputsForTargetWorkflow(
+  workflowFile: string,
+  inputs: Record<string, string>,
+  asyncCallInputs: Record<string, string> | undefined,
+  configLabel: string,
+): void {
+  if (!asyncCallInputs) return;
+  const allowed = getAllowedDispatchInputKeys(workflowFile.trim());
+  if (!allowed) {
+    throw new Error(`${configLabel}: "${workflowFile}" has no input allowlist — add to WORKFLOW_DISPATCH_STRING_INPUT_KEYS.`);
+  }
+  for (const [k, v] of Object.entries(asyncCallInputs)) {
+    if (!allowed.has(k)) {
+      throw new Error(
+        `${configLabel}: async_call.inputs.${k} is not a declared input on "${workflowFile}" ` +
+          `(allowed: ${[...allowed].sort().join(', ')}).`,
+      );
+    }
+    if (v !== undefined && v !== null) inputs[k] = String(v);
+  }
+}
+
+/**
+ * Build `workflow_dispatch.inputs` for a child started from the AI Teammate pipeline async handoff job.
+ * Centralizes parent_correlation vs standalone shapes and terminal rules (see registry).
+ */
+export function buildAsyncChildWorkflowDispatchInputs(params: {
+  workflowFile: string;
+  terminal: boolean;
+  configLabel: string;
+  concurrencyKey: string;
+  configFile: string;
+  callerConfigEncoded: string;
+  handoffIssueKey: string;
+  handoffGithubIssueNumber: string;
+  /** Default for workflows that use a `step` input (e.g. SpecKit entry); overridden by `async_call.inputs`. */
+  standaloneDefaultStep: string;
+  asyncCallInputs?: Record<string, string>;
+}): Record<string, string> {
+  const wf = params.workflowFile.trim();
+  assertTerminalMatchesPipelineChildWorkflow(wf, params.terminal, params.configLabel);
+  const shape = getPipelineChildAsyncDispatchShape(wf);
+  if (!shape) {
+    throw new Error(`[routing_helper] Missing pipeline child shape for "${wf}"`);
+  }
+
+  let inputs: Record<string, string>;
+  if (shape === 'parent_correlation') {
+    inputs = buildAiTeammateWorkflowDispatchInputsWithCaller({
+      concurrencyKey: params.concurrencyKey,
+      configFile: params.configFile,
+      callerConfigEncoded: params.callerConfigEncoded,
+    });
+  } else {
+    inputs = buildStandaloneChildDispatchBaseline(wf, {
+      issueKey: params.handoffIssueKey.trim(),
+      githubIssueNumber: params.handoffGithubIssueNumber.trim(),
+      step: params.standaloneDefaultStep.trim() || 'specify',
+    });
+  }
+
+  mergeAsyncCallInputsForTargetWorkflow(wf, inputs, params.asyncCallInputs, params.configLabel);
+  return inputs;
 }
 
 /** Repo defaults for resolving which workflow/ref to dispatch (structurally matches `ScrumMasterContext`). */

@@ -15,8 +15,8 @@ import { parseAgentPipelineSteps } from '../../lib/pipeline-config.js';
 import { buildParentRunFields, mergeCallerConfigForAsyncChildDispatch } from '../../lib/pipeline-callback-config.js';
 import { decodeCallerConfig, isParentAsyncChildResumeCallerConfig } from '../../lib/caller-config.js';
 import {
+  buildAsyncChildWorkflowDispatchInputs,
   buildGithubWorkflowDispatchPayload,
-  buildAiTeammateWorkflowDispatchInputsWithCaller,
   dispatchGithubWorkflow,
 } from '../../lib/routing_helper.js';
 import { buildInvocationInputsArtifactRelativePath } from '../../lib/invocation-inputs-artifact.js';
@@ -232,60 +232,31 @@ async function main(): Promise<void> {
         ...parentFields,
       });
 
-  // Build inputs based on the target workflow
-  let inputs: Record<string, string> = {};
+  const issueKey = handoff.issueKey || concurrencyKey;
+  const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
+  const standaloneDefaultStep = ac.inputs?.step?.trim() || 'specify';
 
-  // For speckit-developer-agent.yml (terminal operation), build developer agent inputs
-  console.log(`[dispatch-pipeline-async-child] Checking if terminal && workflowFile === 'speckit-developer-agent.yml': terminal=${terminal}, workflowFile="${workflowFile}"`);
-  if (terminal && workflowFile === 'speckit-developer-agent.yml') {
-    const issueKey = handoff.issueKey || concurrencyKey;
-    const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
-    // Allow step to be configured via async_call.inputs.step, default to 'specify'
-    const stepValue = ac.inputs?.step?.trim() || 'specify';
+  console.log(
+    `[dispatch-pipeline-async-child] Building dispatch inputs via registry (workflowFile="${workflowFile}", terminal=${terminal})`,
+  );
+  console.log(
+    `[dispatch-pipeline-async-child]   - issueKey: "${issueKey}", githubIssueNumber: "${githubIssueNumber}", default step: "${standaloneDefaultStep}"`,
+  );
 
-    console.log(`[dispatch-pipeline-async-child] Building developer agent inputs...`);
-    console.log(`[dispatch-pipeline-async-child]   - issueKey: "${issueKey}"`);
-    console.log(`[dispatch-pipeline-async-child]   - githubIssueNumber: "${githubIssueNumber}"`);
-    console.log(`[dispatch-pipeline-async-child]   - step: "${stepValue}" (from async_call.inputs.step or default)`);
+  const inputs = buildAsyncChildWorkflowDispatchInputs({
+    workflowFile,
+    terminal,
+    configLabel: configFile,
+    concurrencyKey,
+    configFile,
+    callerConfigEncoded: mergedCaller,
+    handoffIssueKey: issueKey,
+    handoffGithubIssueNumber: githubIssueNumber,
+    standaloneDefaultStep,
+    asyncCallInputs: ac.inputs,
+  });
 
-    inputs = {
-      mode: 'speckit',
-      issue_number: githubIssueNumber,
-      issue_key: issueKey,
-      step: stepValue,
-      branch_name: '',
-      pr_number: '',
-      prompt: '',
-    };
-
-    console.log(
-      `[dispatch-pipeline-async-child] Developer agent inputs built: mode=${inputs.mode}, issue_key=${inputs.issue_key}, issue_number=${inputs.issue_number}, step=${inputs.step}`,
-    );
-  } else {
-    // For other workflows (like business-analyst.yml), use AI Teammate inputs
-    console.log(`[dispatch-pipeline-async-child] Building AI Teammate inputs (not speckit-developer-agent.yml)...`);
-    inputs = {
-      ...buildAiTeammateWorkflowDispatchInputsWithCaller({
-        concurrencyKey,
-        configFile,
-        callerConfigEncoded: mergedCaller,
-      }),
-    };
-    console.log(`[dispatch-pipeline-async-child] AI Teammate inputs built with ${Object.keys(inputs).length} keys: ${Object.keys(inputs).join(', ')}`);
-  }
-
-  // Merge any additional inputs from config
-  if (ac.inputs) {
-    console.log(`[dispatch-pipeline-async-child] Merging additional inputs from async_call.inputs (${Object.keys(ac.inputs).length} keys)`);
-    for (const [k, v] of Object.entries(ac.inputs)) {
-      if (v !== undefined && v !== null) inputs[k] = String(v);
-    }
-  }
-  if (workflowFile.trim() === 'speckit-developer-agent.yml') {
-    delete inputs.config_file;
-  }
-
-  console.log(`[dispatch-pipeline-async-child] Final inputs: ${Object.keys(inputs).length} total keys`);
+  console.log(`[dispatch-pipeline-async-child] Final inputs (${Object.keys(inputs).length} keys): ${Object.keys(inputs).join(', ')}`);
 
   const invIssueKey = effectiveHandoffIssueKey(concurrencyKey, handoff);
   const invRel = buildInvocationInputsArtifactRelativePath(invIssueKey, stepId);
