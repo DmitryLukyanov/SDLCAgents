@@ -11,8 +11,10 @@ Unify how all agents are configured (rules, steps, contracts, models) and how th
 communicate (artifacts + declarative contracts) while using GitHub issues as the durable
 memory surface (body snapshot + timeline comments). Fix the AI Teammate → SpecKit
 Developer Agent dispatch regression where a terminal workflow is dispatched with
-unexpected `workflow_dispatch` inputs (currently `config_file`), and improve the existing
-SpecKit “step-by-step + extra validation” flow (Codex via `openai/codex-action@v1`).
+unexpected `workflow_dispatch` inputs (currently `config_file`). The SpecKit Developer
+Agent already runs its step-by-step flow with Codex through `openai/codex-action@v1`; this
+feature must **preserve** that approach (orchestration stays agent-agnostic; do not replace
+Codex invocation with ad-hoc alternatives).
 
 ## Technical Context
 
@@ -29,7 +31,7 @@ SpecKit “step-by-step + extra validation” flow (Codex via `openai/codex-acti
 **Target Platform**: GitHub Actions runners (consumer repos call reusable workflows from SDLCAgents)  
 **Project Type**: TypeScript library + reusable GitHub Actions workflows  
 **Performance Goals**: Dispatch and validation overhead low enough to keep typical ticket runs within CI expectations (seconds/minutes, not hours)  
-**Constraints**: Must be agent-agnostic and config-first; issue updates are mandatory (fail run if cannot write)  
+**Constraints**: Must be agent-agnostic and config-first; issue updates are mandatory (fail run if cannot write). SpecKit Developer Agent steps MUST continue to invoke Codex only via `openai/codex-action@v1` (existing pattern—no parallel runner path in scope for this feature).  
 **Scale/Scope**: Multiple agents and steps per ticket; frequent resumes/retries; needs predictable artifact naming and validation
 
 ## Constitution Check
