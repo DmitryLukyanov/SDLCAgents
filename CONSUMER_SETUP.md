@@ -69,7 +69,7 @@ Then customize:
 Run this once in your repo root and commit the result:
 
 ```bash
-uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
+uvx --from git+https://github.com/github/spec-kit.git@v0.8.6 \
   specify init --here --ai copilot --script ps --force
 ```
 

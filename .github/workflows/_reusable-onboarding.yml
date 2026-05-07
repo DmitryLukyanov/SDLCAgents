@@ -1,9 +1,9 @@
 # Reusable onboarding workflow.
 #
 # File sources:
-#   spec-kit (via `specify init --ai codex`):
+#   spec-kit (via `specify init --ai codex --ai-skills`):
 #     - .specify/scripts/, .specify/templates/, .specify/integrations/
-#     - .agents/skills/speckit-{step}/SKILL.md  (native Codex skills, 9 total)
+#     - .agents/skills/speckit-{step}/SKILL.md  (native Codex skills for CI)
 #
 #   SDLCAgents (single source of truth, overrides spec-kit defaults):
 #     - .github/workflows/    ← consumer-templates/
@@ -11,7 +11,7 @@
 #     - .github/prompts/      ← .github/prompts/
 #     - .github/copilot-instructions.md
 #     - .specify/scripts/     ← .specify/scripts/
-#     - .agents/skills/       ← .agents/skills/   (overrides spec-kit generated skills)
+#     - .cursor/skills/       ← repo stores skills here; copied to consumer .agents/skills/ only
 #     - config/spec-kit/      ← config/spec-kit/
 #     - config/workflows/     ← config/workflows/
 #
@@ -61,9 +61,10 @@ jobs:
           # copies fresh files and records them in speckit.manifest.json.
           # Without this, on re-runs all files are "skipped" (already exist) and
           # the manifest is saved as {"files": {}}.
-          rm -rf .specify/scripts .specify/templates
-          uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
-            specify init --here --ai codex --script sh --force --ignore-agent-tools
+          rm -rf .specify/scripts .specify/templates .agents/skills
+          uvx --from git+https://github.com/github/spec-kit.git@v0.8.6 \
+            specify init --here --ai codex --ai-skills \
+            --script sh --force --ignore-agent-tools
           echo "✅ spec-kit initialised"
           echo "   Codex skills generated:"
           find .agents/skills -name 'SKILL.md' 2>/dev/null | sort | sed 's/^/    /' || true
@@ -82,7 +83,7 @@ jobs:
             .github/prompts
             .github/copilot-instructions.md
             .specify/scripts
-            .agents/skills
+            .cursor/skills
             config/spec-kit
             config/workflows
 
@@ -106,10 +107,10 @@ jobs:
           cp -r _sdlc_agents/.specify/scripts/. .specify/scripts/
           echo "  copied .specify/scripts/"
 
-          # ── .agents/skills (from SDLCAgents — overrides spec-kit generated skills) ──
+          # ── .agents/skills (SDLCAgents stores skills under `.cursor/skills/` on disk) ──
           mkdir -p .agents/skills
-          cp -r _sdlc_agents/.agents/skills/. .agents/skills/
-          echo "  copied .agents/skills/"
+          cp -r _sdlc_agents/.cursor/skills/. .agents/skills/
+          echo "  copied SDLCAgents .cursor/skills → .agents/skills/ (Codex)"
 
           # ── .github/content (PR bodies, job-summary snippets) ───────
           mkdir -p .github/content
@@ -126,7 +127,7 @@ jobs:
 
           # ── Re-hash manifests after SDLCAgents overrides ──────────────
           # spec-kit recorded hashes for its generated files; now that we've
-          # overwritten .specify/scripts/, .github/agents/, and
+          # overwritten .specify/scripts/, .agents/skills/, .github/agents/, and
           # .github/prompts/ with our own files, update both manifests so
           # hashes match what's on disk — otherwise `specify integration
           # uninstall` would see mismatches and silently skip those files.
@@ -285,5 +286,5 @@ jobs:
 
       - name: Run spec-kit check
         run: |
-          uvx --from git+https://github.com/github/spec-kit.git@v0.5.0 \
+          uvx --from git+https://github.com/github/spec-kit.git@v0.8.6 \
             specify check

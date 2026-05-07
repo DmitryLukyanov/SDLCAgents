@@ -81,11 +81,11 @@ jobs:
       # ── Step 4: Validate spec-kit in consumer repo ──────────────────────
       - name: Validate Spec-Kit version (consumer vs SDLCAgents)
         env:
-          SPECKIT_TARGET_VERSION: "0.5.0"
+          SPECKIT_TARGET_VERSION: "0.8.6"
         run: |
           if [ ! -f ".specify/init-options.json" ]; then
             echo "::error::Spec-Kit is not initialized in this repo."
-            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai codex --script sh --force"
+            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
             exit 1
           fi
 
@@ -93,7 +93,7 @@ jobs:
           AGENTS_VERSION=$(jq -r '.speckit_version // "0.0.0"' .sdlc-agents/.specify/init-options.json 2>/dev/null || echo "0.0.0")
           if [ "$CURRENT" != "$AGENTS_VERSION" ]; then
             echo "::error::Spec-Kit version mismatch: consumer has v${CURRENT}, SDLCAgents requires v${AGENTS_VERSION}."
-            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${AGENTS_VERSION} specify init --here --ai codex --script sh --force"
+            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${AGENTS_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
             exit 1
           fi
 
