@@ -17,7 +17,7 @@ inputs:
       Used only when fail_on_not_ready is true: printed in the final ::error:: hint
       (spec-kit specify init via uvx).
     required: false
-    default: '0.5.0'
+    default: '0.8.6'
 
 outputs:
   speckit_ready:
@@ -65,7 +65,7 @@ runs:
         if [ "$MISSING" -eq 1 ]; then
           echo "speckit_ready=false" >> "$GITHUB_OUTPUT"
           if [ "$FAIL_ON_NOT_READY" = "true" ]; then
-            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SUGGEST_UVX_VERSION} specify init --here --ai codex --script sh --force"
+            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SUGGEST_UVX_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
             exit 1
           fi
           echo ""

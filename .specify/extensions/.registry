@@ -8,14 +8,21 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "copilot": [
+        "agy": [
           "speckit.git.feature",
           "speckit.git.validate",
           "speckit.git.remote",
           "speckit.git.initialize",
           "speckit.git.commit"
         ],
-        "cursor-agent": [
+        "codex": [
+          "speckit.git.feature",
+          "speckit.git.validate",
+          "speckit.git.remote",
+          "speckit.git.initialize",
+          "speckit.git.commit"
+        ],
+        "copilot": [
           "speckit.git.feature",
           "speckit.git.validate",
           "speckit.git.remote",
@@ -24,7 +31,7 @@
         ]
       },
       "registered_skills": [],
-      "installed_at": "2026-05-07T00:01:51.316006+00:00"
+      "installed_at": "2026-05-07T18:22:17.238781+00:00"
     }
   }
 }
