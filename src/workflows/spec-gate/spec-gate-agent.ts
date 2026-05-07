@@ -22,6 +22,7 @@ import { Octokit } from '@octokit/rest';
 import { buildSpecGateCodexPromptDocument, interpretGateCodexOutput } from './analyze-spec.js';
 import { STEP_FILES, STEP_ORDER, type GateAnalysisResult, type SpeckitStep } from './spec-gate-types.js';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
+import { assertWorkflowDispatchInputsAllowed } from '../../lib/workflow-dispatch-validate.js';
 
 const PROCEED_TEMPLATE = loadTemplate(import.meta.url, 'templates', 'pr-comment-proceed.md');
 const HIL_TEMPLATE     = loadTemplate(import.meta.url, 'templates', 'pr-comment-hil.md');
@@ -165,12 +166,14 @@ async function postGateResults(result: GateAnalysisResult, ctx: GatePostContext)
     console.log(
       `[gate] Dispatching ${PROCEED_WORKFLOW_ID} ref=${defaultBranch} pr=${prNumber}`,
     );
+    const proceedInputs = { pr_number: String(prNumber) };
+    assertWorkflowDispatchInputsAllowed(PROCEED_WORKFLOW_ID, proceedInputs);
     await octokitPat.rest.actions.createWorkflowDispatch({
       owner,
       repo,
       workflow_id: PROCEED_WORKFLOW_ID,
       ref: defaultBranch,
-      inputs: { pr_number: String(prNumber) },
+      inputs: proceedInputs,
     });
     console.log('[gate] speckit-developer-agent-proceed workflow_dispatch succeeded');
     dispatchedProceed = true;

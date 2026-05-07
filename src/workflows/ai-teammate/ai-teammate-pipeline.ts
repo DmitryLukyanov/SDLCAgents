@@ -432,6 +432,7 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
         issueKey,
         triggerStep: triggerStep as PipelineStepConfig,
         contextLabel: 'Pipeline async resume',
+        agentConfigPathAbs: ctx.configFile,
       });
 
       const t0 = Date.now();

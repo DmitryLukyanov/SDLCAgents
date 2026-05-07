@@ -50,6 +50,23 @@ export function normalizePipelineStepIds(steps: PipelineStepConfig[]): PipelineS
   });
 }
 
+/** FR-023: duplicate normalized ids are invalid. */
+export function assertUniqueNormalizedStepIds(steps: PipelineStepConfig[], configLabel: string): void {
+  const ids = steps.map((s) => s.id!);
+  const seen = new Set<string>();
+  const dups = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) dups.add(id);
+    seen.add(id);
+  }
+  if (dups.size > 0) {
+    throw new Error(
+      `${configLabel}: duplicate step id(s) after normalization: ${[...dups].sort().join(', ')} ` +
+        '(set unique steps[].id values)',
+    );
+  }
+}
+
 export function parseAgentPipelineSteps(rawConfigText: string, configLabel: string): PipelineStepConfig[] {
   let root: AgentJsonWithPipeline;
   try {
@@ -73,7 +90,9 @@ export function parseAgentPipelineSteps(rawConfigText: string, configLabel: stri
       }
     }
   }
-  return normalizePipelineStepIds(steps as PipelineStepConfig[]);
+  const normalized = normalizePipelineStepIds(steps as PipelineStepConfig[]);
+  assertUniqueNormalizedStepIds(normalized, configLabel);
+  return normalized;
 }
 
 /** First step that declares `async_call`, or -1 if none. */

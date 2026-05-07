@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { validateRouterRules } from '../../lib/agent-config-validate.js';
 import type { SmConfig } from './sm-types.js';
 
 export async function loadSmConfig(filePath: string): Promise<SmConfig> {
@@ -9,6 +10,7 @@ export async function loadSmConfig(filePath: string): Promise<SmConfig> {
   if (!data.rules || !Array.isArray(data.rules)) {
     throw new Error(`Scrum Master config must contain a "rules" array: ${abs}`);
   }
+  validateRouterRules(data.rules, abs);
   return data;
 }
 

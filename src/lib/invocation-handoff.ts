@@ -5,18 +5,19 @@
  * Import **this** module from any workflow/CI entrypoint so handoff rules stay consistent (AI Teammate,
  * future agents, or other repos that copy the same artifact layout).
  */
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   assertAsyncHandoffPrimaryOutputPresent,
   handoffIssueRootAbsolute,
   invocationContractsArtifactPathsEqual,
   loadAgentInvocationContractFromConfigFile,
+  loadNamedContractsFromConfigRoot,
   parseAgentInvocationContractFromStep,
   readInvocationHandoffManifestFile,
   type AgentInvocationContract,
 } from './agent-invocation-contract.js';
-import type { PipelineStepConfig } from './pipeline-config.js';
+import type { AgentJsonWithPipeline, PipelineStepConfig } from './pipeline-config.js';
 
 export interface VerifyPreparedHandoffBundleParams {
   /** Repository root (usually `process.cwd()`). */
@@ -66,6 +67,11 @@ export interface AssertAsyncResumeHandoffParams {
   triggerStep: PipelineStepConfig;
   /** Short label prepended to thrown errors (e.g. `Pipeline async resume`). */
   contextLabel: string;
+  /**
+   * Absolute path to pipeline agent JSON — required when the async step uses `contractRef`
+   * (loads `contracts` from the same file).
+   */
+  agentConfigPathAbs?: string;
 }
 
 /**
@@ -77,11 +83,17 @@ export function assertManifestMatchesAsyncStepAndPrimaryOutputPresent(
   p: AssertAsyncResumeHandoffParams,
 ): AgentInvocationContract {
   const manifest = readInvocationHandoffManifestFile(handoffIssueRootAbsolute(p.cwd, p.issueKey));
-  const stepContract = parseAgentInvocationContractFromStep(p.triggerStep);
+  let named: Record<string, AgentInvocationContract> = {};
+  if (p.agentConfigPathAbs) {
+    const raw = readFileSync(p.agentConfigPathAbs, 'utf8');
+    const root = JSON.parse(raw) as AgentJsonWithPipeline;
+    named = loadNamedContractsFromConfigRoot(root, p.agentConfigPathAbs);
+  }
+  const stepContract = parseAgentInvocationContractFromStep(p.triggerStep, named);
   if (!invocationContractsArtifactPathsEqual(manifest.contract, stepContract)) {
     throw new Error(
-      `${p.contextLabel}: invocation-handoff-manifest.json contract does not match the agent config ` +
-        `async step "${String(p.triggerStep.id)}". Refresh the handoff bundle from the same config or fix config drift.`,
+      `${p.contextLabel}: contract drift — invocation-handoff-manifest.json does not match the effective contract ` +
+        `for async step "${String(p.triggerStep.id)}" (regenerate the handoff bundle or fix config / named contracts).`,
     );
   }
   assertAsyncHandoffPrimaryOutputPresent(p.issueKey, manifest.contract);

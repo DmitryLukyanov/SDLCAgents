@@ -6,7 +6,9 @@
  */
 
 import { readFileSync } from 'node:fs';
-import type { PipelineStepConfig } from '../../lib/pipeline-config.js';
+import { validatePipelineAgentShape } from '../../lib/agent-config-validate.js';
+import { loadNamedContractsFromConfigRoot } from '../../lib/agent-invocation-contract.js';
+import { parseAgentPipelineSteps, type AgentJsonWithPipeline, type PipelineStepConfig } from '../../lib/pipeline-config.js';
 
 export interface SpeckitDeveloperAgentConfig {
   /** Agent identifier */
@@ -78,6 +80,20 @@ export function loadSpeckitDeveloperAgentConfig(configFilePath: string): Speckit
     }
     if (!config.description) {
       throw new Error('Config must have a "description" field');
+    }
+
+    if (config.params?.runner === 'pipeline' && config.params.steps?.length) {
+      const steps = parseAgentPipelineSteps(content, configFilePath);
+      const root = config as unknown as AgentJsonWithPipeline;
+      validatePipelineAgentShape(root, steps, configFilePath);
+      const named = loadNamedContractsFromConfigRoot(root, configFilePath);
+      for (const step of steps) {
+        const refRaw = (step as unknown as { contractRef?: unknown }).contractRef;
+        const ref = typeof refRaw === 'string' ? refRaw.trim() : '';
+        if (ref && !named[ref]) {
+          throw new Error(`${configFilePath} [pipeline_agent] contractRef "${ref}" not found in contracts (FR-017)`);
+        }
+      }
     }
 
     return config;

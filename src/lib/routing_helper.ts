@@ -6,6 +6,7 @@
 import { Octokit } from '@octokit/rest';
 import type { CallerConfigParams } from './caller-config.js';
 import { encodeCallerConfig } from './caller-config.js';
+import { assertWorkflowDispatchInputsAllowed } from './workflow-dispatch-validate.js';
 
 /**
  * Payload for `POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches`
@@ -143,6 +144,10 @@ export async function dispatchGithubWorkflow(
     await client.dispatchWorkflow(payload);
     return;
   }
+  assertWorkflowDispatchInputsAllowed(
+    String(payload.workflow_id),
+    payload.inputs as Record<string, string>,
+  );
   await client.rest.actions.createWorkflowDispatch({
     owner: payload.owner,
     repo: payload.repo,

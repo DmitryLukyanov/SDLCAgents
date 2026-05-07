@@ -34,6 +34,22 @@ export async function runCreateGithubIssue(
   await deps.updateGithubIssueBody(owner, repo, issueNumber, issueBody);
   console.log(`  ✅ Set GitHub issue #${issueNumber} body with Jira snapshot`);
 
+  const workflowRef = process.env.GITHUB_REF_NAME?.trim() || process.env.GITHUB_SHA?.trim() || 'unknown';
+  await deps.addGithubIssueComment(
+    owner,
+    repo,
+    issueNumber,
+    [
+      '### AI Teammate — pipeline start',
+      '',
+      `- **Config kind:** pipeline_agent`,
+      `- **Config file:** \`${ctx.configFile}\``,
+      `- **Workflow ref:** \`${workflowRef}\``,
+      `- **Jira key:** \`${issueKey}\``,
+    ].join('\n'),
+  );
+  console.log(`  ✅ Timeline: pipeline start comment on #${issueNumber}`);
+
   console.log(`  ✅ Created GitHub issue #${issueNumber}`);
   return { status: 'continue' };
 }
