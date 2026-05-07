@@ -96,6 +96,9 @@ As an operator, I want AI Teammate to reliably dispatch the Developer Agent duri
 - What happens when a child agent artifact bundle exists but is incomplete (missing required contract file, empty file, wrong path)?
 - What happens when a config defines a contract that conflicts with an existing deployed workflow’s accepted inputs?
 - What happens when multiple agents write updates concurrently to the same GitHub issue (ordering, idempotency, duplication)?
+- What happens when a config references a named contract that does not exist?
+- What happens when a step references a contract and applies overrides that conflict with the named contract?
+- What happens when the invocation inputs artifact cannot be uploaded (but GitHub issue updates are mandatory)?
 
 ## Requirements *(mandatory)*
 
@@ -110,6 +113,22 @@ As an operator, I want AI Teammate to reliably dispatch the Developer Agent duri
 - **FR-007**: System MUST make creating a new agent “config-first”: a new config can be introduced without changing unrelated code; missing step runners MUST be surfaced as explicit, actionable errors.
 - **FR-008**: System MUST prevent dispatching GitHub workflows with unexpected `workflow_dispatch` inputs; dispatch payloads MUST match the target workflow input schema.
 - **FR-009**: If the agent cannot write required GitHub issue updates (body snapshot or timeline comment), the run MUST fail with an actionable error explaining what operation failed and why.
+- **FR-010**: The unified configuration approach MUST explicitly support two config kinds:
+  - **Router configs**: top-level non-empty `rules[]`; each rule MUST include at minimum a dispatch target (`configFile`, `workflowFile` or equivalent) and selection criteria where applicable (e.g. `jql` for Jira-driven routers).
+  - **Pipeline agent configs**: top-level `name`, `description`, non-empty `params.steps[]`, optional `contracts{}`, and required `model` when the agent uses an AI model.
+- **FR-011**: System MUST validate config files and fail fast with a single, actionable error that includes: config path, config kind, and the exact invalid/missing field(s).
+- **FR-012**: System MUST define and record a **config identity** in GitHub issue updates: `{ config_file_path, workflow_ref (or equivalent version identifier) }`.
+- **FR-013**: System MUST define `stepId` as the stable step identifier from configuration (`steps[].id`, or a deterministic default if omitted) and MUST use it consistently for resume correlation and canonical artifact naming.
+- **FR-014**: Shared plumbing MUST remain reusable across agents (no per-agent forks without justification): config parsing/validation, routing/dispatch payload building, workflow dispatch input validation, contract validation, and issue memory writes.
+- **FR-015**: “Unique agent functionality” MUST be limited to implementing new step runners/operations and their domain-specific side effects; introducing a new agent MUST NOT require duplicating routing/dispatch/config parsing logic.
+- **FR-016**: For dispatch input validation failures, the error reported in the GitHub issue timeline MUST list: target workflow, provided input keys, and the rejected/unknown keys.
+- **FR-017**: If a config references a named contract that does not exist, the run MUST fail during config validation and the error MUST name the missing contract key.
+- **FR-018**: If step-level contract overrides create a conflict with the named contract (e.g., invalid path, unsafe path, or ambiguous primary output), the run MUST fail during validation with a “contract override conflict” error.
+- **FR-019**: If uploading the invocation inputs artifact fails, the run MUST fail and MUST still attempt to write a final GitHub issue update describing the failure (unless GitHub issue updates also fail, in which case FR-009 governs).
+- **FR-020**: Requirements MUST explicitly prohibit writing secrets to GitHub issues or artifacts. Any issue/artefact updates MUST be limited to non-secret metadata, links, and safe excerpts.
+- **FR-021**: On resume or retry after async handoff, the effective config file, named contracts, and `stepId` correlation MUST match the run that produced the stored handoff artifacts; otherwise the run MUST fail with an explicit config or handoff mismatch error (in addition to contract drift detection in FR-004).
+- **FR-022**: Operator-visible issue updates (body snapshot and timeline comments) MUST include enough context to identify the active **config kind**, **config file path**, and **step** when reporting parsing, validation, or dispatch outcomes; for dispatch validation failures, FR-016 applies.
+- **FR-023**: Within a single pipeline agent config, step identifiers MUST be unique after applying FR-013 defaults; duplicate ids MUST fail validation per FR-011 so canonical artifact names `invocation-inputs_<issueKey>_<stepId>` cannot collide within one agent run.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -128,6 +147,7 @@ As an operator, I want AI Teammate to reliably dispatch the Developer Agent duri
 - **SC-002**: For any agent run, an operator can understand the run’s inputs, progress, outputs, and next actions by reading the GitHub issue alone (without logs) in under 3 minutes.
 - **SC-003**: Cross-agent handoff failures are diagnosable from the issue + artifact bundle (clear “contract drift/missing artifact” messages) with no silent failures.
 - **SC-004**: AI Teammate → Developer Agent dispatch succeeds for the “resume/handoff” scenario that previously returned HTTP 422, and does not regress in repeated runs.
+- **SC-005**: Adding a new agent that reuses existing routing/dispatch/config parsing requires implementing only new step runners (no new dispatch/parsing variants) and results in at most one new config file plus operation code.
 
 ## Assumptions
 
@@ -135,3 +155,4 @@ As an operator, I want AI Teammate to reliably dispatch the Developer Agent duri
 - GitHub Actions artifacts are available and are the primary mechanism for transferring structured data between workflows/jobs.
 - Agent behavior is intended to be driven primarily through `config/workflows/**` files, consistent with the repository’s stated goals.
 - The platform will continue to support human-in-the-loop interaction where needed (issue comments and PR comments remain the primary control surface).
+- GitHub Actions artifacts are assumed **never to expire** for the lifetime of the workflows that reference them; durable operator narrative and correlation still remain in the GitHub issue per FR-003, but artifact links are not treated as time-limited by this specification.
