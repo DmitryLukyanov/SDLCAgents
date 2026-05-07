@@ -3,7 +3,7 @@
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Note**: This template is filled in by the `/speckit-plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
@@ -31,7 +31,15 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Per `.specify/memory/constitution.md` (SDLCAgents):
+
+- **Agent-agnostic core**: Design keeps shared orchestration free of single-vendor lock-in; runner-specific logic is adapter/config scoped.
+- **Configuration-driven orchestration**: Flow and knobs live in config where possible; TypeScript covers operations and contracts, not one-off forks of the same pipeline.
+- **Operations as extension surface**: New roles/agents add operations and wire them in config rather than duplicating orchestration.
+- **TypeScript discipline**: Plan technical context matches TS/Node; typecheck and agreed test scope remain feasible.
+- **Stable consumer contract**: Onboarding paths, copied artifacts, and documented secrets stay compatible or the plan documents migration.
+
+If any gate cannot be met, document justification in **Complexity Tracking** below.
 
 ## Project Structure
 
@@ -39,12 +47,12 @@
 
 ```text
 specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+├── plan.md              # This file (/speckit-plan command output)
+├── research.md          # Phase 0 output (/speckit-plan command)
+├── data-model.md        # Phase 1 output (/speckit-plan command)
+├── quickstart.md        # Phase 1 output (/speckit-plan command)
+├── contracts/           # Phase 1 output (/speckit-plan command)
+└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
 ```
 
 ### Source Code (repository root)

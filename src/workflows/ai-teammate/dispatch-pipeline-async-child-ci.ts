@@ -8,17 +8,23 @@
  *      `github.workflow_ref` basename in `_reusable-ai-teammate.yml`).
  *      GITHUB_STEP_SUMMARY (optional): appends a markdown section for async handoff (dispatched or skipped).
  */
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { parseAgentPipelineSteps } from '../../lib/pipeline-config.js';
 import { buildParentRunFields, mergeCallerConfigForAsyncChildDispatch } from '../../lib/pipeline-callback-config.js';
 import { decodeCallerConfig, isParentAsyncChildResumeCallerConfig } from '../../lib/caller-config.js';
 import {
+  buildAsyncChildWorkflowDispatchInputs,
   buildGithubWorkflowDispatchPayload,
-  buildAiTeammateWorkflowDispatchInputsWithCaller,
   dispatchGithubWorkflow,
 } from '../../lib/routing_helper.js';
+import { buildInvocationInputsArtifactRelativePath } from '../../lib/invocation-inputs-artifact.js';
+import {
+  WorkflowDispatchInputValidationError,
+  formatDispatchValidationIssueComment,
+} from '../../lib/workflow-dispatch-validate.js';
+import { createIssueCommentOrThrow } from '../../lib/issue-memory.js';
 
 function setOutput(name: string, value: string): void {
   const out = process.env.GITHUB_OUTPUT;
@@ -37,6 +43,13 @@ function requireEnv(name: string): string {
   const v = process.env[name]?.trim();
   if (!v) throw new Error(`Missing required environment variable: ${name}`);
   return v;
+}
+
+function effectiveHandoffIssueKey(
+  concurrencyKey: string,
+  handoff: { issueKey?: string },
+): string {
+  return (handoff.issueKey?.trim() || concurrencyKey).trim();
 }
 
 function maybeParseAsyncHandoffFromOutput(): {
@@ -219,73 +232,71 @@ async function main(): Promise<void> {
         ...parentFields,
       });
 
-  // Build inputs based on the target workflow
-  let inputs: Record<string, string> = {};
+  const issueKey = handoff.issueKey || concurrencyKey;
+  const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
+  const standaloneDefaultStep = ac.inputs?.step?.trim() || 'specify';
 
-  // For speckit-developer-agent.yml (terminal operation), build developer agent inputs
-  console.log(`[dispatch-pipeline-async-child] Checking if terminal && workflowFile === 'speckit-developer-agent.yml': terminal=${terminal}, workflowFile="${workflowFile}"`);
-  if (terminal && workflowFile === 'speckit-developer-agent.yml') {
-    const issueKey = handoff.issueKey || concurrencyKey;
-    const githubIssueNumber = (handoff.githubIssueNumber?.toString() || '').trim();
-    // Allow step to be configured via async_call.inputs.step, default to 'specify'
-    const stepValue = ac.inputs?.step?.trim() || 'specify';
+  console.log(
+    `[dispatch-pipeline-async-child] Building dispatch inputs via registry (workflowFile="${workflowFile}", terminal=${terminal})`,
+  );
+  console.log(
+    `[dispatch-pipeline-async-child]   - issueKey: "${issueKey}", githubIssueNumber: "${githubIssueNumber}", default step: "${standaloneDefaultStep}"`,
+  );
 
-    console.log(`[dispatch-pipeline-async-child] Building developer agent inputs...`);
-    console.log(`[dispatch-pipeline-async-child]   - issueKey: "${issueKey}"`);
-    console.log(`[dispatch-pipeline-async-child]   - githubIssueNumber: "${githubIssueNumber}"`);
-    console.log(`[dispatch-pipeline-async-child]   - step: "${stepValue}" (from async_call.inputs.step or default)`);
+  const inputs = buildAsyncChildWorkflowDispatchInputs({
+    workflowFile,
+    terminal,
+    configLabel: configFile,
+    concurrencyKey,
+    configFile,
+    callerConfigEncoded: mergedCaller,
+    handoffIssueKey: issueKey,
+    handoffGithubIssueNumber: githubIssueNumber,
+    standaloneDefaultStep,
+    asyncCallInputs: ac.inputs,
+  });
 
-    // Derive speckit-developer-agent config file path from AI Teammate config path
-    // e.g., config/workflows/ai-teammate/ai-teammate.config -> config/workflows/speckit-developer-agent/speckit-developer-agent.config
-    const speckitConfigFile = configFile.replace(
-      /\/ai-teammate\/[^/]+\.config$/,
-      '/speckit-developer-agent/speckit-developer-agent.config'
+  console.log(`[dispatch-pipeline-async-child] Final inputs (${Object.keys(inputs).length} keys): ${Object.keys(inputs).join(', ')}`);
+
+  const invIssueKey = effectiveHandoffIssueKey(concurrencyKey, handoff);
+  const invRel = buildInvocationInputsArtifactRelativePath(invIssueKey, stepId);
+  try {
+    writeFileSync(
+      invRel,
+      `${JSON.stringify(
+        {
+          kind: 'invocation_inputs_v1',
+          issueKey: invIssueKey,
+          stepId,
+          targetWorkflow: workflowFile,
+          configIdentity: { config_file_path: configFile, workflow_ref: ref },
+          dispatchInputs: inputs,
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
     );
-    if (speckitConfigFile === configFile) {
-      // Pattern did not match — configFile is not in the expected ai-teammate directory structure.
-      // Log a clear warning so the failure is easy to diagnose when the downstream workflow rejects the path.
-      console.warn(
-        `[dispatch-pipeline-async-child] WARNING: Could not derive speckit-developer-agent config path from ` +
-        `AI Teammate config "${configFile}". Expected pattern "/<repo>/ai-teammate/<name>.config" was not matched. ` +
-        `Using the original configFile path as a fallback — this will likely fail if the format is unexpected.`
-      );
+    console.log(`[dispatch-pipeline-async-child] Wrote ${invRel} (upload as artifact with matching name in workflow if required).`);
+  } catch (writeErr) {
+    const gh = process.env.GITHUB_TOKEN?.trim();
+    const issueNum = handoff.githubIssueNumber;
+    if (gh && issueNum) {
+      try {
+        const o = new Octokit({ auth: gh });
+        await createIssueCommentOrThrow(
+          o,
+          owner,
+          repo,
+          issueNum,
+          `### Invocation inputs file write failed\n\n\`${invRel}\`: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`,
+        );
+      } catch {
+        /* FR-009: primary failure is still the write error */
+      }
     }
-    console.log(`[dispatch-pipeline-async-child]   - config_file: "${speckitConfigFile}" (derived from AI Teammate config)`);
-
-    inputs = {
-      mode: 'speckit',
-      issue_number: githubIssueNumber,
-      issue_key: issueKey,
-      step: stepValue,
-      branch_name: '',  // Empty means bootstrap will create the branch
-      pr_number: '',
-      prompt: '',
-      config_file: speckitConfigFile,
-    };
-
-    console.log(`[dispatch-pipeline-async-child] Developer agent inputs built: mode=${inputs.mode}, issue_key=${inputs.issue_key}, issue_number=${inputs.issue_number}, step=${inputs.step}, config_file=${inputs.config_file}`);
-  } else {
-    // For other workflows (like business-analyst.yml), use AI Teammate inputs
-    console.log(`[dispatch-pipeline-async-child] Building AI Teammate inputs (not speckit-developer-agent.yml)...`);
-    inputs = {
-      ...buildAiTeammateWorkflowDispatchInputsWithCaller({
-        concurrencyKey,
-        configFile,
-        callerConfigEncoded: mergedCaller,
-      }),
-    };
-    console.log(`[dispatch-pipeline-async-child] AI Teammate inputs built with ${Object.keys(inputs).length} keys: ${Object.keys(inputs).join(', ')}`);
+    throw writeErr;
   }
-
-  // Merge any additional inputs from config
-  if (ac.inputs) {
-    console.log(`[dispatch-pipeline-async-child] Merging additional inputs from async_call.inputs (${Object.keys(ac.inputs).length} keys)`);
-    for (const [k, v] of Object.entries(ac.inputs)) {
-      if (v !== undefined && v !== null) inputs[k] = String(v);
-    }
-  }
-
-  console.log(`[dispatch-pipeline-async-child] Final inputs: ${Object.keys(inputs).length} total keys`);
 
   const payload = buildGithubWorkflowDispatchPayload({
     owner,
@@ -299,7 +310,23 @@ async function main(): Promise<void> {
   console.log(`[dispatch-pipeline-async-child] Dispatching workflow...`);
 
   const octokit = new Octokit({ auth: requireEnv('COPILOT_PAT') });
-  await dispatchGithubWorkflow(octokit, payload);
+  try {
+    await dispatchGithubWorkflow(octokit, payload);
+  } catch (err: unknown) {
+    if (err instanceof WorkflowDispatchInputValidationError) {
+      const gh = process.env.GITHUB_TOKEN?.trim();
+      const issueNum = handoff.githubIssueNumber;
+      if (gh && issueNum) {
+        try {
+          const o = new Octokit({ auth: gh });
+          await createIssueCommentOrThrow(o, owner, repo, issueNum, formatDispatchValidationIssueComment(err));
+        } catch {
+          /* still rethrow dispatch error */
+        }
+      }
+    }
+    throw err;
+  }
 
   console.log(`[dispatch-pipeline-async-child] Dispatched ${workflowFile}@${ref} for ${concurrencyKey}.`);
   console.log('[dispatch-pipeline-async-child] ======== DISPATCH SUCCESSFUL ========');

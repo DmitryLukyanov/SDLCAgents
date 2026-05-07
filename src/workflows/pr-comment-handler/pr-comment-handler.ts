@@ -18,6 +18,7 @@
 
 import { appendFileSync } from 'node:fs';
 import { Octokit } from '@octokit/rest';
+import { assertWorkflowDispatchInputsAllowed } from '../../lib/workflow-dispatch-validate.js';
 
 const MAX_COMMENT_IN_SUMMARY = 120_000;
 
@@ -123,16 +124,19 @@ async function main(): Promise<void> {
   let outcome = '';
 
   switch (command) {
-    case '/proceed':
+    case '/proceed': {
+      const inputs = { pr_number: prNumber };
+      assertWorkflowDispatchInputsAllowed('speckit-developer-agent-proceed.yml', inputs);
       await octokit.rest.actions.createWorkflowDispatch({
         owner, repo,
         workflow_id: 'speckit-developer-agent-proceed.yml',
         ref,
-        inputs: { pr_number: prNumber },
+        inputs,
       });
       console.log(`[pr-comment-handler] Dispatched speckit-developer-agent-proceed.yml`);
       outcome = `Dispatched **speckit-developer-agent-proceed.yml** with \`pr_number=${prNumber}\`.`;
       break;
+    }
 
     case '/fix': {
       // Fetch the last HIL comment posted by the spec gate so the LLM knows
@@ -167,19 +171,21 @@ async function main(): Promise<void> {
       const prHeadRef = pr.head.ref;
       const issueKey = await resolveIssueKeyForFix(octokit, owner, repo, pr);
 
+      const fixInputs = {
+        mode:         'fix',
+        issue_number: '',
+        issue_key:    issueKey,
+        step:         '',
+        branch_name:  prHeadRef,
+        pr_number:    prNumber,
+        prompt:       commandBody + hilContext,
+      };
+      assertWorkflowDispatchInputsAllowed('speckit-developer-agent.yml', fixInputs);
       await octokit.rest.actions.createWorkflowDispatch({
         owner, repo,
         workflow_id: 'speckit-developer-agent.yml',
         ref,
-        inputs: {
-          mode:         'fix',
-          issue_number: '',
-          issue_key:    issueKey,
-          step:         '',
-          branch_name:  prHeadRef,
-          pr_number:    prNumber,
-          prompt:       commandBody + hilContext,
-        },
+        inputs: fixInputs,
       });
       console.log(`[pr-comment-handler] Dispatched speckit-developer-agent.yml (mode=fix)`);
       outcome = 'Dispatched **speckit-developer-agent.yml** (`mode=fix`; includes HIL context when found).';

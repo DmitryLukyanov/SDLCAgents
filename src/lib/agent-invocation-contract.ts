@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import {
   findFirstEnabledAsyncCallStepIndex,
   parseAgentPipelineSteps,
+  type AgentJsonWithPipeline,
   type PipelineStepConfig,
 } from './pipeline-config.js';
 
@@ -131,44 +132,57 @@ function shallowCloneArtifactMap(map: InvocationArtifactParamMap): Record<string
   return { ...map };
 }
 
-/** Parse `step.contract`; missing param keys merge with {@link DEFAULT_AGENT_INVOCATION_CONTRACT}. */
-export function parseAgentInvocationContractFromStep(step: PipelineStepConfig): AgentInvocationContract {
-  const raw = (step as { contract?: unknown }).contract;
+function cloneAgentInvocationContract(c: AgentInvocationContract): AgentInvocationContract {
+  return {
+    ...(c.primaryOutputKey !== undefined ? { primaryOutputKey: c.primaryOutputKey } : {}),
+    inputParams: { ...c.inputParams } as InvocationArtifactParamMap,
+    outputParams: { ...c.outputParams } as InvocationArtifactParamMap,
+  };
+}
+
+/**
+ * Parse a contract object (named contract entry or inline `step.contract` body).
+ * Missing param keys merge with {@link DEFAULT_AGENT_INVOCATION_CONTRACT}.
+ */
+export function parseInvocationContractObject(raw: unknown, fieldLabel: string): AgentInvocationContract {
   if (!raw) return { ...DEFAULT_AGENT_INVOCATION_CONTRACT };
-  if (!isRecord(raw)) throw new Error('invocation contract: step.contract must be an object');
+  if (!isRecord(raw)) throw new Error(`invocation contract: ${fieldLabel} must be an object`);
 
   const inP = raw.inputParams;
   const outP = raw.outputParams;
-  if (inP !== undefined && !isRecord(inP)) throw new Error('invocation contract: contract.inputParams must be an object');
-  if (outP !== undefined && !isRecord(outP)) throw new Error('invocation contract: contract.outputParams must be an object');
+  if (inP !== undefined && !isRecord(inP)) {
+    throw new Error(`invocation contract: ${fieldLabel}.inputParams must be an object`);
+  }
+  if (outP !== undefined && !isRecord(outP)) {
+    throw new Error(`invocation contract: ${fieldLabel}.outputParams must be an object`);
+  }
 
   const def = DEFAULT_AGENT_INVOCATION_CONTRACT;
   const inputParams = shallowCloneArtifactMap(def.inputParams);
   if (inP) {
     for (const [k, v] of Object.entries(inP)) {
-      inputParams[k] = parseArtifactInput(v, `inputParams.${k}`);
+      inputParams[k] = parseArtifactInput(v, `${fieldLabel}.inputParams.${k}`);
     }
   }
 
-  /** When `outputParams` is set in JSON, it replaces the default map (use `primaryOutputKey` if not using `resultState`). */
   const outputParams: Record<string, ArtifactHandoffRef> = outP
     ? Object.fromEntries(
-        Object.entries(outP).map(([k, v]) => [k, parseArtifactHandoffRef(v, `outputParams.${k}`)]),
+        Object.entries(outP).map(([k, v]) => [k, parseArtifactHandoffRef(v, `${fieldLabel}.outputParams.${k}`)]),
       )
     : shallowCloneArtifactMap(def.outputParams);
   if (Object.keys(outputParams).length === 0) {
-    throw new Error('invocation contract: outputParams must declare at least one artifact');
+    throw new Error(`invocation contract: ${fieldLabel} outputParams must declare at least one artifact`);
   }
 
   let primaryOutputKey: string | undefined;
   if (raw.primaryOutputKey !== undefined) {
     if (typeof raw.primaryOutputKey !== 'string' || !raw.primaryOutputKey.trim()) {
-      throw new Error('invocation contract: primaryOutputKey must be a non-empty string when set');
+      throw new Error(`invocation contract: ${fieldLabel} primaryOutputKey must be a non-empty string when set`);
     }
     primaryOutputKey = raw.primaryOutputKey.trim();
     if (!outputParams[primaryOutputKey]) {
       throw new Error(
-        `invocation contract: primaryOutputKey "${primaryOutputKey}" is not present in contract.outputParams`,
+        `invocation contract: ${fieldLabel} primaryOutputKey "${primaryOutputKey}" is not present in outputParams`,
       );
     }
   }
@@ -176,7 +190,7 @@ export function parseAgentInvocationContractFromStep(step: PipelineStepConfig): 
   for (const k of Object.keys(raw)) {
     if (!RESERVED_CONTRACT_ROOT_KEYS.has(k)) {
       throw new Error(
-        `invocation contract: unknown property "${k}" on step.contract (allowed: inputParams, outputParams, primaryOutputKey)`,
+        `invocation contract: unknown property "${k}" on ${fieldLabel} (allowed: inputParams, outputParams, primaryOutputKey)`,
       );
     }
   }
@@ -186,6 +200,114 @@ export function parseAgentInvocationContractFromStep(step: PipelineStepConfig): 
     inputParams,
     outputParams,
   };
+}
+
+/** Load `config.contracts` map (FR-004). Empty object when absent. */
+export function loadNamedContractsFromConfigRoot(
+  root: AgentJsonWithPipeline,
+  configLabel: string,
+): Record<string, AgentInvocationContract> {
+  const raw = (root as { contracts?: unknown }).contracts;
+  if (raw === undefined) return {};
+  if (!isRecord(raw)) throw new Error(`${configLabel}: contracts must be an object`);
+  const out: Record<string, AgentInvocationContract> = {};
+  for (const [name, entry] of Object.entries(raw)) {
+    const key = name.trim();
+    if (!key) throw new Error(`${configLabel}: contracts contains an empty key`);
+    out[key] = parseInvocationContractObject(entry, `contracts["${key}"]`);
+  }
+  return out;
+}
+
+function mergeContractOverride(
+  base: AgentInvocationContract,
+  overrideRaw: Record<string, unknown>,
+  stepLabel: string,
+): AgentInvocationContract {
+  const merged = cloneAgentInvocationContract(base);
+  const inMap = merged.inputParams as Record<string, ArtifactHandoffRef>;
+  const outMap = merged.outputParams as Record<string, ArtifactHandoffRef>;
+  const inP = overrideRaw.inputParams;
+  const outP = overrideRaw.outputParams;
+  if (inP !== undefined) {
+    if (!isRecord(inP)) throw new Error(`invocation contract: ${stepLabel} contract override inputParams must be an object`);
+    for (const [k, v] of Object.entries(inP)) {
+      const parsed = parseArtifactInput(v, `override.inputParams.${k}`);
+      const prev = inMap[k];
+      if (prev && prev.relativePath !== parsed.relativePath) {
+        throw new Error(
+          `contract override conflict: ${stepLabel} redefines inputParams.${k} with a different path ` +
+            `("${prev.relativePath}" vs "${parsed.relativePath}") (FR-018)`,
+        );
+      }
+      inMap[k] = parsed;
+    }
+  }
+  if (outP !== undefined) {
+    if (!isRecord(outP)) {
+      throw new Error(`invocation contract: ${stepLabel} contract override outputParams must be an object`);
+    }
+    for (const [k, v] of Object.entries(outP)) {
+      const parsed = parseArtifactHandoffRef(v, `override.outputParams.${k}`);
+      const prev = outMap[k];
+      if (prev && prev.relativePath !== parsed.relativePath) {
+        throw new Error(
+          `contract override conflict: ${stepLabel} redefines outputParams.${k} with a different path ` +
+            `("${prev.relativePath}" vs "${parsed.relativePath}") (FR-018)`,
+        );
+      }
+      outMap[k] = parsed;
+    }
+  }
+  if (overrideRaw.primaryOutputKey !== undefined) {
+    const pk =
+      typeof overrideRaw.primaryOutputKey === 'string' ? overrideRaw.primaryOutputKey.trim() : '';
+    if (!pk) throw new Error(`invocation contract: ${stepLabel} override primaryOutputKey invalid`);
+    const effective = resolvePrimaryOutputKey(merged);
+    if (pk !== effective) {
+      throw new Error(
+        `contract override conflict: ${stepLabel} primaryOutputKey "${pk}" does not match merged output map ` +
+          `(resolves to "${effective}") (FR-018)`,
+      );
+    }
+    merged.primaryOutputKey = pk;
+  }
+  for (const k of Object.keys(overrideRaw)) {
+    if (!RESERVED_CONTRACT_ROOT_KEYS.has(k)) {
+      throw new Error(`invocation contract: unknown override property "${k}" on ${stepLabel}`);
+    }
+  }
+  return merged;
+}
+
+/**
+ * Parse effective invocation contract for a step: optional `contractRef` (named `config.contracts`),
+ * optional inline `contract` overrides (FR-017, FR-018).
+ */
+export function parseAgentInvocationContractFromStep(
+  step: PipelineStepConfig,
+  namedContracts?: Record<string, AgentInvocationContract>,
+): AgentInvocationContract {
+  const rawStep = step as { contractRef?: unknown; contract?: unknown };
+  const ref = typeof rawStep.contractRef === 'string' ? rawStep.contractRef.trim() : '';
+  const rawContract = rawStep.contract;
+
+  if (ref) {
+    if (!namedContracts || !namedContracts[ref]) {
+      throw new Error(
+        `invocation contract: contractRef "${ref}" not found in config.contracts (FR-017)`,
+      );
+    }
+    let base = cloneAgentInvocationContract(namedContracts[ref]!);
+    if (rawContract !== undefined && rawContract !== null) {
+      if (!isRecord(rawContract)) throw new Error('invocation contract: step.contract must be an object');
+      base = mergeContractOverride(base, rawContract, `step "${step.id ?? step.runner}"`);
+    }
+    return base;
+  }
+
+  if (!rawContract) return { ...DEFAULT_AGENT_INVOCATION_CONTRACT };
+  return parseInvocationContractObject(rawContract, `step "${step.id ?? step.runner}" contract`);
 }
 
 /** Which output param supplies `codexRelativeOutputPath` / Codex `output-file`. */
@@ -203,10 +325,17 @@ export function resolvePrimaryOutputKey(contract: AgentInvocationContract): stri
 }
 
 export function loadAgentInvocationContractFromConfigText(raw: string, configLabel: string): AgentInvocationContract {
+  let root: AgentJsonWithPipeline;
+  try {
+    root = JSON.parse(raw) as AgentJsonWithPipeline;
+  } catch (e) {
+    throw new Error(`${configLabel}: invalid JSON (${e instanceof Error ? e.message : String(e)})`);
+  }
+  const named = loadNamedContractsFromConfigRoot(root, configLabel);
   const steps = parseAgentPipelineSteps(raw, configLabel);
   const idx = findFirstEnabledAsyncCallStepIndex(steps);
   if (idx < 0) return { ...DEFAULT_AGENT_INVOCATION_CONTRACT };
-  return parseAgentInvocationContractFromStep(steps[idx]!);
+  return parseAgentInvocationContractFromStep(steps[idx]!, named);
 }
 
 export function loadAgentInvocationContractFromConfigFile(configPathAbs: string): AgentInvocationContract {

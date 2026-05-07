@@ -7,6 +7,9 @@ import {
   decodeCallerConfig,
   extractIssueKeyFromCallerConfig,
 } from '../../lib/caller-config.js';
+import { validatePipelineAgentShape } from '../../lib/agent-config-validate.js';
+import { loadNamedContractsFromConfigRoot } from '../../lib/agent-invocation-contract.js';
+import { parseAgentPipelineSteps, type AgentJsonWithPipeline } from '../../lib/pipeline-config.js';
 import type { AgentLabelParams, PipelineStep, RunnerContext } from './runner-types.js';
 
 interface AgentJson {
@@ -77,11 +80,22 @@ export async function loadAiTeammatePipelineFromEnv(): Promise<LoadedAiTeammateP
         : 1;
   process.env.TICKET_CONTEXT_DEPTH = String(depth);
 
-  const steps = agent.params?.steps;
+  let steps = agent.params?.steps;
   if (runner === 'pipeline') {
     if (!steps || !Array.isArray(steps) || steps.length === 0) {
       throw new Error(`Pipeline runner requires a non-empty "steps" array in ${configFile}.`);
     }
+    const parsedSteps = parseAgentPipelineSteps(raw, configFile);
+    validatePipelineAgentShape(agent as AgentJsonWithPipeline, parsedSteps, configFile);
+    const named = loadNamedContractsFromConfigRoot(agent as AgentJsonWithPipeline, configFile);
+    for (const step of parsedSteps) {
+      const refRaw = (step as unknown as { contractRef?: unknown }).contractRef;
+      const ref = typeof refRaw === 'string' ? refRaw.trim() : '';
+      if (ref && !named[ref]) {
+        throw new Error(`${configFile} [pipeline_agent] contractRef "${ref}" not found in contracts (FR-017)`);
+      }
+    }
+    steps = parsedSteps as PipelineStep[];
   }
 
   const [owner, repo] = (process.env.GITHUB_REPOSITORY ?? '/').split('/');
