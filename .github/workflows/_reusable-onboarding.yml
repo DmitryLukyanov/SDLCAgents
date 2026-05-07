@@ -11,7 +11,7 @@
 #     - .github/prompts/      ← .github/prompts/
 #     - .github/copilot-instructions.md
 #     - .specify/scripts/     ← .specify/scripts/
-#     - .cursor/skills/       ← repo stores skills here; copied to consumer .agents/skills/ only
+#     - .agents/skills/       ← committed SDLCAgents overrides (Codex); copied to consumer
 #     - config/spec-kit/      ← config/spec-kit/
 #     - config/workflows/     ← config/workflows/
 #
@@ -83,7 +83,7 @@ jobs:
             .github/prompts
             .github/copilot-instructions.md
             .specify/scripts
-            .cursor/skills
+            .agents/skills
             config/spec-kit
             config/workflows
 
@@ -107,10 +107,10 @@ jobs:
           cp -r _sdlc_agents/.specify/scripts/. .specify/scripts/
           echo "  copied .specify/scripts/"
 
-          # ── .agents/skills (SDLCAgents stores skills under `.cursor/skills/` on disk) ──
+          # ── .agents/skills (committed in SDLCAgents — overrides `specify init` output) ──
           mkdir -p .agents/skills
-          cp -r _sdlc_agents/.cursor/skills/. .agents/skills/
-          echo "  copied SDLCAgents .cursor/skills → .agents/skills/ (Codex)"
+          cp -r _sdlc_agents/.agents/skills/. .agents/skills/
+          echo "  copied SDLCAgents .agents/skills/ → consumer .agents/skills/ (Codex)"
 
           # ── .github/content (PR bodies, job-summary snippets) ───────
           mkdir -p .github/content
