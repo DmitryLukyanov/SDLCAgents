@@ -104,3 +104,19 @@ jobs:
           ISSUE_KEY: ${{ inputs.issue_key }}
           BRANCH_NAME: ${{ inputs.branch_name }}
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-bootstrap.ts
+
+      - name: Post bootstrap on tracking issue
+        if: success()
+        uses: ./.github/actions/post-issue-history
+        with:
+          issue_number: ${{ inputs.issue_number }}
+          heading: SpecKit pipeline — bootstrap (specify)
+          body: |
+            Feature branch and draft PR are ready for the **specify** step.
+
+            | Field | Value |
+            | --- | --- |
+            | Issue key | `${{ inputs.issue_key }}` |
+            | Branch | `${{ steps.run.outputs.branch_name }}` |
+            | PR | #${{ steps.run.outputs.pr_number }} |
+            | Feature dir | `${{ steps.run.outputs.feature_dir }}` |

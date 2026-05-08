@@ -1,0 +1,109 @@
+# Composite action: append a timestamped history comment on a GitHub issue or PR.
+# Call from any job that has permission to comment (issues: write; use pull-requests: write for PR threads).
+#
+# Example (caller workflow):
+#   permissions:
+#     issues: write
+#     pull-requests: write
+#   steps:
+#     - uses: DmitryLukyanov/SDLCAgents/.github/actions/post-issue-history@master
+#       with:
+#         issue_number: ${{ github.event.inputs.tracking_issue }}
+#         body: |
+#           Step **analyze** finished.
+#           - Artifact: `spec-report`
+#         heading: Spec Kit — analyze
+name: Post issue history
+description: >-
+  Posts a single GitHub issue/PR comment formatted as a workflow history entry
+  (UTC timestamp, optional heading, markdown body, optional link to the current Actions run).
+
+inputs:
+  issue_number:
+    description: Issue or pull request number to comment on
+    required: true
+  body:
+    description: Markdown content for this history entry
+    required: true
+  heading:
+    description: Optional short title shown in bold under the timestamp
+    required: false
+    default: ''
+  repository:
+    description: >-
+      Target repository as owner/repo. Leave empty to use the repository of the workflow run.
+    required: false
+    default: ''
+  include_run_link:
+    description: >-
+      When true (default), append a footer linking to this workflow run using GITHUB_* env vars.
+    required: false
+    default: 'true'
+  github_token:
+    description: >-
+      Token for the GitHub API (must allow commenting on the issue/PR).
+      Omit to use the default GITHUB_TOKEN for the workflow run.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Post history comment
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github_token != '' && inputs.github_token || github.token }}
+        script: |
+          const issueNumber = parseInt('${{ inputs.issue_number }}', 10);
+          if (!issueNumber || Number.isNaN(issueNumber) || issueNumber < 1) {
+            core.setFailed('issue_number must be a positive integer');
+            return;
+          }
+
+          let owner = context.repo.owner;
+          let repo = context.repo.repo;
+          const repoFull = String('${{ inputs.repository }}' || '').trim();
+          if (repoFull) {
+            const parts = repoFull.split('/');
+            if (parts.length !== 2 || !parts[0] || !parts[1]) {
+              core.setFailed('repository must be owner/repo when set');
+              return;
+            }
+            owner = parts[0];
+            repo = parts[1];
+          }
+
+          const heading = (${{ toJSON(inputs.heading) }}).trim();
+          const entryBody = ${{ toJSON(inputs.body) }};
+          const includeRun = String('${{ inputs.include_run_link }}').toLowerCase() === 'true';
+
+          const ts = new Date().toISOString();
+          const lines = [
+            '<!-- sdlc-issue-history -->',
+            `### Workflow history · \`${ts}\``,
+            '',
+          ];
+          if (heading) {
+            lines.push(`**${heading}**`, '');
+          }
+          lines.push(entryBody);
+
+          if (includeRun) {
+            const server = process.env.GITHUB_SERVER_URL || 'https://github.com';
+            const repository = process.env.GITHUB_REPOSITORY || `${owner}/${repo}`;
+            const runId = process.env.GITHUB_RUN_ID;
+            const workflow = process.env.GITHUB_WORKFLOW || '';
+            if (runId) {
+              const runUrl = `${server}/${repository}/actions/runs/${runId}`;
+              lines.push('', `— *[Workflow run](${runUrl})${workflow ? ` · \`${workflow}\`` : ''}]*`);
+            }
+          }
+
+          await github.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: issueNumber,
+            body: lines.join('\n'),
+          });
+
+          core.info(`Posted history comment on ${owner}/${repo}#${issueNumber}`);

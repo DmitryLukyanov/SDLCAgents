@@ -97,6 +97,8 @@ jobs:
       issue_key: ${{ inputs.issue_key }}
       codex_step_slug: ${{ inputs.mode == 'fix' && 'fix' || inputs.step }}
       input_prompt: ${{ inputs.prompt }}
+      history_issue_number: ${{ steps.history_target.outputs.issue_number }}
+      history_post_enabled: ${{ steps.history_target.outputs.enabled }}
     steps:
       - name: Require branch_name
         env:
@@ -173,6 +175,53 @@ jobs:
           TICKET_CONTEXT_DEPTH: ${{ vars.TICKET_CONTEXT_DEPTH }}
           CONFIG_FILE: ${{ inputs.config_file }}
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-setup.ts
+
+      - name: Resolve tracking issue for history comments
+        id: history_target
+        if: success()
+        shell: bash
+        env:
+          INPUT_ISSUE: ${{ inputs.issue_number }}
+          MODE: ${{ inputs.mode }}
+          FEATURE_DIR: ${{ steps.agent_setup.outputs.feature_dir }}
+        run: |
+          set -euo pipefail
+          enabled=false
+          issue_num=""
+          trimmed=$(echo "${INPUT_ISSUE:-}" | tr -d '[:space:]')
+          if [ -n "$trimmed" ] && [ "$trimmed" != "0" ]; then
+            issue_num=$trimmed
+            enabled=true
+          fi
+          if [ "$enabled" = "false" ] && [ "${MODE:-}" = "fix" ] && [ -n "${FEATURE_DIR:-}" ]; then
+            state="${FEATURE_DIR}/speckit-state.json"
+            if [ -f "$state" ]; then
+              issue_num=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); v=d.get('issueNumber'); print(v if v is not None else '')" "$state")
+              issue_num=$(echo "$issue_num" | tr -d '[:space:]')
+              if [ -n "$issue_num" ] && [ "$issue_num" != "0" ]; then
+                enabled=true
+              fi
+            fi
+          fi
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "issue_number=$issue_num" >> "$GITHUB_OUTPUT"
+
+      - name: Post workflow start on tracking issue
+        if: steps.history_target.outputs.enabled == 'true'
+        uses: ./.github/actions/post-issue-history
+        with:
+          issue_number: ${{ steps.history_target.outputs.issue_number }}
+          heading: SpecKit developer agent — started
+          body: |
+            Prepare (**setup**) finished successfully. Codex job is next.
+
+            | Field | Value |
+            | --- | --- |
+            | Mode | `${{ inputs.mode }}` |
+            | Step | `${{ inputs.step }}` |
+            | Issue key | `${{ inputs.issue_key }}` |
+            | Branch | `${{ steps.agent_setup.outputs.branch_name }}` |
+            | PR | #${{ steps.agent_setup.outputs.pr_number }} |
 
       - name: Materialize prompt into input_prompt.md
         if: inputs.prompt != ''
@@ -290,3 +339,21 @@ jobs:
           PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
           FEATURE_DIR: ${{ needs.prepare.outputs.feature_dir }}
           INPUT_PROMPT: ${{ needs.prepare.outputs.input_prompt }}
+
+      - name: Post workflow completion on tracking issue
+        if: success() && needs.prepare.outputs.history_post_enabled == 'true'
+        uses: ./.github/actions/post-issue-history
+        with:
+          issue_number: ${{ needs.prepare.outputs.history_issue_number }}
+          heading: SpecKit developer agent — finished
+          body: |
+            Teardown completed for this run.
+
+            | Field | Value |
+            | --- | --- |
+            | Mode | `${{ needs.prepare.outputs.mode }}` |
+            | Step | `${{ inputs.step }}` |
+            | Issue key | `${{ needs.prepare.outputs.issue_key }}` |
+            | Branch | `${{ needs.prepare.outputs.branch_name }}` |
+            | PR | #${{ needs.prepare.outputs.pr_number }} |
+            | Codex job | `${{ needs.codex.result }}` |

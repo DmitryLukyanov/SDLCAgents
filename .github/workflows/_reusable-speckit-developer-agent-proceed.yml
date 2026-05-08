@@ -36,6 +36,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: write
       actions: write
 
     steps:
@@ -130,7 +131,24 @@ jobs:
 
             console.log(`Dispatched speckit-developer-agent.yml: step=${nextStep} issue=#${issueNumber}`);
 
-      # ── 5. No-op when all steps done ─────────────────────────────────────────
+      # ── 5. Post tracking-issue history ─────────────────────────────────────
+      - name: Post proceed on tracking issue
+        if: success() && steps.state.outputs.next_step != ''
+        uses: ./.github/actions/post-issue-history
+        with:
+          issue_number: ${{ steps.state.outputs.issue_number }}
+          heading: SpecKit pipeline — next step dispatched
+          body: |
+            Workflow **speckit-developer-agent** was dispatched for the next spec-kit step.
+
+            | Field | Value |
+            | --- | --- |
+            | Next step | `${{ steps.state.outputs.next_step }}` |
+            | Issue key | `${{ steps.state.outputs.issue_key }}` |
+            | Branch | `${{ steps.state.outputs.branch_name }}` |
+            | PR | #${{ inputs.pr_number }} |
+
+      # ── 6. No-op when all steps done ─────────────────────────────────────────
       - name: All steps complete
         if: steps.state.outputs.next_step == ''
         run: echo "All spec-kit steps are complete. No further dispatch needed."
