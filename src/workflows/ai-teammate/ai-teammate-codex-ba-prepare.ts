@@ -2,7 +2,7 @@
  * Codex BA — prepare helpers (no LLM): build BA prompt, `ba-codex-state.json`, and invocation manifest.
  *
  * These helpers are used by the config-driven pipeline async handoff.
- * Skip-by-label is handled in CI (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`; entry: `check-ba-skip-label-ci.ts`).
+ * Skip-by-label: `runPipelineFromConfigForCi` calls `evaluateSkipIfLabelFromConfigFile` (`lib/agent-skip-if-label.ts`) before the step loop.
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';

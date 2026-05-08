@@ -1,7 +1,8 @@
 # AI Teammate — text sequence (GitHub Actions)
 
-High-level order when the consumer repo calls `_reusable-ai-teammate.yml`.  
-Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-teammate-codex-ba-finish.ts`, `ai-teammate-codex-ba-shared.ts` (barrel: `ai-teammate-codex-ba.ts`), shared skip-if-label (`lib/agent-skip-if-label.ts`, CI entry `check-ba-skip-label-ci.ts`), `.github/workflows/_reusable-ai-teammate.yml`.
+High-level order when the consumer repo calls `_reusable-ai-teammate.yml` (single job, multiple steps).
+
+**Implementation:** `ai-teammate-agent.ts` → `runPipelineCi` (`ai-teammate-pipeline.ts`), `ai-teammate-codex-ba-prepare.ts`, `ai-teammate-codex-ba-shared.ts`, barrel `ai-teammate-codex-ba.ts`, skip gate `evaluateSkipIfLabelFromConfigFile` (`lib/agent-skip-if-label.ts`, called **inside** `runPipelineCi`), `.github/workflows/_reusable-ai-teammate.yml`.
 
 ```
 [Optional] Scrum Master (Jira rules)
@@ -9,47 +10,26 @@ Implementation: `ai-teammate-agent.ts`, `ai-teammate-codex-ba-prepare.ts`, `ai-t
     | workflow_dispatch + caller_config, concurrency_key, config_file
     v
 +-------------------------------------------------------------------+
-| Job: Create GitHub issue and prepare BA                           |
+| Job: ai_teammate (_reusable-ai-teammate.yml)                      |
 +-------------------------------------------------------------------+
     |
-    |-- checkout consumer repo + SDLCAgents (scripts)
-    |-- check spec-kit / agent files exist
-    |-- npm ci (.sdlc-agents)
+    |-- checkout consumer repo + SDLCAgents (scripts), npm ci
     |
-    |-- TS: check-ba-skip-label-ci -> lib/agent-skip-if-label (Jira vs skipIfLabel) -> output skip_reason (empty = run BA; non-empty = skip)
+    |-- TS: pipeline_ci (tsx ai-teammate-agent.ts)
+    |       decodeCallerConfig, load agent JSON
+    |       If fresh run: evaluateSkipIfLabelFromConfigFile → ctx.skipBaReason (optional)
+    |       Run params.steps: ensure_jira_fields_expected, create_github_issue, …
+    |       At async_call step: prepareCodexBaArtifacts → handoff under async-invocation-handoff/<KEY>/
+    |       Set job outputs (needs_async_handoff, async_handoff) when dispatching child
     |
-    |-- TS: pipeline_ci (config-driven)
-    |       Runs Jira validate / read context
-    |       GitHub: Jira snapshot in issue body (create_github_issue)
-    |       GitHub: create Issue (title + Jira snapshot body, jira:KEY label)
-    |       If skip_reason empty: prepares BA invocation artifacts (prompt/context/state)
+    |-- If needs_async_handoff: verify-invocation-handoff-ci.ts, upload artifacts,
+    |       dispatch-pipeline-async-child-ci.ts (consumer BA/Codex workflow)
     |
-    |-- shell ba_flags: if skip_reason non-empty -> run_codex=false else true
-    |-- upload artifacts (async-invocation-handoff/<KEY>/ …)
+    |-- Resume: when caller_config.params.async_child_run_id is set, YAML downloads
+    |       parent + child artifacts first; same pipeline_ci step continues the loop
+    |       from async_trigger_step (apply_ba_outcome, optional terminal async_call, …)
     v
-+-------------------------------------------------------------------+
-| Job: ba_codex  (only if run_codex == true)                        |
-|   openai/codex-action: read prompt -> invocation-output.txt      |
-|   upload post-codex artifact                                     |
-+-------------------------------------------------------------------+
-    |
-    v
-+-------------------------------------------------------------------+
-| Job: finish                                                        |
-+-------------------------------------------------------------------+
-    |
-    |-- download prepare (+ post-codex if Codex ran)
-    |-- TS: pipeline_ci (resume) (env AI_TEAMMATE_SKIP_BA_REASON = job output skip_reason)
-    |       if skip_reason non-empty -> summary, stop (no state / no Codex apply)
-    |       else read state + Codex output
-    |       interpret BA JSON
-    |       apply BA outcome (Jira comment/transition/labels; GitHub on incomplete)
-    |       if BA complete -> pipeline continues
-    |             -> update GitHub issue body (BA + Jira template)
-    |             -> workflow_dispatch speckit-developer-agent.yml (step specify)
-    |       if incomplete -> e.g. Jira Blocked, close GitHub issue not_planned
-    v
-Developer Agent (consumer)  -->  branch, draft PR, spec-kit steps, Copilot/Codex per config
+Developer Agent (consumer, optional terminal async_call)  -->  PR, spec-kit, Copilot per config
     |
     v
 PR merge flow (consumer pr-merged / Jira Done)  [optional, separate workflow]
@@ -59,32 +39,31 @@ PR merge flow (consumer pr-merged / Jira Done)  [optional, separate workflow]
 
 | Actor | Role in this flow |
 |-------|-------------------|
-| **Jira** | Read/write in prepare and finish (per pipeline config). |
-| **GitHub Issues** | Placeholder issue → comment → body update after BA; may close on incomplete BA. |
-| **GitHub Actions + tsx** | `create_github_issue_and_prepare_ba` and `finish` jobs run the TypeScript agent. |
-| **Codex** | Only in `ba_codex` (`openai/codex-action`). |
-| **SpecKit Developer Agent + Copilot** | Optional terminal `async_call` can dispatch consumer `speckit-developer-agent.yml`. |
+| **Jira** | Read/write in pipeline steps (per config). |
+| **GitHub Issues** | Placeholder issue → Jira snapshot in body; BA progress may use comments. |
+| **GitHub Actions + tsx** | `ai-teammate-agent.ts` runs the unified pipeline; child workflow runs Codex. |
+| **Codex / BA** | In consumer `business-analyst.yml` (or other `async_call.workflowFile`). |
+| **SpecKit Developer Agent** | Optional terminal `async_call` can dispatch `speckit-developer-agent.yml`. |
 
 For Mermaid diagrams see repo `README.md` and `docs/pipeline-flow.md`.
 
 ---
 
-## Codex BA files under `async-invocation-handoff/<JIRA_KEY>/` (how each is used)
+## Codex BA files under `async-invocation-handoff/<JIRA_KEY>/`
 
-These JSON/Markdown files are the **handoff between GitHub Actions jobs** (prepare → Codex → finish). They live on the runner under `async-invocation-handoff/<KEY>/`, then the **prepare** job uploads that folder as artifact **`caller-handoff_input`**. Later jobs **download** the same paths so `tsx` can read them again. They are **not** stored in the GitHub issue body; the issue description holds the Jira snapshot (from `create_github_issue`); BA progress is in **comments**. (Developer-agent may still use a separate `spec-output/<KEY>/issueContext.md` for spec-kit merge — that is unrelated to this async handoff tree.)
+Handoff between parent job steps and the async child. The **prepare** phase uploads **`caller-handoff_input`**; the child uploads **`caller-handoff_codex_output`** when Codex completes.
 
-**Skip-by-label (Jira `skipIfLabel`)** does **not** use a file: step **`jira_ba_skip`** sets output **`skip_reason`** (`evaluateSkipIfLabel` in `lib/agent-skip-if-label.ts`, invoked from `check-ba-skip-label-ci.ts`). **Empty** = run BA; **non-empty** = skip BA prepare, set `run_codex=false`, and pass the same string to finish via job output **`skip_reason`** → env **`AI_TEAMMATE_SKIP_BA_REASON`** so the resume run exits early without `ba-codex-state.json`.
+**Skip-by-label:** evaluated in **`runPipelineCi`** (not a separate workflow step). If the ticket has **`params.skipIfLabel`**, **`ctx.skipBaReason`** is set; the async BA segment is skipped and **`AI_TEAMMATE_SKIP_BA_REASON`** may propagate where the workflow sets it.
 
 | File / output | Written by | Read by | Purpose |
 |---------------|------------|---------|---------|
-| **`skip_reason`** (job output) | `jira_ba_skip` step | `ba_flags`, finish env `AI_TEAMMATE_SKIP_BA_REASON` | Single string: empty = BA allowed; non-empty = skip BA/Codex/finish BA apply (reason text for logs / step summary). |
-| **`invocation-prompt.md`** (contract default) | pipeline async handoff | `ba_codex` job (`openai/codex-action` **prompt-file**) | Full LLM prompt (paths overridable via async step **`contract`**). |
-| **`invocation-jira-context.md`** (contract default) | pipeline async handoff | Any tool that needs ticket prose from the handoff bundle | Ticket / Jira context snapshot as a **file artifact** (artifact-only contract). |
-| **`ba-codex-state.json`** | pipeline async handoff | pipeline resume | Checkpoint: `codexRelativeOutputPath` for **`invocation-output.txt`** (default), `agentLabelParams`, runner context, etc. |
-| **`invocation-output.txt`** (contract default) | `ba_codex` (Codex **output-file**) | pipeline resume | Raw model reply; resume **parses** it. |
+| **`invocation-prompt.md`** (default) | async handoff prepare | child Codex job | LLM prompt (overridable via **`contract`**). |
+| **`invocation-jira-context.md`** (default) | async handoff prepare | child | Ticket snapshot file. |
+| **`ba-codex-state.json`** | async handoff prepare | pipeline resume | Checkpoint + `codexRelativeOutputPath`, labels, runner ctx. |
+| **`invocation-output.txt`** (default) | Codex child | **`apply_ba_outcome`** | Raw model reply. |
 
 **Artifact chain (short):**
 
-1. **Prepare** uploads `async-invocation-handoff/<KEY>/` (prep JSON; plus all **contract** input artifacts + state **when** `skip_reason` was empty). Parent runs **`verify-invocation-handoff-ci.ts`** before upload.
-2. **`ba_codex`** downloads that artifact, verifies input files, runs Codex, writes **`invocation-output.txt`** (default), uploads **`caller-handoff_codex_output`** artifact.
-3. **Finish** downloads **prepare** artifact again, then **post-codex** overlay when Codex succeeded, passes **`skip_reason`** into the resume run; TS reads **state** + **output** when BA ran, or exits early when **`AI_TEAMMATE_SKIP_BA_REASON`** is set.
+1. **Prepare** (same job): pipeline writes `async-invocation-handoff/<KEY>/`, then **`verify-invocation-handoff-ci.ts`**, upload, **`dispatch-pipeline-async-child-ci.ts`**.
+2. **Child** runs Codex, writes **`invocation-output.txt`**, uploads post-Codex artifact.
+3. **Resume** invocation: downloads artifacts, **`pipeline_ci`** continues from **`async_trigger_step`** → **`apply_ba_outcome`**, then any tail steps.

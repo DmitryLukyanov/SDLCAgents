@@ -41,11 +41,11 @@
 │  │   workflow_dispatch   │    │                                                          │  │
 │  │                       │    │   Runs TypeScript pipeline (ai-teammate-agent.ts):       │  │
 │  │   Scans Jira for      │    │   1. ensure_jira_fields_expected — validate description  │  │
-│  │   tickets, dispatches │    │   2. create_github_issue — placeholder + Jira snapshot comment │  │
-│  │   ai-teammate.yml     │    │   3. params.skipIfLabel / Codex BA — GPT-4o analysis inline              │  │
-│  │   per ticket          │    │      complete → continue                                 │  │
-│  │                       │    │      incomplete → block Jira, close issue, stop          │  │
-│  │                       │    │   4. start_developer_agent — update issue + dispatch workflow │  │
+│  │   tickets, dispatches │    │   2. create_github_issue — Jira snapshot in issue body   │  │
+│  │   ai-teammate.yml     │    │   3. async_operation — handoff files → dispatch child     │  │
+│  │   per ticket          │    │      (BA/Codex in business-analyst.yml / Codex action)    │  │
+│  │                       │    │   4. apply_ba_outcome (resume) — interpret output, Jira/  │  │
+│  │                       │    │      GitHub updates; optional async_terminal_operation    │  │
 │  └──────────────────────┘    └──────────────────────────────┬───────────────────────────┘  │
 │                                                              │ Copilot assigned             │
 │                                                              ▼                              │
@@ -84,7 +84,7 @@
 │  │  Run ai-teammate-agent.ts  (src/workflows/ai-teammate/ai-teammate-agent.ts)        │  │
 │  │                                                                                   │  │
 │  │  decodeCallerConfig(CALLER_CONFIG) → issueKey + customParams                       │  │
-│  │  runPipeline(issueKey, steps, deps)  → ai-teammate-pipeline.ts                    │  │
+│  │  runPipelineCi(deps)  → ai-teammate-pipeline.ts (config steps + async handoff)      │  │
 │  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
 │                               │                                                          │
 │                               ▼                                                          │
@@ -110,28 +110,26 @@
 │                               │                                                          │
 │                               ▼                                                          │
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
-│  │  Step: params.skipIfLabel / Codex BA                                                              │  │
-│  │  src/workflows/ai-teammate/steps/run-ba-inline.ts                                 │  │
+│  │  Step: async_operation (async_call → business-analyst.yml)                        │  │
+│  │  ai-teammate-codex-ba-prepare.ts — prepareCodexBaArtifacts                         │  │
 │  │                                                                                   │  │
-│  │  getIssue() + adfToPlain()             ← jira-client.ts / adf-to-plain.ts        │  │
-│  │  extractComments() + mapRelated()      ← business-analyst-core.ts                │  │
-│  │  fetchRelatedIssueSummaries()          ← jira-related.ts                         │  │
-│  │  analyzeTicket(ctx, token, model)      ← analyze-ticket.ts → GPT-4o              │  │
-│  │                                                                                   │  │
-│  │  complete   → ctx.baOutcome ← outcome → continue                                 │  │
-│  │  incomplete → addIssueComment(questions)                                          │  │
-│  │               transitionIssueToStatusName("Blocked")                              │  │
-│  │               closeGithubIssue(githubIssueNumber) → stop                          │  │
+│  │  Writes async-invocation-handoff/<KEY>/* ; reusable workflow dispatches child.   │  │
+│  │  Codex LLM runs in consumer workflow (not in ai-teammate-agent.ts).               │  │
 │  └────────────────────────────┬──────────────────────────────────────────────────────┘  │
-│                               │ BA complete                                              │
+│                               │ resume after child                                       │
 │                               ▼                                                          │
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
-│  │  Step: start_developer_agent                                                      │  │
-│  │  src/workflows/ai-teammate/steps/start-developer-agent.ts                         │  │
+│  │  Step: apply_ba_outcome                                                           │  │
+│  │  src/workflows/ai-teammate/steps/apply-ba-outcome.ts                              │  │
 │  │                                                                                   │  │
-│  │  updateGithubIssueBody(issueNumber, body)                                         │  │
-│  │  dispatchDeveloperAgent(workflowFile, ref, inputs)                                │  │
-│  │    → developer agent workflow opens a PR                                          │  │
+│  │  interpretBaModelOutput() ← business-analyst/analyze-ticket.ts                    │  │
+│  │  applyCodexBaOutcomeToJiraAndGithub()                                             │  │
+│  └───────────────────────────────────────────────────────────────────────────────────┘  │
+│                               │                                                          │
+│                               ▼                                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Optional: async_terminal_operation (e.g. speckit-developer-agent.yml)            │  │
+│  │  dispatch-pipeline-async-child-ci.ts — terminal child, no parent resume           │  │
 │  └───────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                          │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
@@ -139,53 +137,26 @@
 
 ---
 
-## Level 4 — Code (run-ba-inline.ts + analyze-ticket.ts)
+## Level 4 — Code (apply_ba_outcome + analyze-ticket)
 
 ```
-  run-ba-inline.ts  (src/workflows/ai-teammate/steps/run-ba-inline.ts)
+  apply-ba-outcome.ts  (src/workflows/ai-teammate/steps/apply-ba-outcome.ts)
   │
-  │  runBaInline(ctx, deps)
+  │  runApplyBaOutcome(ctx, step, deps)
   │
-  │    deps.getIssue(issueKey, fields)
-  │      --> src/lib/jira/jira-client.ts  jiraFetch( GET /rest/api/3/issue/{key} )
+  │    read ba-codex-state.json + Codex primary output file (contract paths)
   │
-  │    adfToPlain(fields.description | comment.body)
-  │      --> src/lib/adf-to-plain.ts
-  │
-  │    extractComments(issue)           ← business-analyst-core.ts
-  │      filters BA-generated vs user comments (isBAGeneratedComment flag)
-  │      presents user replies as "User Answers to BA Questions"
-  │
-  │    deps.fetchRelatedIssueSummaries(issueKey, depth)
-  │      --> src/lib/jira/jira-related.ts
-  │            searchIssues(`issue in linkedIssues("KEY")`)
-  │            searchIssues(`parent = KEY`)
-  │
-  │    mapRelated(related)              ← business-analyst-core.ts
-  │
-  │    deps.analyzeTicket(ctx, githubToken, model)
+  │    interpretBaModelOutput(codexOutput, ticketCtx)
   │      --> src/workflows/business-analyst/analyze-ticket.ts
-  │            buildPrompt(ctx)
-  │            callGitHubModels(prompt, token)
-  │              POST https://models.github.ai/inference/chat/completions
-  │              model: openai/gpt-4o, temperature: 0.1
-  │              response_format: { type: "json_object" }
-  │            parseAnalysisResponse(raw) → BaAnalysisResult
-  │              coerceToString() flattens nested LLM object responses
-  │            isComplete(result) → all 5 fields non-null?
+  │            parseAnalysisResponse (JSON from Codex / model)
   │
-  │    complete:
-  │      ctx.baOutcome ← outcome
-  │      return { status: 'continue' }
+  │    applyCodexBaOutcomeToJiraAndGithub(ctx, labels, deps, outcome)
+  │      --> steps/apply-codex-ba-outcome-to-jira-github.ts
   │
-  │    incomplete:
-  │      deps.addIssueComment(issueKey, questions)
-  │      deps.transitionIssueToStatusName(issueKey, "Blocked")
-  │      deps.closeGithubIssue(owner, repo, githubIssueNumber)
-  │      return { status: 'stop', reason: "BA incomplete" }
-  │
-  └── types: BaAnalysisResult, BaOutcome, TicketContext, JiraComment
+  └── types: BaOutcome, BaAnalysisResult
         --> src/workflows/business-analyst/ba-types.ts
+
+  (LLM call for BA happens in consumer Codex workflow, not in apply_ba_outcome.)
 ```
 
 ---
@@ -219,17 +190,11 @@
 │  - Created GitHub issue "{KEY}: Copilot Coding Agent Task"                            │
 │    (label: jira:{KEY}; body: Jira snapshot after marker — no BA-in-progress line)    │
 │                                                                                       │
-│  Step: params.skipIfLabel / Codex BA                                                                  │
-│  - Read Jira ticket: summary, description, comments, related tickets                  │
-│  - Called GPT-4o inline to analyze ticket requirements                                │
-│  - Path: BA complete   → stored baOutcome in pipeline context → continue              │
-│  - Path: BA incomplete → added clarification questions as Jira comment                │
-│                          updated Jira status: In Progress → Blocked                   │
-│                          closed GitHub issue as not planned → stop                    │
+│  Step: async handoff + child BA/Codex (async_operation)                               │
+│  - prepareCodexBaArtifacts → async-invocation-handoff/<KEY>/                         │
+│  - Child workflow runs Codex; resume runs apply_ba_outcome                            │
 │                                                                                       │
-│  Step: start_developer_agent  (only reached if BA complete)                           │
-│  - Filled github-issue-with-copilot.md template with BA results + Jira snapshot      │
-│  - PATCHed GitHub issue: full prompt body + assigned copilot-swe-agent[bot]          │
+│  Optional: async_terminal_operation → speckit-developer-agent.yml                    │
 └────────────────────────────┬──────────────────────────────────────────────────────────┘
                              │ Copilot assigned
                              ▼
@@ -247,7 +212,7 @@
 
 ## End-to-end sequence (Mermaid)
 
-The diagram below matches the **current** automation in this repository: `scrum-master` dispatches the workflow named in `scrum-master.config` (often `ai-teammate.yml` in consumer repos) **always at git ref `master`**, the pipeline runs the steps in `config/workflows/ai-teammate/ai-teammate.config`, BA runs **inline** (`params.skipIfLabel / Codex BA` → GitHub Models), Copilot is assigned on the GitHub issue (`custom_agent: sdlc.pipeline` in `ai-teammate-agent.ts`), and `_reusable-pr-merged.yml` finishes Jira when the PR merges.
+The diagram below matches the **current** automation in this repository: `scrum-master` dispatches `ai-teammate` **at git ref `master`**, the pipeline runs `ai-teammate.config`, BA runs in an **async child** workflow (Codex), **`apply_ba_outcome`** interprets output on resume, and Copilot/spec-kit may follow per consumer config. `_reusable-pr-merged.yml` finishes Jira when the PR merges.
 
 ```mermaid
 sequenceDiagram
@@ -256,7 +221,7 @@ sequenceDiagram
     participant J as Jira
     participant AT as AI Teammate<br/>(ai-teammate-agent.ts)
     participant GH as GitHub Issue
-    participant LLM as AI model<br/>(GitHub Models, GPT-4o)
+    participant CX as Codex BA child<br/>(business-analyst.yml)
     participant COP as Copilot coding agent<br/>(sdlc.pipeline.agent.md)
     participant PR as GitHub PR
     participant PM as PR merged workflow<br/>(_reusable-pr-merged.yml)
@@ -280,21 +245,18 @@ sequenceDiagram
         else description present
             AT->>GH: create_github_issue (Jira snapshot in body; BA progress via comments)
             rect rgb(220, 255, 220)
-                Note over AT,LLM: params.skipIfLabel / Codex BA (skipIfLabel ba_analyzed → stop if already labeled)
-                AT->>J: getIssue + related issues
-                AT->>GH: optional comment: BA analysis started
-                AT->>LLM: analyzeTicket → structured BA result
+                Note over AT,CX: async_operation — handoff; skipIfLabel gate runs inside pipeline_ci
+                AT->>AT: prepareCodexBaArtifacts → async-invocation-handoff/<KEY>/
+                AT->>CX: workflow_dispatch child (business-analyst / Codex)
+                CX-->>AT: invocation-output.txt (resume)
+                AT->>AT: apply_ba_outcome — interpretBaModelOutput + Jira/GitHub
                 alt BA complete (all required fields)
-                    LLM-->>AT: complete outcome
                     AT->>J: add label ba_analyzed (from config)
                     AT->>GH: optional comment: BA complete
-                    Note over AT,GH: start_developer_agent — update issue + dispatch workflow
-                    AT->>GH: Update issue body
-                    AT->>GH: Dispatch developer agent workflow
+                    Note over AT,GH: optional async_terminal_operation or Copilot on issue
                     COP->>PR: Open PR (e.g. label jira:KEY)
                     Note over PR: PR ready → human review / approve / merge
                 else BA incomplete
-                    LLM-->>AT: questions / partial result
                     AT->>J: addIssueComment(questions)
                     AT->>GH: comment + close placeholder issue
                     AT--xAT: stop pipeline

@@ -68,10 +68,10 @@ AI TEAMMATE — one run per dispatched issue
     |
     v
   Step: tsx .../ai-teammate-agent.ts (workflow) or npm run ai-teammate-agent (SDLCAgents root)
-    --> [TS:src/workflows/ai-teammate/ai-teammate-agent.ts] → runAiTeammateAgent() [ai-teammate-core.ts]
-          decodeCallerConfig(CALLER_CONFIG)     [src/lib/caller-config.ts]
-          extractIssueKeyFromCallerConfig(root) [src/lib/caller-config.ts]
-          runPipeline(issueKey, steps, deps)     [ai-teammate-pipeline.ts]
+    --> [TS:src/workflows/ai-teammate/ai-teammate-agent.ts] → runPipelineCi(deps) [ai-teammate-pipeline.ts]
+          loadAiTeammatePipelineFromEnv()      [ai-teammate-core.ts]
+          decodeCallerConfig / extractIssueKey  [src/lib/caller-config.ts]
+          evaluateSkipIfLabelFromConfigFile (fresh runs) [lib/agent-skip-if-label.ts]
             (steps from config/workflows/ai-teammate/ai-teammate.config)
     |
     v
@@ -87,34 +87,19 @@ AI TEAMMATE — one run per dispatched issue
           deps.updateGithubIssueBody → marker `<!-- sdlc-agents:jira-context -->` + Jira-only markdown
     |
     v
-  Step: Codex BA (params.skipIfLabel / addLabel)
-    --> [TS:src/workflows/ai-teammate/steps/run-ba-inline.ts] runBaInline()
-          deps.getIssue(issueKey, fields)             [jira-client.ts]
-          adfToPlain(description / comments)          [adf-to-plain.ts]
-          extractComments(issue)                      [business-analyst-core.ts]
-          deps.fetchRelatedIssueSummaries(key, depth) [jira-related.ts]
-          mapRelated(related)                         [business-analyst-core.ts]
-          deps.analyzeTicket(ctx, githubToken, model) [analyze-ticket.ts]
-            buildPrompt(ctx)
-              user replies after BA questions → "User Answers to BA Questions"
-            callGitHubModels(prompt, token)
-              POST models.github.ai/inference/chat/completions
-              model=openai/gpt-4o, temp=0.1, response_format=json_object
-            parseAnalysisResponse(raw) → BaAnalysisResult
-              coerceToString() handles nested LLM object responses
-            isComplete() → all 5 fields populated?
-          If complete:
-            ctx.baOutcome ← outcome
-            return { status: 'continue' }
-          If incomplete:
-            deps.addIssueComment(issueKey, questions)         [jira-client.ts]
-            deps.transitionIssueToStatusName(key, "Blocked")  [jira-client.ts]
-            deps.closeGithubIssue(owner, repo, githubIssueNumber)
-            return { status: 'stop', reason: "BA incomplete" }
+  Step: async_operation (async_call → consumer business-analyst / Codex)
+    --> [TS:src/workflows/ai-teammate/ai-teammate-codex-ba-prepare.ts] prepareCodexBaArtifacts()
+          writes async-invocation-handoff/<KEY>/* ; reusable workflow dispatches child
     |
     v
-  (Removed) Step: assign_copilot
-    This step is no longer used by the pipeline.
+  Step: apply_ba_outcome (pipeline resume after child)
+    --> [TS:src/workflows/ai-teammate/steps/apply-ba-outcome.ts] runApplyBaOutcome()
+          interpretBaModelOutput() [business-analyst/analyze-ticket.ts]
+          applyCodexBaOutcomeToJiraAndGithub() [apply-codex-ba-outcome-to-jira-github.ts]
+    |
+    v
+  Optional: async_terminal_operation (e.g. speckit-developer-agent.yml)
+    --> [TS:src/workflows/ai-teammate/dispatch-pipeline-async-child-ci.ts] (terminal dispatch)
 
 --------------------------------------------------------------------------------
 CONFIG / SECRETS (reference)
@@ -123,7 +108,7 @@ CONFIG / SECRETS (reference)
   SM pipeline (JSON): env PIPELINE_CONFIG_FILE or RULES_FILE or default config/workflows/scrum-master/scrum-master.config
                       (SmDispatchStep[] per sm_dispatch_rule step: jql, configFile, workflowFile, …)
   Agent JSON:         config/workflows/ai-teammate/ai-teammate.config
-  BA (inline):        src/workflows/business-analyst/analyze-ticket.ts → GitHub Models (no separate BA workflow)
+  BA (Codex):         consumer business-analyst.yml / Codex; interpret output in apply-ba-outcome.ts (analyze-ticket.ts)
   Coding agent def:   .github/agents/sdlc.pipeline.agent.md  (SDLCClient)
   GitHub secrets:     JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
                       COPILOT_PAT (GitHub Models API + issues write)

@@ -18,5 +18,3 @@ export {
 export {
   writeBaGithubIssuePrepCheckpoint,
 } from './ai-teammate-codex-ba-prepare.js';
-
-export { runCodexBaFinish } from './ai-teammate-codex-ba-finish.js';

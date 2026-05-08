@@ -10,7 +10,7 @@
  * Modes (`AI_TEAMMATE_MODE`, required):
  *   pipeline_ci — CI default: config `params.steps` + optional async handoff; parent resume via `caller_config.params.async_child_run_id` + `async_trigger_step`
  *
- * Optional (CI): `AI_TEAMMATE_SKIP_BA_REASON` — when non-empty (from job output `skip_reason`), BA segment is skipped.
+ * Optional (CI): `AI_TEAMMATE_SKIP_BA_REASON` — when non-empty (e.g. child dispatch sets it), BA apply segment may skip.
  */
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
@@ -98,15 +98,6 @@ export function buildAiTeammateDeps(): AiTeammateDeps {
         issue_number: issueNumber,
       });
       return issue.body ?? '';
-    },
-    dispatchDeveloperAgent: async (owner, repo, workflowFile, ref, inputs) => {
-      await octokitRest.rest.actions.createWorkflowDispatch({
-        owner,
-        repo,
-        workflow_id: workflowFile,
-        ref,
-        inputs,
-      });
     },
     closeGithubIssue: async (owner, repo, issueNumber) => {
       await octokitRest.rest.issues.update({

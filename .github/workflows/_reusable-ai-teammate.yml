@@ -3,7 +3,7 @@
 #
 # Single job: config `params.steps` (pipeline runner) — Jira gates, GitHub issue, optional async BA
 # (`ba_codex_async` + `async_call` → consumer `business-analyst.yml` + `_reusable-codex-run.yml`), then
-# `start_developer_agent`. Codex does **not** run inline in this workflow.
+# Tail steps may include `apply_ba_outcome` and optional `async_terminal_operation`. Codex does **not** run inline here.
 #
 # Resume: early steps detect `caller_config.params.async_child_run_id`, download parent + child artifacts,
 # main `pipeline_ci` step reads `caller_config.params.async_child_run_id` + `async_trigger_step` to resume the step loop (skip prior steps, complete async from artifacts, run tail).

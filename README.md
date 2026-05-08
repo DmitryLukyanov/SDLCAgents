@@ -98,16 +98,16 @@ Repositories that run **Spec Gate** or **AI Teammate / Developer Agent** with Co
 
 ## AI Teammate — Issue & Agent Flow
 
-Implementation lives in `src/workflows/ai-teammate/` (text flow: `SEQUENCE.md`; diagrams: `docs/pipeline-flow.md`). Shared **`params.skipIfLabel`** / **`params.addLabel`** gate Codex BA (and match the scrum-master label pattern); Codex runs in CI (inline or async child workflow). CI job **Create GitHub issue and prepare BA** runs a **Jira skip-label** check, then runs the unified **config-driven** pipeline (`AI_TEAMMATE_MODE=pipeline_ci`), then **Codex**, then **finish**. For a dry run with mocks, use `npm run ai-teammate:debug`.
+Implementation lives in `src/workflows/ai-teammate/` (text flow: `SEQUENCE.md`; diagrams: `docs/pipeline-flow.md`). Shared **`params.skipIfLabel`** / **`params.addLabel`** gate the BA segment (same idea as scrum-master labels). **`runPipelineCi`** evaluates the skip gate via Jira before running steps; Codex/BA runs in an **async child** workflow (`async_call`). For a dry run with mocks, use `npm run ai-teammate:debug`.
 
 ### Codex BA — prepare, LLM run, and finish
 
 | Phase | `AI_TEAMMATE_MODE` / job | What runs | LLM? |
 |-------|--------------------------|-----------|------|
-| **0** | _(workflow step)_ | **`lib/agent-skip-if-label.ts`** (`evaluateSkipIfLabel`), entry **`check-ba-skip-label-ci.ts`** → step output **`skip_reason`**: **empty** = run BA; **non-empty** = skip BA prepare + Codex (no skip file; job output → finish via **`AI_TEAMMATE_SKIP_BA_REASON`**). | **No** |
-| **1. Prepare + dispatch** | `pipeline_ci` — `tsx …/ai-teammate-agent.ts` | Runs config steps up to the async boundary, writes the BA invocation artifacts (prompt/context/state/manifest), and dispatches the async child when configured. | **No** |
-| **2. Codex BA** | separate workflow job — `openai/codex-action@v1` | Reads the prepared prompt (and repo context per action config), writes **`async-invocation-handoff/<JIRA_KEY>/invocation-output.txt`** (default contract). | **Yes** — this is the BA LLM call. |
-| **3. Finish** | `pipeline_ci` (resume) — `tsx …/ai-teammate-agent.ts` | If **`AI_TEAMMATE_SKIP_BA_REASON`** is set (from job output **`skip_reason`**), records that and exits. Otherwise resumes from the async child outputs, applies the BA outcome (Jira comment/transition, GitHub issue updates, labels), then continues the pipeline (or stops on incomplete BA). | **No** — parses Codex output; does not invoke Codex again. |
+| **0** | _(inside `pipeline_ci`)_ | **`evaluateSkipIfLabelFromConfigFile`** (`lib/agent-skip-if-label.ts`) on fresh runs — sets **`ctx.skipBaReason`** when the ticket already has **`skipIfLabel`** (skips BA prepare + child dispatch for that segment). | **No** |
+| **1. Prepare + dispatch** | `pipeline_ci` — `tsx …/ai-teammate-agent.ts` | Runs config steps up to **`async_call`**, writes BA invocation artifacts, then reusable workflow dispatches the child (`dispatch-pipeline-async-child-ci.ts`). | **No** |
+| **2. Codex BA** | Consumer child workflow (e.g. `business-analyst.yml`) | Codex reads the prepared prompt, writes **`invocation-output.txt`** (default contract). | **Yes** — BA LLM. |
+| **3. Resume** | `pipeline_ci` (same entrypoint, **`async_child_run_id`** in caller) | Downloads handoff artifacts, runs **`apply_ba_outcome`** and tail steps. If **`AI_TEAMMATE_SKIP_BA_REASON`** is set, BA apply may no-op. | **No** — parses Codex output only. |
 
 `AI_TEAMMATE_CONCURRENCY_KEY` (workflow input) must match the Jira key embedded in `CALLER_CONFIG`, or artifact paths and the workflow disagree.
 
@@ -123,18 +123,17 @@ sequenceDiagram
 
     Note over AT: runPipeline steps from ai-teammate.config
 
-    AT->>AT: agent-skip-if-label (Jira vs skipIfLabel) → skip_reason
+    AT->>AT: runPipelineCi: skipIfLabel gate (Jira) → skipBaReason
     AT->>AT: pipeline_ci — runs steps, writes BA invocation prompt/state
     AT->>CX: Codex job — invocation-output.txt
     AT->>AT: pipeline_ci (resume) — read Codex output, interpret + apply (no second LLM)
     alt BA complete
-        CX-->>AT: five-field JSON result
-        AT->>J: optional ba_analyzed label
-        AT->>GH: start_developer_agent — update body + dispatch dev agent workflow
-        GH-->>COP: agent session starts
-        COP->>COP: step-controller → specify → PR comment
-        Note over COP: user posts /proceed on the PR
-        COP->>COP: step-controller → clarify / plan / tasks / implement / code_review → PR comment (repeat)
+        CX-->>AT: five-field JSON result (invocation-output.txt)
+        AT->>J: optional ba_analyzed label (apply_ba_outcome)
+        AT->>GH: Jira/GitHub updates per outcome
+        Note over AT: optional async_terminal_operation → speckit / Copilot (consumer config)
+        GH-->>COP: Copilot session may run from issue assignment (consumer)
+        COP->>COP: spec-kit steps → PR
     else BA incomplete
         CX-->>AT: questions / partial (or parse HIL)
         AT->>J: comment + transition Blocked
@@ -164,7 +163,7 @@ sequenceDiagram
     AT->>GH: placeholder issue
     Note over AT: Codex BA — prepare (TS, no LLM), codex-action, finish (TS, no LLM)
     alt BA complete
-        AT->>GH: start_developer_agent — body + Copilot + dispatch
+        AT->>GH: apply BA outcome; optional terminal workflow dispatch
         COP->>GH: branch, implement, PR (jira:KEY)
     else BA incomplete
         AT->>J: questions, Blocked
@@ -183,26 +182,27 @@ sequenceDiagram
 flowchart TD
     subgraph SM [Scrum Master — scrum-master.yml]
         SM1[Load scrum-master.config]
-        SM2[Search Jira per rules]
+        SM2[Search Jira per sm_dispatch_rule steps]
         SM3[Dispatch consumer ai-teammate.yml]
         SM1 --> SM2 --> SM3
     end
 
     subgraph AT [AI Teammate — reusable workflow + agent]
         A1[ensure_jira_fields_expected]
-        A2[create_github_issue\n+ Jira snapshot comment]
-        A3[Codex BA — async / openai/codex-action\n(params.skipIfLabel / addLabel)]
-        A4[start_developer_agent]
-        A1 --> A2 --> A3 --> A4
+        A2[create_github_issue\n+ Jira snapshot body]
+        A3[async_operation — handoff +\nchild Codex BA]
+        A4[apply_ba_outcome — resume]
+        A5[optional terminal async\n/ Copilot on issue]
+        A1 --> A2 --> A3 --> A4 --> A5
     end
 
     SM3 --> A1
 
-    A4 -->|incomplete| X1[Jira comment + Blocked]
-    A4 -->|incomplete| X2[Close GitHub issue not_planned]
+    A4 -->|BA incomplete| X1[Jira comment + Blocked]
+    A4 -->|BA incomplete| X2[Close GitHub issue not_planned]
     X1 --> END_BAD([End])
 
-    A5 --> COP[Copilot — speckit.step-controller\none step at a time, PR comment after each\nuser posts /proceed to advance]
+    A5 --> COP[Copilot — speckit / coding agent\nper consumer config]
 
     subgraph PM [PR merged — pr-merged.yml]
         P1[GitHub issue cleanup]

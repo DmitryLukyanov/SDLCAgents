@@ -31,14 +31,6 @@ export interface AiTeammateDeps {
   updateGithubIssueBody: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;
   /** Get the GitHub issue body. */
   getGithubIssueBody: (owner: string, repo: string, issueNumber: number) => Promise<string>;
-  /** Dispatch the developer agent workflow in the consumer repo. */
-  dispatchDeveloperAgent: (
-    owner: string,
-    repo: string,
-    workflowFile: string,
-    ref: string,
-    inputs: { issue_number: string; issue_key: string; step: string; branch_name?: string },
-  ) => Promise<void>;
   closeGithubIssue: (owner: string, repo: string, issueNumber: number) => Promise<void>;
   addGithubIssueComment: (owner: string, repo: string, issueNumber: number, body: string) => Promise<void>;
 }

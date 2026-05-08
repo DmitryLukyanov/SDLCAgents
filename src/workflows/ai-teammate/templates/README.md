@@ -92,7 +92,7 @@ pipeline.
 | `{{TASKS_INPUT}}` | BA-generated tasks-step instruction |
 | `{{IMPLEMENT_INPUT}}` | BA-generated implement-step instruction |
 
-**Set by:** `steps/start-developer-agent.ts` → `deps.updateGithubIssueBody`
+**Set by:** _(no current `ai-teammate` pipeline step loads this template; retained for reference / manual use)_
 
 ---
 
@@ -103,7 +103,7 @@ observers know the agent is running.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `ai-teammate-codex-ba-prepare.ts` (pipeline async handoff, before the Codex job; re-exported from `ai-teammate-codex-ba.ts`)
+**Set by:** `ai-teammate-codex-ba-prepare.ts` (pipeline async handoff, before the Codex job; shared exports in `ai-teammate-codex-ba.ts`)
 
 ---
 
@@ -138,7 +138,7 @@ label conventions.
 
 **Placeholders:** `{{ISSUE_KEY}}`
 
-**Set by:** `steps/start-developer-agent.ts`
+**Set by:** _(not wired by current `ai-teammate-agent.ts` pipeline; consumer may use when assigning Copilot)_
 
 **Example output:**
 ```

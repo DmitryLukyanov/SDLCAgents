@@ -3,7 +3,7 @@
  * Run:   npm run ai-teammate:debug
  *
  * Runs **Codex BA prepare** only (writes `async-invocation-handoff/<KEY>/invocation-*.md` + state under the repo).
- * `params.skipIfLabel` is evaluated in GitHub Actions only (`lib/agent-skip-if-label.ts` via `check-ba-skip-label-ci.ts`); this script does not skip BA by label.
+ * `params.skipIfLabel` is evaluated inside `runPipelineCi` (`evaluateSkipIfLabelFromConfigFile`); ensure Jira is reachable if you test the gate.
  * Edit ISSUE_KEY or mock data below to experiment.
  */
 import { buildAiTeammateCallerConfigEncoded } from '../../src/lib/routing_helper.js';
@@ -97,12 +97,6 @@ const mockDeps: AiTeammateDeps = {
     return 'Mock issue body';
   },
 
-  dispatchDeveloperAgent: async (owner, repo, workflowFile, ref, inputs) => {
-    console.log(
-      `[mock] dispatchDeveloperAgent(${owner}/${repo}, ${workflowFile}@${ref}) issue=${inputs.issue_number} key=${inputs.issue_key} step=${inputs.step} branch=${inputs.branch_name ?? '(bootstrap)'}`,
-    );
-  },
-
   closeGithubIssue: async (owner, repo, issueNumber) => {
     console.log(`[mock] closeGithubIssue(${owner}/${repo}#${issueNumber})`);
   },
@@ -112,8 +106,6 @@ const mockDeps: AiTeammateDeps = {
   },
 };
 
-await runPipelineCi(mockDeps);
-
-console.log(`=== AI Teammate local debug (codex_ba_prepare) · issue: ${ISSUE_KEY} ===\n`);
+console.log(`=== AI Teammate local debug (pipeline_ci) · issue: ${ISSUE_KEY} ===\n`);
 await runPipelineCi(mockDeps);
 console.log('\n=== Done ===');
