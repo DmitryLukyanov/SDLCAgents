@@ -136,19 +136,9 @@ Scrum Master (Jira)
 
 ---
 
-## Pinning to a specific version
+## SDLCAgents ref
 
-By default, workflows pull from `main` of SDLCAgents. To pin to a specific commit or tag,
-edit the `sdlc_agents_ref` input in your caller workflows:
-
-```yaml
-jobs:
-  call:
-    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-scrum-master.yml@main
-    with:
-      sdlc_agents_ref: 'v1.2.3'   # or a commit SHA
-    secrets: inherit
-```
+Reusable workflows always check out the **SDLCAgents** scripts repo at the **`master`** branch. Pin which workflow definition runs by setting the version in the `uses: …@ref` line of each caller (for example `@master`).
 
 ---
 

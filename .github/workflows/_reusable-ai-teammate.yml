@@ -39,11 +39,6 @@ on:
         description: "Caller payload: URL-encoded JSON { params: { inputJql, customParams? } } (ticket + overrides; see buildAiTeammateCallerConfigEncoded in src/lib/routing_helper.ts)."
         required: true
         type: string
-      sdlc_agents_ref:
-        description: "SDLCAgents branch/tag/SHA to pull scripts from"
-        required: false
-        type: string
-        default: 'master'
     secrets:
       JIRA_BASE_URL:
         required: true
@@ -102,7 +97,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: DmitryLukyanov/SDLCAgents
-          ref: ${{ inputs.sdlc_agents_ref }}
+          ref: master
           path: .sdlc-agents
           token: ${{ secrets.COPILOT_PAT }}
 

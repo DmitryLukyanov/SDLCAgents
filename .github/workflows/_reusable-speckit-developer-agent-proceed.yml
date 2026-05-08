@@ -20,11 +20,6 @@ on:
         description: "PR number where /proceed was commented"
         required: true
         type: number
-      sdlc_agents_ref:
-        description: "SDLCAgents branch/tag/SHA to use"
-        required: false
-        type: string
-        default: 'master'
     secrets:
       COPILOT_PAT:
         required: true

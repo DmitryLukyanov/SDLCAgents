@@ -25,11 +25,6 @@ on:
         required: false
         type: string
         default: 'master'
-      sdlc_agents_ref:
-        description: "SDLCAgents branch/tag/SHA to use"
-        required: false
-        type: string
-        default: 'master'
     secrets:
       COPILOT_PAT:
         required: true
@@ -47,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: DmitryLukyanov/SDLCAgents
-          ref: ${{ inputs.sdlc_agents_ref }}
+          ref: master
           path: .sdlc-agents
           token: ${{ secrets.COPILOT_PAT }}
 
