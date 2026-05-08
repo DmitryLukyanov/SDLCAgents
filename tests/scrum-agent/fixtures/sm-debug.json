@@ -1,13 +1,20 @@
 {
-  "rules": [
-    {
-      "description": "Local debug rule (JQL is not executed — search is mocked)",
-      "jql": "project = DEBUG",
-      "configFile": "config/workflows/ai-teammate/ai-teammate.config",
-      "workflowFile": "ai-teammate.yml",
-      "limit": 10,
-      "skipIfLabel": "sm_triggered",
-      "addLabel": "sm_local_debug_done"
-    }
-  ]
+  "name": "scrum_master_debug",
+  "description": "Local debug fixture (JQL is not executed — search is mocked)",
+  "params": {
+    "runner": "pipeline",
+    "steps": [
+      {
+        "id": "debug_batch",
+        "runner": "sm_dispatch_rule",
+        "description": "Local debug rule",
+        "jql": "project = DEBUG",
+        "configFile": "config/workflows/ai-teammate/ai-teammate.config",
+        "workflowFile": "ai-teammate.yml",
+        "limit": 10,
+        "skipIfLabel": "sm_triggered",
+        "addLabel": "sm_local_debug_done"
+      }
+    ]
+  }
 }

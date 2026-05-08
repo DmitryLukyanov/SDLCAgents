@@ -2,7 +2,7 @@
  * Shared Jira workflow status env helpers (Scrum Master JQL filter + ticket processor read/transition).
  */
 
-/** Default matches typical Jira backlog column name ("To Do"). Override with env or a rule’s `requiredJiraStatus` in scrum-master.config. */
+/** Default matches typical Jira backlog column name ("To Do"). Override with env or a step’s `requiredJiraStatus` in scrum-master.config. */
 export function getRequiredIssueStatus(): string {
   const s = (process.env.REQUIRED_JIRA_STATUS ?? 'To Do').trim();
   return s || 'To Do';
@@ -16,7 +16,7 @@ export function getRequiredIssueStatusWithOverride(override?: string): string {
   return getRequiredIssueStatus();
 }
 
-/** Default "In Progress". Override with env or a rule’s `postReadStatus` in scrum-master.config. */
+/** Default "In Progress". Override with env or a step’s `postReadStatus` in scrum-master.config. */
 export function getPostReadTargetStatus(): string {
   const s = (process.env.POST_READ_STATUS ?? 'In Progress').trim();
   return s || 'In Progress';

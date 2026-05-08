@@ -4,7 +4,7 @@ JSON files under `config/workflows/<agent>/` define **router** or **pipeline age
 
 ## Kinds
 
-- **Router** (e.g. Scrum Master): top-level non-empty `rules[]` with `jql`, `configFile`, optional `workflowFile` / `workflowRef`.
+- **Scrum Master**: pipeline agent JSON (`params.runner: pipeline`, non-empty `params.steps[]` with `runner: sm_dispatch_rule`, `jql`, `configFile`, `workflowFile`, …). Entry `workflow_dispatch` **always** uses git ref **`master`** (see `SCRUM_MASTER_ENTRY_DISPATCH_REF` in `src/lib/routing_helper.ts`).
 - **Pipeline agent**: top-level `name`, `description`, `params.steps[]`, optional top-level `contracts{}`. AI-using pipelines require a **single** agent-level `model` (top-level or `params.model`).
 
 ## Named contracts

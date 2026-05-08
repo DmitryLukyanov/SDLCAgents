@@ -1,5 +1,5 @@
 # Scrum Master — dispatches AI Teammate for each matching Jira ticket.
-# JQL and per-rule settings (including optional requiredJiraStatus / postReadStatus per rule) live in config/workflows/scrum-master/scrum-master.config.
+# JQL and per-step settings (including optional requiredJiraStatus / postReadStatus on each `sm_dispatch_rule` step) live in config/workflows/scrum-master/scrum-master.config.
 # Delegates execution to the shared SDLCAgents reusable workflow.
 #
 # Required secrets (Settings > Secrets and variables > Actions):

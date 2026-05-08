@@ -18,21 +18,19 @@ if (!token) {
   throw new Error('GITHUB_TOKEN is required');
 }
 
-const ref = process.env.GITHUB_REF_NAME || 'main';
 const globalLimit = Math.min(50, Math.max(1, parseInt(process.env.GLOBAL_LIMIT || '10', 10) || 10));
-const rulesFile =
-  process.env.RULES_FILE?.trim() || 'config/workflows/scrum-master/scrum-master.config';
-const defaultWorkflowFile = process.env.WORKFLOW_FILE?.trim() || 'ai-teammate.yml';
+const pipelineConfigPath =
+  process.env.PIPELINE_CONFIG_FILE?.trim()
+  || process.env.RULES_FILE?.trim()
+  || 'config/workflows/scrum-master/scrum-master.config';
 
 const octokit = new Octokit({ auth: token });
 
 const ctx = {
   owner,
   repo,
-  ref,
   globalLimit,
-  rulesFile,
-  defaultWorkflowFile,
+  pipelineConfigPath,
 };
 
 type WorkflowDispatchParams = NonNullable<

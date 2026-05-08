@@ -1,27 +1,29 @@
-# Composite action: validate consumer repo has specify init + SDLC Codex skills + agent files.
-# Same file list as onboarding / AI Teammate / Scrum Master expectations.
+# Composite: validate consumer spec-kit layout against SDLCAgents expectations.
+# - `.specify/init-options.json` exists
+# - When `.sdlc-agents/.specify/init-options.json` is present (SDLCAgents checkout), `speckit_version` must match
+# - Required `.github/agents` + `.agents/skills/speckit-*` files (same list as onboarding / SpecKit Developer Agent)
 name: Check spec-kit prerequisites
 description: >-
-  Verifies .specify/init-options.json and required .github/agents + .agents/skills files exist.
-  Sets output speckit_ready (true|false). Optional fail_on_not_ready exits 1 when not ready.
+  Validates the consumer repo for SpecKit Developer Agent: init file, version pin vs SDLCAgents checkout,
+  and Codex skill/agent files. Sets output speckit_ready. Optional fail_on_not_ready exits 1 when not ready.
 
 inputs:
   fail_on_not_ready:
     description: >-
-      If true, emit ::error:: annotations and exit with code 1 when anything is missing
-      (CI hard-fail). If false, only set speckit_ready=false and print hints (soft check).
+      If true, emit ::error:: annotations and exit with code 1 when anything is missing or version-mismatched.
+      If false, only set speckit_ready=false and print hints (soft check).
     required: false
     default: 'false'
   suggest_uvx_version:
     description: >-
-      Used only when fail_on_not_ready is true: printed in the final ::error:: hint
+      Used when fail_on_not_ready is true and init/options are missing: printed in the final ::error:: hint
       (spec-kit specify init via uvx).
     required: false
     default: '0.8.6'
 
 outputs:
   speckit_ready:
-    description: 'true when all prerequisite files exist; false otherwise'
+    description: 'true when all checks pass; false otherwise'
     value: ${{ steps.check.outputs.speckit_ready }}
 
 runs:
@@ -33,7 +35,9 @@ runs:
         FAIL_ON_NOT_READY: ${{ inputs.fail_on_not_ready }}
         SUGGEST_UVX_VERSION: ${{ inputs.suggest_uvx_version }}
       run: |
+        set -euo pipefail
         MISSING=0
+        VERSION_MISMATCH=0
 
         if [ ! -f ".specify/init-options.json" ]; then
           if [ "$FAIL_ON_NOT_READY" = "true" ]; then
@@ -42,6 +46,29 @@ runs:
             echo "❌ Missing: .specify/init-options.json"
           fi
           MISSING=1
+        fi
+
+        if [ "$MISSING" -eq 0 ] && [ -f ".specify/init-options.json" ]; then
+          if [ ! -f ".sdlc-agents/.specify/init-options.json" ]; then
+            if [ "$FAIL_ON_NOT_READY" = "true" ]; then
+              echo "::error::Cannot validate spec-kit version: missing .sdlc-agents/.specify/init-options.json (checkout SDLCAgents to path .sdlc-agents before this action)."
+              VERSION_MISMATCH=1
+            else
+              echo "⚠️ No .sdlc-agents/.specify/init-options.json — skipping version compare with SDLCAgents."
+            fi
+          else
+            CURRENT=$(jq -r '.speckit_version // "0.0.0"' .specify/init-options.json)
+            AGENTS_VERSION=$(jq -r '.speckit_version // "0.0.0"' .sdlc-agents/.specify/init-options.json)
+            if [ "$CURRENT" != "$AGENTS_VERSION" ]; then
+              if [ "$FAIL_ON_NOT_READY" = "true" ]; then
+                echo "::error::Spec-Kit version mismatch: consumer has v${CURRENT}, SDLCAgents requires v${AGENTS_VERSION}."
+                echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${AGENTS_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
+              else
+                echo "❌ Spec-Kit version mismatch: consumer v${CURRENT} vs SDLCAgents v${AGENTS_VERSION}"
+              fi
+              VERSION_MISMATCH=1
+            fi
+          fi
         fi
 
         for f in \
@@ -62,16 +89,17 @@ runs:
           fi
         done
 
-        if [ "$MISSING" -eq 1 ]; then
+        if [ "$MISSING" -eq 1 ] || [ "$VERSION_MISMATCH" -eq 1 ]; then
           echo "speckit_ready=false" >> "$GITHUB_OUTPUT"
           if [ "$FAIL_ON_NOT_READY" = "true" ]; then
-            echo "::error::Some agent/prompt files are missing. Run: uvx --from git+https://github.com/github/spec-kit.git@v${SUGGEST_UVX_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
+            if [ "$MISSING" -eq 1 ]; then
+              echo "::error::Remediation (missing files or uninitialized specify): uvx --from git+https://github.com/github/spec-kit.git@v${SUGGEST_UVX_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
+            fi
             exit 1
           fi
           echo ""
-          echo "⚠️ Spec-kit / Codex prerequisites are missing in this repo."
-          echo "   Run SDLC onboarding (or specify init + copy .agents/skills and .github/agents from SDLCAgents)."
+          echo "⚠️ Spec-kit prerequisites incomplete or version mismatch — see messages above."
         else
           echo "speckit_ready=true" >> "$GITHUB_OUTPUT"
-          echo "✅ Spec-kit init, Codex skills, and SDLC agent files found."
+          echo "✅ Spec-kit prerequisites OK (init, version vs SDLCAgents, agents + skills)."
         fi

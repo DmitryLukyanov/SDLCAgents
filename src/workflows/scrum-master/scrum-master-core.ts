@@ -1,8 +1,19 @@
 /**
  * Scrum Master orchestration — dependency-injected for tests / local debug.
+ *
+ * **Boundary:** Pipeline JSON uses shared loading (`load-sm-config` → `agent-config-file` / `pipeline-config`,
+ * same `params.steps` shape as other agents). **All Jira-specific behavior stays here** (and the CLI): JQL
+ * interpolation, status filters, search, transitions, labels, skip-by-label — not in generic pipeline helpers.
  */
-import { appendFile } from 'node:fs/promises';
 import type { JiraSearchResponse } from '../../lib/jira/jira-types.js';
+import {
+  publishJobSummary,
+  type JobSummarySegment,
+} from '../../lib/github/index.js';
+import {
+  isPipelineStepEnabled,
+  runPipelineStepSequence,
+} from '../../lib/pipeline-expected-step-helper.js';
 import {
   getPostReadTargetStatusWithOverride,
   getRequiredIssueStatusWithOverride,
@@ -11,20 +22,18 @@ import {
 import {
   dispatchEntryWorkflowForMappedIssue,
   resolveEntryWorkflowDispatchTarget,
+  type EntryWorkflowDispatchConfig,
   type GithubWorkflowDispatchPayload,
 } from '../../lib/routing_helper.js';
 import { interpolateJql, loadSmConfig } from './load-sm-config.js';
-import type { SmRule } from './sm-types.js';
+import type { SmDispatchStep } from './sm-types.js';
 
 export interface ScrumMasterContext {
   owner: string;
   repo: string;
-  ref: string;
   globalLimit: number;
-  /** Path to `scrum-master.config` JSON (env `RULES_FILE`). */
-  rulesFile: string;
-  /** Default workflow filename when a rule omits `workflowFile` (env `WORKFLOW_FILE`). */
-  defaultWorkflowFile: string;
+  /** Path to Scrum Master pipeline JSON (`params.steps`; env `PIPELINE_CONFIG_FILE` or legacy `RULES_FILE`). */
+  pipelineConfigPath: string;
 }
 
 export interface ScrumMasterDeps {
@@ -41,7 +50,8 @@ export interface ScrumMasterDeps {
 
 interface DispatchRecord {
   key: string;
-  rule: string;
+  /** Pipeline step label (`description` or `Step #n`). */
+  stepLabel: string;
   workflow: string;
   status: 'dispatched' | 'skipped' | 'failed';
   reason?: string;
@@ -54,181 +64,180 @@ function hasLabel(ticket: { fields?: { labels?: string[] } }, label: string): bo
   return labels.includes(label);
 }
 
-async function printSummaryTable(records: DispatchRecord[]): Promise<void> {
+function statusIcon(status: DispatchRecord['status']): string {
+  return status === 'dispatched' ? '✅' : status === 'skipped' ? '⏭️' : '❌';
+}
+
+function buildScrumMasterSummarySegments(records: DispatchRecord[]): JobSummarySegment[] {
   const dispatched = records.filter((r) => r.status === 'dispatched');
   const skipped = records.filter((r) => r.status === 'skipped');
   const failed = records.filter((r) => r.status === 'failed');
+  const stats = `**Total:** ${records.length} · ✅ Dispatched: ${dispatched.length} · ⏭️ Skipped: ${skipped.length} · ❌ Failed: ${failed.length}`;
 
-  // ── Console output ──
-  console.log('\n╔══════════════════════════════════════════════════════════════════╗');
-  console.log('║                     SCRUM MASTER SUMMARY                        ║');
-  console.log('╠══════════════════════════════════════════════════════════════════╣');
+  const intro: JobSummarySegment[] = [
+    '## Scrum Master Summary',
+    '',
+    stats,
+    '',
+  ];
 
   if (records.length === 0) {
-    console.log('║  No tickets processed.                                          ║');
-    console.log('╚══════════════════════════════════════════════════════════════════╝');
-  } else {
-    console.log(`║  Total: ${records.length}  │  ✅ Dispatched: ${dispatched.length}  │  ⏭️ Skipped: ${skipped.length}  │  ❌ Failed: ${failed.length}`);
-    console.log('╠══════════════════════════════════════════════════════════════════╣');
-    console.log('║  Ticket     │ Status     │ Workflow              │ Rule / Reason');
-    console.log('╟─────────────┼────────────┼───────────────────────┼──────────────');
-    for (const r of records) {
-      const icon = r.status === 'dispatched' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌';
-      const statusStr = `${icon} ${r.status}`.padEnd(10);
-      const detail = r.reason ? `${r.rule} — ${r.reason}` : r.rule;
-      console.log(`║  ${r.key.padEnd(11)}│ ${statusStr} │ ${r.workflow.padEnd(21)} │ ${detail}`);
-    }
-    console.log('╚══════════════════════════════════════════════════════════════════╝');
+    return [...intro, '_No tickets processed._'];
   }
 
-  // ── Markdown summary for GitHub Actions Job Summary ──
-  const lines: string[] = [];
-  lines.push('## Scrum Master Summary');
-  lines.push('');
-  lines.push(`**Total:** ${records.length} · ✅ Dispatched: ${dispatched.length} · ⏭️ Skipped: ${skipped.length} · ❌ Failed: ${failed.length}`);
-  lines.push('');
-
-  if (records.length > 0) {
-    lines.push('| Ticket | Status | Workflow | Rule / Reason | Issue |');
-    lines.push('|--------|--------|----------|---------------|-------|');
-    for (const r of records) {
-      const icon = r.status === 'dispatched' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌';
-      const detail = r.reason ? `${r.rule} — ${r.reason}` : r.rule;
-      const issueLink = r.status === 'dispatched' && r.repo
+  const rows = records.map((r) => {
+    const icon = statusIcon(r.status);
+    const detail = r.reason ? `${r.stepLabel} — ${r.reason}` : r.stepLabel;
+    const issueLink =
+      r.status === 'dispatched' && r.repo
         ? `[🔗 view](https://github.com/${r.repo}/issues?q=is%3Aissue+${r.key})`
         : '—';
-      lines.push(`| ${r.key} | ${icon} ${r.status} | ${r.workflow} | ${detail} | ${issueLink} |`);
-    }
-  } else {
-    lines.push('No tickets processed.');
-  }
+    return [r.key, `${icon} ${r.status}`, r.workflow, detail, issueLink];
+  });
 
-  lines.push('');
-  const md = lines.join('\n');
-
-  // GitHub Actions exposes GITHUB_STEP_SUMMARY as a path — append markdown directly (no temp copy step).
-  const stepSummary = process.env.GITHUB_STEP_SUMMARY?.trim();
-  if (stepSummary) {
-    try {
-      await appendFile(stepSummary, `${md}\n`, 'utf8');
-    } catch (e) {
-      console.warn('Could not append to GITHUB_STEP_SUMMARY (non-fatal):', e);
-    }
-  }
+  return [
+    ...intro,
+    {
+      kind: 'table',
+      headers: ['Ticket', 'Status', 'Workflow', 'Step / Reason', 'Issue'],
+      rows,
+    },
+  ];
 }
 
-async function processRule(
+/** One pipeline step (`sm_dispatch_rule`): Jira search + optional dispatch per issue (Jira logic stays here). */
+async function runSmDispatchStep(
   ctx: ScrumMasterContext,
   deps: ScrumMasterDeps,
-  rule: SmRule,
-  ruleIndex: number,
+  step: SmDispatchStep,
+  stepIndex: number,
   records: DispatchRecord[],
 ): Promise<number> {
-  if (rule.enabled === false) {
-    console.log(`\n══ Rule #${ruleIndex + 1} (disabled) ══`);
+  const requiredOverride = step.requiredJiraStatus?.trim();
+  const postOverride = step.postReadStatus?.trim();
+
+  let dispatched = 0;
+  const stepLabel = step.description || `Step #${stepIndex + 1}`;
+  const wfPath = step.workflowFile?.trim();
+  if (!wfPath) {
+    throw new Error(`${stepLabel}: workflowFile is required`);
+  }
+  const entryDispatch: EntryWorkflowDispatchConfig = {
+    configFile: step.configFile,
+    workflowFile: wfPath,
+  };
+  const { workflowId: workflowFile, ref: dispatchRef } = resolveEntryWorkflowDispatchTarget(entryDispatch);
+  const limit = Math.min(50, step.limit ?? ctx.globalLimit);
+
+  const baseJql = interpolateJql(step.jql);
+  const effectiveJql = jqlRequireStatusWithOverride(baseJql, requiredOverride);
+  const requiredStatus = getRequiredIssueStatusWithOverride(requiredOverride);
+
+  console.log(`\n══ ${stepLabel} ══`);
+  console.log(`   workflow: ${workflowFile} @ ${dispatchRef}`);
+  console.log(`   config: ${step.configFile}`);
+  console.log(`   status filter: "${requiredStatus}" → ${effectiveJql}`);
+
+  const needLabels = Boolean(step.skipIfLabel);
+  const searchFields = needLabels ? (['key', 'labels'] as const) : (['key'] as const);
+
+  const data = await deps.searchIssues(effectiveJql, limit, [...searchFields]);
+  let issues = data.issues || [];
+  console.log(
+    `   matched ${data.total ?? issues.length} issue(s); processing up to ${limit}, got ${issues.length}.`,
+  );
+
+  if (step.skipIfLabel) {
+    const before = issues.length;
+    const skipped = issues.filter((t) => hasLabel(t, step.skipIfLabel!));
+    issues = issues.filter((t) => !hasLabel(t, step.skipIfLabel!));
+    for (const t of skipped) {
+      records.push({
+        key: t.key,
+        stepLabel,
+        workflow: workflowFile,
+        status: 'skipped',
+        reason: `label "${step.skipIfLabel}"`,
+        repo: `${ctx.owner}/${ctx.repo}`,
+      });
+    }
+    if (before !== issues.length) {
+      console.log(`   skipIfLabel "${step.skipIfLabel}": ${before - issues.length} skipped`);
+    }
+  }
+
+  if (issues.length === 0) {
+    console.log('   Nothing to dispatch.');
     return 0;
   }
 
-  const requiredOverride = rule.requiredJiraStatus?.trim();
-  const postOverride = rule.postReadStatus?.trim();
-
-  let dispatched = 0;
-  try {
-    const ruleLabel = rule.description || `Rule #${ruleIndex + 1}`;
-    const { workflowId: workflowFile, ref: ruleRef } = resolveEntryWorkflowDispatchTarget(ctx, rule);
-    const limit = Math.min(50, rule.limit ?? ctx.globalLimit);
-
-    const baseJql = interpolateJql(rule.jql);
-    const effectiveJql = jqlRequireStatusWithOverride(baseJql, requiredOverride);
-    const requiredStatus = getRequiredIssueStatusWithOverride(requiredOverride);
-
-    console.log(`\n══ ${ruleLabel} ══`);
-    console.log(`   workflow: ${workflowFile} @ ${ruleRef}`);
-    console.log(`   config: ${rule.configFile}`);
-    console.log(`   status filter: "${requiredStatus}" → ${effectiveJql}`);
-
-    const needLabels = Boolean(rule.skipIfLabel);
-    const searchFields = needLabels ? (['key', 'labels'] as const) : (['key'] as const);
-
-    const data = await deps.searchIssues(effectiveJql, limit, [...searchFields]);
-    let issues = data.issues || [];
-    console.log(
-      `   matched ${data.total ?? issues.length} issue(s); processing up to ${limit}, got ${issues.length}.`,
-    );
-
-    if (rule.skipIfLabel) {
-      const before = issues.length;
-      const skipped = issues.filter((t) => hasLabel(t, rule.skipIfLabel!));
-      issues = issues.filter((t) => !hasLabel(t, rule.skipIfLabel!));
-      for (const t of skipped) {
-        records.push({ key: t.key, rule: ruleLabel, workflow: workflowFile, status: 'skipped', reason: `label "${rule.skipIfLabel}"`, repo: `${ctx.owner}/${ctx.repo}` });
-      }
-      if (before !== issues.length) {
-        console.log(`   skipIfLabel "${rule.skipIfLabel}": ${before - issues.length} skipped`);
-      }
-    }
-
-    if (issues.length === 0) {
-      console.log('   Nothing to dispatch.');
-      return 0;
-    }
-
-    for (const issue of issues) {
-      const key = issue.key;
-      console.log(`   Dispatching ${workflowFile} for ${key}...`);
+  for (const issue of issues) {
+    const key = issue.key;
+    console.log(`   Dispatching ${workflowFile} for ${key}...`);
+    try {
+      await dispatchEntryWorkflowForMappedIssue(deps, ctx, entryDispatch, key);
+      console.log(`   ok: ${key}`);
+      dispatched++;
+      records.push({ key, stepLabel, workflow: workflowFile, status: 'dispatched', repo: `${ctx.owner}/${ctx.repo}` });
       try {
-        await dispatchEntryWorkflowForMappedIssue(deps, ctx, rule, key);
-        console.log(`   ok: ${key}`);
-        dispatched++;
-        records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'dispatched', repo: `${ctx.owner}/${ctx.repo}` });
-        try {
-          await deps.transitionIssueToPostRead(key);
-          console.log(`   Jira status → ${getPostReadTargetStatusWithOverride(postOverride)}: ${key}`);
-        } catch (e) {
-          console.warn(`   ⚠️ Jira status update failed for ${key}:`, e);
-        }
-        if (rule.addLabel) {
-          try {
-            await deps.addIssueLabel(key, rule.addLabel);
-            console.log(`   label +${rule.addLabel}`);
-          } catch (e) {
-            console.warn(`   ⚠️ addLabel failed for ${key}:`, e);
-          }
-        }
+        await deps.transitionIssueToPostRead(key);
+        console.log(`   Jira status → ${getPostReadTargetStatusWithOverride(postOverride)}: ${key}`);
       } catch (e) {
-        console.warn(`   ⚠️ dispatch failed for ${key}:`, e);
-        records.push({ key, rule: ruleLabel, workflow: workflowFile, status: 'failed', reason: String(e instanceof Error ? e.message : e), repo: `${ctx.owner}/${ctx.repo}` });
+        console.warn(`   ⚠️ Jira status update failed for ${key}:`, e);
       }
+      if (step.addLabel) {
+        try {
+          await deps.addIssueLabel(key, step.addLabel);
+          console.log(`   label +${step.addLabel}`);
+        } catch (e) {
+          console.warn(`   ⚠️ addLabel failed for ${key}:`, e);
+        }
+      }
+    } catch (e) {
+      console.warn(`   ⚠️ dispatch failed for ${key}:`, e);
+      records.push({
+        key,
+        stepLabel,
+        workflow: workflowFile,
+        status: 'failed',
+        reason: String(e instanceof Error ? e.message : e),
+        repo: `${ctx.owner}/${ctx.repo}`,
+      });
     }
-    return dispatched;
-  } finally {
-    // no per-rule global state to restore
   }
+  return dispatched;
 }
 
 /**
- * Loads rules from `scrum-master.config` (JQL per rule) and dispatches AI Teammate per matched issue.
+ * Loads `scrum-master.config` (pipeline with `sm_dispatch_rule` steps) and dispatches the entry workflow per matched Jira issue.
  * JQL is defined only inside that file — not via env `JQL` or workflow inputs.
  */
 export async function runScrumMaster(ctx: ScrumMasterContext, deps: ScrumMasterDeps): Promise<void> {
   const records: DispatchRecord[] = [];
 
-  const cfg = await loadSmConfig(ctx.rulesFile);
-  console.log(`Rules file: ${ctx.rulesFile} (${cfg.rules.length} rule(s))`);
-  console.log(`Global limit: ${ctx.globalLimit} · Jira statuses: per-rule fields or env defaults`);
+  const cfg = await loadSmConfig(ctx.pipelineConfigPath);
+  console.log(`Config file: ${ctx.pipelineConfigPath} (${cfg.steps.length} step(s))`);
+  console.log(`Global limit: ${ctx.globalLimit} · Jira statuses: per-step fields or env defaults`);
 
-  for (let i = 0; i < cfg.rules.length; i++) {
-    const rule = cfg.rules[i];
-    if (!rule.jql?.trim() || !rule.configFile?.trim()) {
-      console.warn(`Skipping rule #${i + 1}: jql and configFile are required`);
-      continue;
-    }
-    const dispatched = await processRule(ctx, deps, rule, i, records);
-    if (rule.stopIfDispatched && dispatched > 0) {
-      console.log(`\n⏹ stopIfDispatched: rule #${i + 1} dispatched ${dispatched} — stopping further rules.`);
-      break;
-    }
-  }
+  await runPipelineStepSequence(cfg.steps, {
+    skipStep: (step, i) => {
+      if (!isPipelineStepEnabled(step)) {
+        console.log(`\n══ Step #${i + 1} (disabled) ══`);
+        return true;
+      }
+      if (!step.jql?.trim() || !step.configFile?.trim() || !step.workflowFile?.trim()) {
+        console.warn(`Skipping step #${i + 1}: jql, configFile, and workflowFile are required`);
+        return true;
+      }
+      return false;
+    },
+    executeStep: (step, i) => runSmDispatchStep(ctx, deps, step, i, records),
+    breakAfter: (step, i, dispatched) => {
+      if (!step.stopIfDispatched || dispatched <= 0) return false;
+      console.log(`\n⏹ stopIfDispatched: step #${i + 1} dispatched ${dispatched} — stopping further steps.`);
+      return true;
+    },
+  });
 
-  await printSummaryTable(records);
+  await publishJobSummary(buildScrumMasterSummarySegments(records));
 }

@@ -15,26 +15,27 @@ Legend:
   ..>       optional / parallel / triggered
 
 --------------------------------------------------------------------------------
-SCRUM MASTER — rules from scrum-master.config only (JQL per rule in JSON)
+SCRUM MASTER — pipeline in scrum-master.config only (JQL per `sm_dispatch_rule` step)
 --------------------------------------------------------------------------------
 
   Human triggers [GH] .github/workflows/scrum-master.yml
     |
     v
   [GH] _reusable-scrum-master.yml → tsx .../scrum-master.ts
-    env RULES_FILE → path to JSON (default: config/workflows/scrum-master/scrum-master.config)
+    env PIPELINE_CONFIG_FILE or RULES_FILE → path to JSON (default: config/workflows/scrum-master/scrum-master.config)
     |
     v
   [TS:src/workflows/scrum-master/scrum-master-core.ts] runScrumMaster()
           |
           v
-          loadSmConfig(ctx.rulesFile)   [TS:src/workflows/scrum-master/load-sm-config.ts]
-          interpolateJql()              (per rule: {jiraProject} from env JIRA_PROJECT)
+          loadSmConfig(ctx.pipelineConfigPath)   [TS:src/workflows/scrum-master/load-sm-config.ts]
+          runPipelineStepSequence()                [TS:src/lib/pipeline-expected-step-helper.ts]  (skip disabled / missing jql|configFile|workflowFile; break on stopIfDispatched)
+          interpolateJql()              (per step: {jiraProject} from env JIRA_PROJECT)
           |
           v
-  FOR each rule in SmConfig.rules:
-          processRule(rule, i)
-            jqlRequireStatus(interpolateJql(rule.jql))
+  FOR each step in loadSmConfig().steps:
+          runSmDispatchStep(step, i)
+            jqlRequireStatus(interpolateJql(step.jql))
               --> [TS:src/lib/jira-status.ts] getRequiredIssueStatus()
                   wraps: ( <jql> ) AND status = "<taken>"
             searchIssues(effectiveJql, limit, fields)
@@ -47,13 +48,13 @@ SCRUM MASTER — rules from scrum-master.config only (JQL per rule in JSON)
                   ticket_context_depth (default '1' via env TICKET_CONTEXT_DEPTH)
             |
             Octokit.rest.actions.createWorkflowDispatch({
-              workflow_id: rule.workflowFile,  ← e.g. "ai-teammate.yml" from rule
-              ref: rule.workflowRef || ctx.ref (GITHUB_REF_NAME),
+              workflow_id: step.workflowFile,  ← e.g. "ai-teammate.yml" from step
+              ref: "master"  (fixed; SCRUM_MASTER_ENTRY_DISPATCH_REF in routing_helper.ts),
               inputs: { concurrency_key, config_file, caller_config }
             })
             |
             transitionIssueToPostRead(key)    [jira-client.ts]
-            addIssueLabel(key, rule.addLabel) [jira-client.ts]
+            addIssueLabel(key, step.addLabel) [jira-client.ts]
 
 --------------------------------------------------------------------------------
 AI TEAMMATE — one run per dispatched issue
@@ -63,10 +64,10 @@ AI TEAMMATE — one run per dispatched issue
     concurrency: ai-teammate-{concurrency_key}
     |
     ── Steps 1-2: checkout consumer repo + SDLCAgents into .sdlc-agents/
-    ── Steps 3-4: composite `.github/actions/check-speckit-prerequisites` (speckit_check) + node setup + npm ci
+    ── Steps 3+: node setup + npm ci (no spec-kit prerequisite gate — optional lightweight pipelines)
     |
     v
-  Step 5: tsx .../ai-teammate-agent.ts (workflow) or npm run ai-teammate-agent (SDLCAgents root)
+  Step: tsx .../ai-teammate-agent.ts (workflow) or npm run ai-teammate-agent (SDLCAgents root)
     --> [TS:src/workflows/ai-teammate/ai-teammate-agent.ts] → runAiTeammateAgent() [ai-teammate-core.ts]
           decodeCallerConfig(CALLER_CONFIG)     [src/lib/caller-config.ts]
           extractIssueKeyFromCallerConfig(root) [src/lib/caller-config.ts]
@@ -119,8 +120,8 @@ AI TEAMMATE — one run per dispatched issue
 CONFIG / SECRETS (reference)
 --------------------------------------------------------------------------------
 
-  SM rules (JSON):    env RULES_FILE or default config/workflows/scrum-master/scrum-master.config
-                      (SmRule[] per rule: jql, configFile, workflowFile, workflowRef, …)
+  SM pipeline (JSON): env PIPELINE_CONFIG_FILE or RULES_FILE or default config/workflows/scrum-master/scrum-master.config
+                      (SmDispatchStep[] per sm_dispatch_rule step: jql, configFile, workflowFile, …)
   Agent JSON:         config/workflows/ai-teammate/ai-teammate.config
   BA (inline):        src/workflows/business-analyst/analyze-ticket.ts → GitHub Models (no separate BA workflow)
   Coding agent def:   .github/agents/sdlc.pipeline.agent.md  (SDLCClient)

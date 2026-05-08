@@ -48,7 +48,7 @@ export function buildGithubWorkflowDispatchPayload(params: {
 /**
  * URL-encoded JSON `{ params: { inputJql, customParams? } }` for workflow input `caller_config` / env `CALLER_CONFIG`.
  * Reads optional env: `REQUIRED_JIRA_STATUS`, `POST_READ_STATUS`, `TICKET_CONTEXT_DEPTH`
- * (Scrum Master sets these from each rule’s `requiredJiraStatus` / `postReadStatus` while that rule runs.)
+ * (Scrum Master sets these from each `sm_dispatch_rule` step’s `requiredJiraStatus` / `postReadStatus` while that step runs.)
  */
 export function buildAiTeammateCallerConfigEncoded(ticketKey: string): string {
   const customParams: Record<string, string> = {};
@@ -194,31 +194,31 @@ export function buildAsyncChildWorkflowDispatchInputs(params: {
   return inputs;
 }
 
-/** Repo defaults for resolving which workflow/ref to dispatch (structurally matches `ScrumMasterContext`). */
+/** Scrum Master entry `workflow_dispatch` always targets this git ref (consumer workflows must exist on `master`). */
+export const SCRUM_MASTER_ENTRY_DISPATCH_REF = 'master';
+
+/** Repo identity for `workflow_dispatch` (matches {@link ScrumMasterContext}). */
 export type EntryWorkflowDispatchHost = {
   owner: string;
   repo: string;
-  ref: string;
-  defaultWorkflowFile: string;
 };
 
-/** Rule fragment: agent config path + optional workflow override (structurally matches `SmRule`). */
-export type EntryWorkflowDispatchRule = {
+/** Workflow dispatch inputs fragment (`sm_dispatch_rule` step fields used for entry workflows). */
+export type EntryWorkflowDispatchConfig = {
   configFile: string;
-  workflowFile?: string;
-  workflowRef?: string;
+  workflowFile: string;
 };
 
 /**
- * Effective workflow filename and git ref (`rule.workflowFile || host.defaultWorkflowFile`, etc.).
+ * Entry workflow id + ref. Ref is fixed to {@link SCRUM_MASTER_ENTRY_DISPATCH_REF}.
  */
-export function resolveEntryWorkflowDispatchTarget(
-  host: EntryWorkflowDispatchHost,
-  rule: EntryWorkflowDispatchRule,
-): { workflowId: string; ref: string } {
+export function resolveEntryWorkflowDispatchTarget(step: EntryWorkflowDispatchConfig): {
+  workflowId: string;
+  ref: string;
+} {
   return {
-    workflowId: rule.workflowFile || host.defaultWorkflowFile,
-    ref: rule.workflowRef || host.ref,
+    workflowId: step.workflowFile,
+    ref: SCRUM_MASTER_ENTRY_DISPATCH_REF,
   };
 }
 
@@ -257,7 +257,7 @@ export async function dispatchGithubWorkflow(
 }
 
 /**
- * Dispatch the configured **entry** workflow for one mapped issue: resolve target from host + rule,
+ * Dispatch the configured **entry** workflow for one mapped issue: resolve workflow id + fixed **`master`** ref from step config,
  * build `concurrency_key` / `config_file` / `caller_config` from the Jira key (`buildAiTeammateWorkflowDispatchInputs`).
  *
  * This is **not** used for async parent callback: that path reads `params.callback` and a pre-built
@@ -267,16 +267,16 @@ export async function dispatchGithubWorkflow(
 export async function dispatchEntryWorkflowForMappedIssue(
   deps: GithubWorkflowDispatchSink,
   host: EntryWorkflowDispatchHost,
-  rule: EntryWorkflowDispatchRule,
+  step: EntryWorkflowDispatchConfig,
   issueKey: string,
 ): Promise<void> {
-  const { workflowId, ref } = resolveEntryWorkflowDispatchTarget(host, rule);
+  const { workflowId, ref } = resolveEntryWorkflowDispatchTarget(step);
   const payload = buildGithubWorkflowDispatchPayload({
     owner: host.owner,
     repo: host.repo,
     workflowId,
     ref,
-    inputs: buildAiTeammateWorkflowDispatchInputs(issueKey, rule.configFile),
+    inputs: buildAiTeammateWorkflowDispatchInputs(issueKey, step.configFile),
   });
   await dispatchGithubWorkflow(deps, payload);
 }

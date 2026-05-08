@@ -45,20 +45,28 @@ Then customize:
 | `config/workflows/ai-teammate/ai-teammate.config` | No changes needed for standard use |
 
 **Example `config/workflows/scrum-master/scrum-master.config` for project key `MYPROJ`:**
+
+Scrum Master **always** dispatches entry workflows (e.g. `ai-teammate.yml`) at git ref **`master`** (`SCRUM_MASTER_ENTRY_DISPATCH_REF` in SDLCAgents). Your consumer repo must have those workflow files on **`master`** — ref is not read from config or env.
+
 ```json
 {
-  "rules": [
-    {
-      "description": "To Do queue → Copilot Coding Agent",
-      "jql": "project = MYPROJ AND status = 'To Do' ORDER BY updated ASC",
-      "configFile": "config/workflows/ai-teammate/ai-teammate.config",
-      "workflowFile": "ai-teammate.yml",
-      "workflowRef": "main",
-      "limit": 5,
-      "skipIfLabel": "sm_triggered",
-      "addLabel": "sm_triggered"
-    }
-  ]
+  "name": "scrum_master_example",
+  "description": "MYPROJ → AI Teammate",
+  "params": {
+    "runner": "pipeline",
+    "steps": [
+      {
+        "runner": "sm_dispatch_rule",
+        "description": "To Do queue → AI Teammate",
+        "jql": "project = MYPROJ AND status = 'To Do' ORDER BY updated ASC",
+        "configFile": "config/workflows/ai-teammate/ai-teammate.config",
+        "workflowFile": "ai-teammate.yml",
+        "limit": 5,
+        "skipIfLabel": "sm_triggered",
+        "addLabel": "sm_triggered"
+      }
+    ]
+  }
 }
 ```
 
@@ -152,4 +160,4 @@ jobs:
 | `Missing agent file` | Copy missing files from `SDLCAgents/.github/agents/` |
 | `No open PR found for branch` | Copilot may not have opened a PR yet; check the Copilot agent session |
 | Jira transition skipped | PR title must contain the Jira key, e.g. `TC-5: ...` |
-| `404` dispatching `ai-teammate.yml` | Ensure `ai-teammate.yml` is committed on the branch set in `workflowRef` in `config/workflows/scrum-master/scrum-master.config` |
+| `404` dispatching `ai-teammate.yml` | Entry workflows are dispatched with git ref **`master`** (`SCRUM_MASTER_ENTRY_DISPATCH_REF`). Ensure `ai-teammate.yml` exists on **`master`** in the consumer repo. |

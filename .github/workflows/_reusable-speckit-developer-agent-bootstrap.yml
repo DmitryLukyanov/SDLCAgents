@@ -89,6 +89,11 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
+      - name: Check spec-kit prerequisites
+        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
+        with:
+          fail_on_not_ready: 'true'
+
       - name: Configure git
         run: |
           git config user.email "speckit-developer-agent@sdlc-agents.bot"

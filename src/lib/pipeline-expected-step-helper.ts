@@ -33,8 +33,34 @@ export function getPipelineStartIndex(
   return boundaryIdx + 1;
 }
 
-export function isStepEnabled(step: PipelineStepConfig): boolean {
+/** Any step-shaped object with optional `enabled` (JSON pipeline steps, Scrum Master dispatch steps, …). */
+export function isPipelineStepEnabled(step: { enabled?: boolean }): boolean {
   return step.enabled !== false;
+}
+
+export function isStepEnabled(step: PipelineStepConfig): boolean {
+  return isPipelineStepEnabled(step);
+}
+
+/**
+ * Walk steps in order: optional skip predicate, async execute returning a number (e.g. dispatch count),
+ * optional early exit after a step (Scrum Master `stopIfDispatched`).
+ */
+export async function runPipelineStepSequence<T>(
+  steps: readonly T[],
+  options: {
+    skipStep?: (step: T, index: number) => boolean;
+    executeStep: (step: T, index: number) => Promise<number>;
+    breakAfter?: (step: T, index: number, stepResult: number) => boolean;
+  },
+): Promise<void> {
+  const { skipStep, executeStep, breakAfter } = options;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i]!;
+    if (skipStep?.(step, i)) continue;
+    const n = await executeStep(step, i);
+    if (breakAfter?.(step, i, n)) break;
+  }
 }
 
 export function getResumeCursorFromCallerConfig(root: CallerConfigRoot): PipelineResumeCursor | undefined {

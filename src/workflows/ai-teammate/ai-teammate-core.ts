@@ -1,12 +1,11 @@
 /**
  * AI Teammate core: CONFIG_FILE + CALLER_CONFIG → pipeline metadata for Codex BA phases.
  */
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import {
   decodeCallerConfig,
   extractIssueKeyFromCallerConfig,
 } from '../../lib/caller-config.js';
+import { readPipelineAgentConfigFile } from '../../lib/agent-config-file.js';
 import { validatePipelineAgentShape } from '../../lib/agent-config-validate.js';
 import { loadNamedContractsFromConfigRoot } from '../../lib/agent-invocation-contract.js';
 import { parseAgentPipelineSteps, type AgentJsonWithPipeline } from '../../lib/pipeline-config.js';
@@ -50,13 +49,12 @@ export async function loadAiTeammatePipelineFromEnv(): Promise<LoadedAiTeammateP
   if (!configFile) throw new Error('CONFIG_FILE is required');
   if (!callerConfigEncoded) throw new Error('CALLER_CONFIG is required');
 
-  const root = decodeCallerConfig(callerConfigEncoded);
-  const issueKey = extractIssueKeyFromCallerConfig(root);
-  const custom = root.params?.customParams ?? {};
+  const callerRoot = decodeCallerConfig(callerConfigEncoded);
+  const issueKey = extractIssueKeyFromCallerConfig(callerRoot);
+  const custom = callerRoot.params?.customParams ?? {};
 
-  const abs = resolve(process.cwd(), configFile);
-  const raw = await readFile(abs, 'utf8');
-  const agent = JSON.parse(raw) as AgentJson;
+  const { abs, raw, root: agentRoot } = await readPipelineAgentConfigFile(configFile);
+  const agent = agentRoot as AgentJson;
   const runner = agent.params?.runner?.trim() ?? '';
 
   process.env.ISSUE_KEY = issueKey;

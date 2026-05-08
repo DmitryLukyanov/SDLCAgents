@@ -1,10 +1,11 @@
 /**
- * Unified config validation: router vs pipeline agent kinds (FR-010, FR-011).
+ * Unified config validation: pipeline agent configs (FR-010, FR-011).
+ * Classification: non-empty `params.steps[]`.
  */
 import { assertPipelineRunnerImplemented } from './pipeline-runner-registry.js';
 import { type AgentJsonWithPipeline, type PipelineStepConfig } from './pipeline-config.js';
 
-export type AgentConfigKind = 'router' | 'pipeline_agent';
+export type AgentConfigKind = 'pipeline_agent';
 
 export function formatConfigValidationError(configPath: string, kind: AgentConfigKind, message: string): string {
   return `${configPath} [${kind}] ${message}`;
@@ -14,45 +15,12 @@ function isRecord(x: unknown): x is Record<string, unknown> {
   return Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 }
 
-/** Router: top-level non-empty `rules[]` (FR-010). */
+/** Pipeline agent: non-empty `params.steps[]`. */
 export function detectAgentConfigKind(root: unknown): AgentConfigKind | null {
   if (!isRecord(root)) return null;
-  if (Array.isArray(root.rules) && root.rules.length > 0) return 'router';
   const params = root.params;
   if (isRecord(params) && Array.isArray(params.steps) && params.steps.length > 0) return 'pipeline_agent';
   return null;
-}
-
-/** Validate Scrum Master–style `rules[]` entries (enabled rules only). */
-export function validateRouterRules(rules: unknown, configPath: string): void {
-  const kind: AgentConfigKind = 'router';
-  if (!Array.isArray(rules) || rules.length === 0) {
-    throw new Error(formatConfigValidationError(configPath, kind, 'rules must be a non-empty array'));
-  }
-  rules.forEach((rule, index) => {
-    if (!isRecord(rule)) {
-      throw new Error(formatConfigValidationError(configPath, kind, `rules[${index}] must be an object`));
-    }
-    if (rule.enabled === false) return;
-    const jql = rule.jql;
-    if (typeof jql !== 'string' || !jql.trim()) {
-      throw new Error(formatConfigValidationError(configPath, kind, `rules[${index}]: "jql" is required`));
-    }
-    const configFile = rule.configFile;
-    if (typeof configFile !== 'string' || !configFile.trim()) {
-      throw new Error(formatConfigValidationError(configPath, kind, `rules[${index}]: "configFile" is required`));
-    }
-    const wf = typeof rule.workflowFile === 'string' ? rule.workflowFile.trim() : '';
-    if (wf && !wf.endsWith('.yml') && !wf.endsWith('.yaml')) {
-      throw new Error(
-        formatConfigValidationError(
-          configPath,
-          kind,
-          `rules[${index}]: workflowFile should be a YAML workflow filename (got "${rule.workflowFile}")`,
-        ),
-      );
-    }
-  });
 }
 
 /** True when pipeline likely uses an LLM / Codex (FR-005). */

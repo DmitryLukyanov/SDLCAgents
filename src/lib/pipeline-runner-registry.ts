@@ -3,6 +3,8 @@
  * Update when adding a new step runner switch arm.
  */
 export const IMPLEMENTED_PIPELINE_RUNNERS = new Set<string>([
+  // Scrum Master — src/workflows/scrum-master/scrum-master-core.ts (JQL batch → entry workflow_dispatch)
+  'sm_dispatch_rule',
   // AI Teammate — src/workflows/ai-teammate/ai-teammate-pipeline.ts
   'ensure_jira_fields_expected',
   'create_github_issue',
@@ -17,6 +19,7 @@ export const IMPLEMENTED_PIPELINE_RUNNERS = new Set<string>([
 
 /** Hint paths for operators when a runner is missing. */
 export const PIPELINE_RUNNER_IMPLEMENTATION_HINT: Readonly<Record<string, string>> = {
+  sm_dispatch_rule: 'src/workflows/scrum-master/scrum-master-core.ts (runSmDispatchStep)',
   ensure_jira_fields_expected: 'src/workflows/ai-teammate/steps/ensure-jira-fields-expected.ts',
   create_github_issue: 'src/workflows/ai-teammate/steps/create-github-issue.ts',
   async_operation: 'src/workflows/ai-teammate/ai-teammate-pipeline.ts (async_operation)',

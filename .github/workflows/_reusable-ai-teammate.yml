@@ -106,10 +106,6 @@ jobs:
           path: .sdlc-agents
           token: ${{ secrets.COPILOT_PAT }}
 
-      - name: Check spec-kit prerequisites
-        id: speckit_check
-        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

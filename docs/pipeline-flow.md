@@ -196,7 +196,7 @@
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
 │  1. SCRUM MASTER                                                                      │
 │                                                                                       │
-│  - Loaded rules from scrum-master.config                                              │
+│  - Loaded `params.steps` pipeline from scrum-master.config                              │
 │  - Searched Jira for tickets with status "To Do"                                      │
 │  - For each ticket:                                                                   │
 │      - Updated Jira status: To Do → In Progress                                       │
@@ -247,7 +247,7 @@
 
 ## End-to-end sequence (Mermaid)
 
-The diagram below matches the **current** automation in this repository: `scrum-master` dispatches the workflow named in `scrum-master.config` (often `ai-teammate.yml` in consumer repos), the pipeline runs the steps in `config/workflows/ai-teammate/ai-teammate.config`, BA runs **inline** (`params.skipIfLabel / Codex BA` → GitHub Models), Copilot is assigned on the GitHub issue (`custom_agent: sdlc.pipeline` in `ai-teammate-agent.ts`), and `_reusable-pr-merged.yml` finishes Jira when the PR merges.
+The diagram below matches the **current** automation in this repository: `scrum-master` dispatches the workflow named in `scrum-master.config` (often `ai-teammate.yml` in consumer repos) **always at git ref `master`**, the pipeline runs the steps in `config/workflows/ai-teammate/ai-teammate.config`, BA runs **inline** (`params.skipIfLabel / Codex BA` → GitHub Models), Copilot is assigned on the GitHub issue (`custom_agent: sdlc.pipeline` in `ai-teammate-agent.ts`), and `_reusable-pr-merged.yml` finishes Jira when the PR merges.
 
 ```mermaid
 sequenceDiagram
@@ -264,9 +264,9 @@ sequenceDiagram
     rect rgb(240, 248, 255)
         Note over SM,J: Scrum master (scrum-master-core): JQL + status filter; skip tickets with skipIfLabel
         SM->>J: Search issues
-        SM->>SM: dispatchWorkflow (per rule: workflow_id + caller_config)
+        SM->>SM: workflow_dispatch (per step: workflow_id on master + caller_config)
         SM->>J: transitionIssueToPostRead (POST_READ_STATUS env, default In Progress)
-        SM->>J: addIssueLabel (addLabel from rule, e.g. sm_triggered)
+        SM->>J: addIssueLabel (addLabel from step, e.g. sm_triggered)
     end
 
     SM->>AT: workflow_dispatch with caller_config (issue key)

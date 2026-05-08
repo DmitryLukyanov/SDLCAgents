@@ -3,7 +3,7 @@
  *
  * Cross-agent stack (all under `src/lib/`):
  *   • `pipeline-config.ts` — parse/normalize steps, find `async_call`
- *   • `pipeline-expected-step-helper.ts` — resume cursor → start step index
+ *   • `pipeline-expected-step-helper.ts` — resume cursor → start step index; `isPipelineStepEnabled`; `runPipelineStepSequence` (ordered walk + early exit, e.g. Scrum Master)
  *   • `pipeline-callback-config.ts` — merge `caller_config` for child dispatch / parent callback
  *   • `caller-config.ts` — encode/decode/merge generic `params`
  *   • `agent-skip-if-label.ts` — read agent config file → `params.skipIfLabel` → `getIssueLabelNames` → skip reason

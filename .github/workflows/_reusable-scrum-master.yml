@@ -6,22 +6,23 @@
 #     call:
 #       uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-scrum-master.yml@master
 #       with:
-#         jira_project: MY-PROJECT   # optional: replaces {jiraProject} in rule JQL in scrum-master.config
+#         jira_project: MY-PROJECT   # optional: replaces {jiraProject} in step JQL in scrum-master.config
 #       secrets: inherit
-# JQL, workflow paths, and per-rule Jira status filter / post-dispatch status are read from
-# config/workflows/scrum-master/scrum-master.config (RULES_FILE): each rule may set requiredJiraStatus, postReadStatus.
+# JQL, workflow paths, and per-step Jira status filter / post-dispatch status are read from
+# config/workflows/scrum-master/scrum-master.config (PIPELINE_CONFIG_FILE or RULES_FILE): pipeline steps `sm_dispatch_rule` may set requiredJiraStatus, postReadStatus.
+# Entry workflows are always dispatched at git ref **master** (see SCRUM_MASTER_ENTRY_DISPATCH_REF in src/lib/routing_helper.ts).
 name: "[Reusable] Scrum Master (Jira)"
 
 on:
   workflow_call:
     inputs:
       limit:
-        description: "Global max issues per rule (1–50)"
+        description: "Global max issues per sm_dispatch_rule step (1–50)"
         required: false
         type: string
         default: '10'
       jira_project:
-        description: "Replaces {jiraProject} in rule JQL"
+        description: "Replaces {jiraProject} in step JQL"
         required: false
         type: string
         default: ''
@@ -78,33 +79,7 @@ jobs:
         run: npm ci
         working-directory: .sdlc-agents
 
-      # ── Step 4: Validate spec-kit in consumer repo ──────────────────────
-      - name: Validate Spec-Kit version (consumer vs SDLCAgents)
-        env:
-          SPECKIT_TARGET_VERSION: "0.8.6"
-        run: |
-          if [ ! -f ".specify/init-options.json" ]; then
-            echo "::error::Spec-Kit is not initialized in this repo."
-            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${SPECKIT_TARGET_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
-            exit 1
-          fi
-
-          CURRENT=$(jq -r '.speckit_version // "0.0.0"' .specify/init-options.json)
-          AGENTS_VERSION=$(jq -r '.speckit_version // "0.0.0"' .sdlc-agents/.specify/init-options.json 2>/dev/null || echo "0.0.0")
-          if [ "$CURRENT" != "$AGENTS_VERSION" ]; then
-            echo "::error::Spec-Kit version mismatch: consumer has v${CURRENT}, SDLCAgents requires v${AGENTS_VERSION}."
-            echo "::error::Run: uvx --from git+https://github.com/github/spec-kit.git@v${AGENTS_VERSION} specify init --here --ai codex --ai-skills --script sh --force --ignore-agent-tools"
-            exit 1
-          fi
-
-          echo "✅ Spec-Kit v${CURRENT} (matches SDLCAgents)"
-
-      - name: Validate spec-kit files (agents + skills)
-        # Local action path resolves to the *caller* repo; the action lives in SDLCAgents (.sdlc-agents).
-        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
-        with:
-          fail_on_not_ready: 'true'
-
+      # ── Step 4: Upload Scrum Master config artifact ───────────────────────
       - name: Upload Scrum Master config artifact
         uses: actions/upload-artifact@v4
         with:
@@ -114,7 +89,7 @@ jobs:
 
       # ── Step 5: Run Scrum Master (CWD = consumer workspace root) ────────
       # Scripts run from .sdlc-agents/ but process.cwd() = workspace root.
-      # JQL and agent paths come only from config/workflows/scrum-master/scrum-master.config (RULES_FILE).
+      # JQL and agent paths come only from config/workflows/scrum-master/scrum-master.config (PIPELINE_CONFIG_FILE or RULES_FILE).
       - name: Run Scrum Master
         run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/scrum-master/scrum-master.ts
         env:
@@ -125,4 +100,3 @@ jobs:
           GLOBAL_LIMIT: ${{ inputs.limit }}
           JIRA_PROJECT: ${{ inputs.jira_project }}
           TICKET_CONTEXT_DEPTH: ${{ inputs.ticket_context_depth }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}

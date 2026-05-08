@@ -50,10 +50,10 @@ const mockDeps: ScrumMasterDeps = {
 const ctx = {
   owner: 'debug-owner',
   repo: 'debug-repo',
-  ref: 'main',
   globalLimit: 10,
-  rulesFile: process.env.RULES_FILE?.trim() || 'tests/scrum-agent/fixtures/sm-debug.json',
-  defaultWorkflowFile: 'ai-teammate.yml',
+  pipelineConfigPath: process.env.PIPELINE_CONFIG_FILE?.trim()
+    || process.env.RULES_FILE?.trim()
+    || 'tests/scrum-agent/fixtures/sm-debug.json',
 };
 
 async function main(): Promise<void> {

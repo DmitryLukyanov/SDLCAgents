@@ -23,7 +23,7 @@ Routing configuration that selects tickets and dispatches a workflow + config.
 - **jql** (for Jira-driven agents)
 - **requiredJiraStatus** / **postReadStatus**
 - **configFile**: agent config path to run
-- **workflowFile** / **workflowRef**: entry workflow dispatch target
+- **workflowFile**: entry workflow YAML for `workflow_dispatch` (Scrum Master uses git ref **`master`** only; see `SCRUM_MASTER_ENTRY_DISPATCH_REF` in `routing_helper.ts`)
 - **limit**
 - **skipIfLabel** / **addLabel**
 
