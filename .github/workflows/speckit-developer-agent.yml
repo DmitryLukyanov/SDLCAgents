@@ -85,4 +85,5 @@ jobs:
       fix_pr_number: ${{ inputs.pr_number }}
       prompt: ${{ inputs.prompt }}
       speckit_pr_number: ${{ needs.bootstrap.outputs.pr_number || inputs.pr_number }}
+      config_file: config/workflows/speckit-developer-agent/speckit-developer-agent.config
     secrets: inherit
