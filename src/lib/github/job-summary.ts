@@ -31,14 +31,17 @@ export function renderJobSummaryMarkdown(segments: JobSummarySegment[]): string 
     } else if (isSummaryTableSegment(seg)) {
       const { headers, rows } = seg;
       if (headers.length === 0) continue;
-      blocks.push(
+      // GFM tables require consecutive rows separated by a single newline; blank lines
+      // between header / separator / body break parsing (e.g. GitHub Actions job summary).
+      const tableMd = [
         '| ' + headers.map((h) => escapeMarkdownTableCell(String(h))).join(' | ') + ' |',
         '| ' + headers.map(() => '---').join(' | ') + ' |',
         ...rows.map((row) => {
           const cells = headers.map((_, i) => escapeMarkdownTableCell(String(row[i] ?? '')));
           return '| ' + cells.join(' | ') + ' |';
         }),
-      );
+      ].join('\n');
+      blocks.push(tableMd);
     }
   }
   return blocks.join('\n\n') + '\n';
