@@ -238,6 +238,12 @@ jobs:
           check_file "speckit-checklist     SKILL.md"         .agents/skills/speckit-checklist/SKILL.md
           check_file "speckit-constitution  SKILL.md"         .agents/skills/speckit-constitution/SKILL.md
           check_file "speckit-taskstoissues SKILL.md"         .agents/skills/speckit-taskstoissues/SKILL.md
+          check_file "speckit-code_review   SKILL.md"         .agents/skills/speckit-code_review/SKILL.md
+          check_file "speckit-git-commit    SKILL.md"         .agents/skills/speckit-git-commit/SKILL.md
+          check_file "speckit-git-feature   SKILL.md"         .agents/skills/speckit-git-feature/SKILL.md
+          check_file "speckit-git-initialize SKILL.md"        .agents/skills/speckit-git-initialize/SKILL.md
+          check_file "speckit-git-remote    SKILL.md"         .agents/skills/speckit-git-remote/SKILL.md
+          check_file "speckit-git-validate  SKILL.md"         .agents/skills/speckit-git-validate/SKILL.md
 
           echo ""
           echo "── Config ────────────────────────────────────"
