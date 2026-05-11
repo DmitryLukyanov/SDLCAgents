@@ -18,15 +18,10 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { Octokit } from '@octokit/rest';
 
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
-import {
-  ASYNC_INVOCATION_HANDOFF_ROOT_DIR,
-  writeInvocationHandoffManifestFile,
-  type AgentInvocationContract,
-} from '../../lib/agent-invocation-contract.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
 import { tryWriteSpecKitIssueContextFile } from './spec-kit-context/issue-context.js';
 import {
@@ -39,16 +34,6 @@ import {
   type SpeckitWorkflowBaseState,
   parseSpeckitStep,
 } from './speckit-step-model.js';
-
-/** Invocation contract for fix mode: prompt in, Codex result out (no jiraContext needed). */
-const FIX_INVOCATION_CONTRACT: AgentInvocationContract = {
-  inputParams: {
-    prompt: { kind: 'artifact', scope: 'handoff_workspace', relativePath: 'invocation-prompt.md' },
-  },
-  outputParams: {
-    resultState: { kind: 'artifact', scope: 'handoff_workspace', relativePath: 'invocation-output.txt' },
-  },
-};
 
 /* ------------------------------------------------------------------ */
 /*  Mode                                                               */
@@ -227,24 +212,6 @@ async function runSpeckitSetup(): Promise<void> {
 /*  Fix setup                                                          */
 /* ------------------------------------------------------------------ */
 
-/**
- * Write the fix prompt to the invocation-handoff workspace and set Codex artifact path outputs.
- * Mirrors how AI Teammate BA prepare writes artifacts; keeps both modes consistent.
- */
-function writeFixHandoffArtifact(issueKey: string, promptContent: string, featureDir: string, codexModel: string): void {
-  const handoffBase = join(process.cwd(), ASYNC_INVOCATION_HANDOFF_ROOT_DIR, issueKey);
-  mkdirSync(handoffBase, { recursive: true });
-  writeFileSync(join(handoffBase, 'invocation-prompt.md'), promptContent.endsWith('\n') ? promptContent : `${promptContent}\n`, 'utf8');
-  writeInvocationHandoffManifestFile(handoffBase, FIX_INVOCATION_CONTRACT);
-  const handoffDir = join(ASYNC_INVOCATION_HANDOFF_ROOT_DIR, issueKey).replace(/\\/g, '/');
-  setOutput('prompt_file', `${handoffDir}/invocation-prompt.md`);
-  setOutput('output_file', `${handoffDir}/invocation-output.txt`);
-  setOutput('handoff_dir', handoffDir);
-  setOutput('feature_dir', featureDir);
-  setOutput('model', codexModel);
-  console.log(`[codex-prepare] fix: handoff workspace → ${handoffBase}`);
-}
-
 async function runFixSetup(): Promise<void> {
   // Load config if available
   const config = tryLoadConfig();
@@ -271,8 +238,11 @@ async function runFixSetup(): Promise<void> {
   const pathCandidate = fixInstructions.trim();
   if (pathCandidate && existsSync(pathCandidate) && statSync(pathCandidate).isFile()) {
     const body = readFileSync(pathCandidate, 'utf8');
-    writeFixHandoffArtifact(issueKey, body, featureDir, codexModel);
-    console.log(`[codex-prepare] fix: copied prompt from file ${pathCandidate} → handoff workspace`);
+    mkdirSync('.sdlc-agents', { recursive: true });
+    writeFileSync('.sdlc-agents/input_prompt.md', body.endsWith('\n') ? body : `${body}\n`);
+    console.log(`[codex-prepare] fix: copied prompt from file ${pathCandidate}`);
+    setOutput('feature_dir', featureDir);
+    setOutput('model', codexModel);
     console.log('[codex-prepare] fix: setup complete (raw prompt file)');
     return;
   }
@@ -321,8 +291,15 @@ async function runFixSetup(): Promise<void> {
     REVIEWER_SECTION: reviewerSection,
   });
 
-  writeFixHandoffArtifact(issueKey, prompt, featureDir, codexModel);
-  console.log(`[codex-prepare] fix: wrote prompt to handoff workspace (${prompt.length} chars)`);
+  mkdirSync('.sdlc-agents', { recursive: true });
+  writeFileSync('.sdlc-agents/input_prompt.md', prompt + '\n');
+  console.log(
+    `[codex-prepare] fix: wrote prompt to .sdlc-agents/input_prompt.md (${prompt.length} chars)`,
+  );
+
+  setOutput('feature_dir', featureDir);
+  setOutput('model', codexModel);
+
   console.log('[codex-prepare] fix: setup complete');
 }
 

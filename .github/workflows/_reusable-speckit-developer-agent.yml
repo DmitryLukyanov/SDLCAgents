@@ -110,9 +110,6 @@ jobs:
       issue_key: ${{ inputs.issue_key }}
       codex_step_slug: ${{ inputs.mode == 'fix' && 'fix' || inputs.step }}
       input_prompt: ${{ inputs.prompt }}
-      prompt_file: ${{ steps.agent_setup.outputs.prompt_file }}
-      output_file: ${{ steps.agent_setup.outputs.output_file }}
-      handoff_dir: ${{ steps.agent_setup.outputs.handoff_dir }}
       history_issue_number: ${{ steps.history_target.outputs.issue_number }}
       history_post_enabled: ${{ steps.history_target.outputs.enabled }}
     steps:
@@ -166,7 +163,7 @@ jobs:
         working-directory: .sdlc-agents
 
       - name: Check spec-kit prerequisites
-        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/check-speckit-prerequisites@master
         with:
           fail_on_not_ready: 'true'
 
@@ -229,7 +226,7 @@ jobs:
 
       - name: Post workflow start on tracking issue
         if: steps.history_target.outputs.enabled == 'true'
-        uses: ./.github/actions/post-issue-history
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/post-issue-history@master
         with:
           issue_number: ${{ steps.history_target.outputs.issue_number }}
           heading: SpecKit developer agent — started
@@ -245,7 +242,7 @@ jobs:
             | PR | #${{ steps.agent_setup.outputs.pr_number }} |
 
       - name: Materialize prompt into input_prompt.md
-        if: inputs.prompt != '' && inputs.mode != 'fix'
+        if: inputs.prompt != ''
         env:
           PROMPT_ARG: ${{ inputs.prompt }}
         run: |
@@ -266,31 +263,20 @@ jobs:
           set -euo pipefail
           if [ "${{ inputs.mode }}" = "fix" ]; then
             HDR=.sdlc-agents/.github/content/job-summary-codex-fix-header.md
-            PROMPT_PATH="${{ steps.agent_setup.outputs.prompt_file }}"
           else
             HDR=.sdlc-agents/.github/content/job-summary-codex-prompt-header.md
-            PROMPT_PATH=".sdlc-agents/input_prompt.md"
           fi
           cat "$HDR" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' '```text' >> "$GITHUB_STEP_SUMMARY"
-          cat "$PROMPT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          cat .sdlc-agents/input_prompt.md >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload prompt for Codex job (speckit)
-        if: inputs.mode != 'fix'
+      - name: Upload input_prompt.md for Codex job
         uses: actions/upload-artifact@v4
         with:
           name: developer-agent-codex-input-${{ github.run_id }}
           path: .sdlc-agents/input_prompt.md
-          if-no-files-found: error
-
-      - name: Upload handoff workspace for Codex job (fix)
-        if: inputs.mode == 'fix'
-        uses: actions/upload-artifact@v4
-        with:
-          name: developer-agent-codex-input-${{ github.run_id }}
-          path: ${{ steps.agent_setup.outputs.handoff_dir }}/
           if-no-files-found: error
 
   codex:
@@ -300,18 +286,20 @@ jobs:
     with:
       checkout_ref: ${{ needs.prepare.outputs.branch_name }}
       download_artifact_name: developer-agent-codex-input-${{ github.run_id }}
-      download_path: ${{ needs.prepare.outputs.mode == 'fix' && '.' || '.sdlc-agents' }}
-      prompt_file: ${{ needs.prepare.outputs.mode == 'fix' && needs.prepare.outputs.prompt_file || '.sdlc-agents/input_prompt.md' }}
-      output_file: ${{ needs.prepare.outputs.mode == 'fix' && needs.prepare.outputs.output_file || '.sdlc-agents/codex-output.txt' }}
+      download_path: .sdlc-agents
+      prompt_file: .sdlc-agents/input_prompt.md
+      output_file: .sdlc-agents/codex-output.txt
       upload_artifact_name: developer-agent-codex-output-${{ github.run_id }}
-      upload_path: ${{ needs.prepare.outputs.mode == 'fix' && format('{0}/', needs.prepare.outputs.handoff_dir) || '.sdlc-agents/' }}
+      upload_path: |
+        .sdlc-agents/codex-output.txt
+        .sdlc-agents/input_prompt.md
       upload_if_no_files_found: ignore
       model: ${{ needs.prepare.outputs.model }}
       codex_step_name: ${{ needs.prepare.outputs.mode == 'fix' && 'Apply fix via Codex' || format('Run Codex skill — {0}', inputs.step) }}
       timeout_minutes: ${{ needs.prepare.outputs.mode == 'fix' && 15 || 30 }}
       commit_workspace_after_codex: true
       workspace_commit_message: "${{ needs.prepare.outputs.mode == 'fix' && format('speckit(fix): apply targeted fixes for {0}', needs.prepare.outputs.issue_key) || format('speckit({0}): add {0} artifacts for {1}', inputs.step, needs.prepare.outputs.issue_key) }}"
-      extra_git_add_paths: ${{ needs.prepare.outputs.mode == 'fix' && needs.prepare.outputs.handoff_dir || '' }}
+      extra_git_add_paths: ${{ needs.prepare.outputs.mode == 'fix' && '.sdlc-agents/codex-output.txt' || '' }}
 
   teardown:
     needs: [prepare, codex]
@@ -372,7 +360,7 @@ jobs:
 
       - name: Post workflow completion on tracking issue
         if: success() && needs.prepare.outputs.history_post_enabled == 'true'
-        uses: ./.github/actions/post-issue-history
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/post-issue-history@master
         with:
           issue_number: ${{ needs.prepare.outputs.history_issue_number }}
           heading: SpecKit developer agent — finished

@@ -28,6 +28,13 @@ export interface PipelineStepConfig {
   id?: string;
   runner: string;
   enabled?: boolean;
+  /**
+   * When set on a sync step, the step runs only if the predicate holds (see `pipeline-run-if.ts`).
+   * Ignored on steps that declare `async_call` (async dispatch is never gated by runIf).
+   */
+  runIf?: string;
+  /** Optional reason passed to `stop_pipeline` when that runner halts the pipeline. */
+  stopReason?: string;
   async_call?: PipelineAsyncCallSpec;
   [key: string]: unknown;
 }

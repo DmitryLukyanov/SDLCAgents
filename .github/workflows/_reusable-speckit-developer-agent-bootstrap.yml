@@ -84,7 +84,7 @@ jobs:
         working-directory: .sdlc-agents
 
       - name: Check spec-kit prerequisites
-        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/check-speckit-prerequisites@master
         with:
           fail_on_not_ready: 'true'
 
@@ -106,7 +106,7 @@ jobs:
 
       - name: Post bootstrap on tracking issue
         if: success()
-        uses: ./.github/actions/post-issue-history
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/post-issue-history@master
         with:
           issue_number: ${{ inputs.issue_number }}
           heading: SpecKit pipeline — bootstrap (specify)

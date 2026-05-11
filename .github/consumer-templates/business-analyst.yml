@@ -144,9 +144,56 @@ jobs:
       codex_step_name: Run Codex - Business Analyst
       timeout_minutes: 30
 
+  finalize_ba_invocation_status:
+    name: Write invocation-output-status.json
+    if: always() && !cancelled()
+    needs: [ba_codex]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: DmitryLukyanov/SDLCAgents
+          ref: master
+          path: .sdlc-agents
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: .sdlc-agents/package-lock.json
+
+      - name: Install SDLCAgents dependencies
+        run: npm ci
+        working-directory: .sdlc-agents
+
+      - name: Download Codex handoff tree
+        uses: actions/download-artifact@v4
+        with:
+          name: caller-handoff_codex_output
+          path: async-invocation-handoff/${{ inputs.concurrency_key }}/
+
+      - name: Write invocation-output-status.json
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/ai-teammate/write-invocation-output-status-ci.ts
+        env:
+          CONFIG_FILE: ${{ inputs.config_file }}
+          CONCURRENCY_KEY: ${{ inputs.concurrency_key }}
+
+      - name: Upload BA invocation status artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: caller-handoff_ba_invocation_status
+          path: async-invocation-handoff/${{ inputs.concurrency_key }}/invocation-output-status.json
+          if-no-files-found: error
+
   dispatch_parent_callback:
     name: Dispatch parent entry workflow (resume)
-    needs: [ba_codex]
+    needs: [finalize_ba_invocation_status]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     permissions:

@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  assertAsyncHandoffPrimaryOutputPresent,
+  assertAsyncHandoffContractOutputsPresent,
   handoffIssueRootAbsolute,
   invocationContractsArtifactPathsEqual,
   loadAgentInvocationContractFromConfigFile,
@@ -96,6 +96,6 @@ export function assertManifestMatchesAsyncStepAndPrimaryOutputPresent(
         `for async step "${String(p.triggerStep.id)}" (regenerate the handoff bundle or fix config / named contracts).`,
     );
   }
-  assertAsyncHandoffPrimaryOutputPresent(p.issueKey, manifest.contract);
+  assertAsyncHandoffContractOutputsPresent(p.issueKey, manifest.contract);
   return manifest.contract;
 }

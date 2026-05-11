@@ -129,7 +129,7 @@ jobs:
       # ── 5. Post tracking-issue history ─────────────────────────────────────
       - name: Post proceed on tracking issue
         if: success() && steps.state.outputs.next_step != ''
-        uses: ./.github/actions/post-issue-history
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/post-issue-history@master
         with:
           issue_number: ${{ steps.state.outputs.issue_number }}
           heading: SpecKit pipeline — next step dispatched

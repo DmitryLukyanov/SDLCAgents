@@ -7,7 +7,11 @@
  * Supported step runners:
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
  *   create_github_issue          — creates a GitHub issue (Jira snapshot body); stores issue number in context
+ *   apply_ba_outcome             — reads Codex BA artifact; applies to Jira/GitHub; sets ctx.baOutcome
+ *   stop_pipeline                — returns stop (pair with steps[].runIf, e.g. "ba_incomplete")
  *   (developer agent dispatch is now typically done via a terminal async_call step)
+ *
+ * Sync steps may set `runIf` to `ba_complete` or `ba_incomplete` (see `pipeline-run-if.ts`). Steps with `async_call` ignore `runIf`.
  *
  * Jira context snapshot: `create_github_issue` appends a marked block to the issue body.
  *
@@ -26,12 +30,17 @@ import {
 } from '../../lib/caller-config.js';
 import { evaluateSkipIfLabelFromConfigFile } from '../../lib/agent-skip-if-label.js';
 import { assertManifestMatchesAsyncStepAndPrimaryOutputPresent } from '../../lib/invocation-handoff.js';
+import {
+  INVOCATION_OUTPUT_STATUS_PARAM_KEY,
+  loadAsyncStepStatusEnvelopeForRunIf,
+} from '../../lib/agent-invocation-contract.js';
 import { normalizePipelineStepIds, type PipelineStepConfig } from '../../lib/pipeline-config.js';
 import {
   findPipelineStepIndexById,
   getPipelineStartIndexFromCallerRoot,
   isStepEnabled,
 } from '../../lib/pipeline-expected-step-helper.js';
+import { shouldRunPipelineStepByRunIf } from '../../lib/pipeline-run-if.js';
 import { fillTemplate, loadTemplate } from '../../lib/template-utils.js';
 import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected.js';
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
@@ -78,10 +87,19 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runApplyBaOutcome(ctx, step, deps);
     }
 
+    case 'stop_pipeline': {
+      const reason =
+        (typeof step.stopReason === 'string' && step.stopReason.trim())
+          ? step.stopReason.trim()
+          : 'Pipeline stopped by config (stop_pipeline)';
+      return { status: 'stop', reason };
+    }
+
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, async_terminal_operation, apply_ba_outcome.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, async_terminal_operation, ` +
+          `apply_ba_outcome, stop_pipeline.`,
       );
   }
 }
@@ -164,10 +182,14 @@ export async function runPipelineThroughInclusive(
     console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} (partial → "${lastInclusiveRunner}") ──`);
 
     const stepEnabled = isStepEnabled(step);
+    const runIfGate = shouldRunPipelineStepByRunIf(step as unknown as PipelineStepConfig, ctx);
     const t0 = Date.now();
     let outcome: StepOutcome;
     if (!stepEnabled) {
       console.log(`   ⏭ Skipped — step.enabled is false in config`);
+      outcome = { status: 'continue' };
+    } else if (!runIfGate.execute) {
+      console.log(`   ⏭ Skipped — runIf not satisfied${runIfGate.token ? ` (${runIfGate.token})` : ''}`);
       outcome = { status: 'continue' };
     } else {
       outcome = await runPipelineStep(ctx, step, deps);
@@ -178,7 +200,10 @@ export async function runPipelineThroughInclusive(
       runner: step.runner,
       status: outcome.status,
       reason:
-        outcome.status === 'stop' ? outcome.reason : !stepEnabled ? 'skipped (enabled: false)' : undefined,
+        outcome.status === 'stop' ? outcome.reason
+        : !stepEnabled ? 'skipped (enabled: false)'
+        : !runIfGate.execute ? (runIfGate.token ? `skipped (runIf: ${runIfGate.token})` : 'skipped (runIf)')
+        : undefined,
       durationMs,
     });
 
@@ -231,10 +256,14 @@ export async function runPipelineFromStepId(
     console.log(`\n── Step ${i + 1}/${steps.length}: ${step.runner} ──`);
 
     const stepEnabled = isStepEnabled(step);
+    const runIfGate = shouldRunPipelineStepByRunIf(step as unknown as PipelineStepConfig, ctx);
     const t0 = Date.now();
     let outcome: StepOutcome;
     if (!stepEnabled) {
       console.log(`   ⏭ Skipped — step.enabled is false in config`);
+      outcome = { status: 'continue' };
+    } else if (!runIfGate.execute) {
+      console.log(`   ⏭ Skipped — runIf not satisfied${runIfGate.token ? ` (${runIfGate.token})` : ''}`);
       outcome = { status: 'continue' };
     } else {
       outcome = await runPipelineStep(ctx, step, deps);
@@ -245,7 +274,10 @@ export async function runPipelineFromStepId(
       runner: step.runner,
       status: outcome.status,
       reason:
-        outcome.status === 'stop' ? outcome.reason : !stepEnabled ? 'skipped (enabled: false)' : undefined,
+        outcome.status === 'stop' ? outcome.reason
+        : !stepEnabled ? 'skipped (enabled: false)'
+        : !runIfGate.execute ? (runIfGate.token ? `skipped (runIf: ${runIfGate.token})` : 'skipped (runIf)')
+        : undefined,
       durationMs,
       source: 'this_invocation',
     });
@@ -427,13 +459,26 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
       }
 
       // Verify the async child uploaded its output artifacts before we continue.
-      assertManifestMatchesAsyncStepAndPrimaryOutputPresent({
+      const resumeContract = assertManifestMatchesAsyncStepAndPrimaryOutputPresent({
         cwd: process.cwd(),
         issueKey,
         triggerStep: triggerStep as PipelineStepConfig,
         contextLabel: 'Pipeline async resume',
         agentConfigPathAbs: ctx.configFile,
       });
+
+      const triggerStepId = (triggerStep.id ?? `${triggerStep.runner}#${i}`).trim();
+      if (resumeContract.outputParams[INVOCATION_OUTPUT_STATUS_PARAM_KEY]) {
+        const statusEnvelope = loadAsyncStepStatusEnvelopeForRunIf(issueKey, resumeContract, triggerStepId);
+        if (!statusEnvelope[triggerStepId]) {
+          throw new Error(
+            `Pipeline async resume: missing invocation output status for async step "${triggerStepId}" ` +
+              `(${INVOCATION_OUTPUT_STATUS_PARAM_KEY} / invocation-output-status.json). ` +
+              'Ensure the BA child workflow uploaded caller-handoff_ba_invocation_status.',
+          );
+        }
+        ctx.asyncStepOutputById = { ...ctx.asyncStepOutputById, ...statusEnvelope };
+      }
 
       const t0 = Date.now();
       if (!isStepEnabled(triggerStep)) {
@@ -533,10 +578,14 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
     }
 
     const stepEnabled = isStepEnabled(step);
+    const runIfGate = shouldRunPipelineStepByRunIf(step as PipelineStepConfig, ctx);
     const t0 = Date.now();
     let outcome: StepOutcome;
     if (!stepEnabled) {
       console.log('   ⏭ Skipped — step.enabled is false in config');
+      outcome = { status: 'continue' };
+    } else if (!runIfGate.execute) {
+      console.log(`   ⏭ Skipped — runIf not satisfied${runIfGate.token ? ` (${runIfGate.token})` : ''}`);
       outcome = { status: 'continue' };
     } else {
       outcome = await runPipelineStep(ctx, step, deps);
@@ -547,7 +596,10 @@ async function runPipelineFromConfigForCi(deps: AiTeammateDeps): Promise<void> {
       runner: step.runner,
       status: outcome.status,
       reason:
-        outcome.status === 'stop' ? outcome.reason : !stepEnabled ? 'skipped (enabled: false)' : undefined,
+        outcome.status === 'stop' ? outcome.reason
+        : !stepEnabled ? 'skipped (enabled: false)'
+        : !runIfGate.execute ? (runIfGate.token ? `skipped (runIf: ${runIfGate.token})` : 'skipped (runIf)')
+        : undefined,
       durationMs,
     });
 

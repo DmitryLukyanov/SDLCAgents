@@ -3,7 +3,7 @@
 #
 # Single job: config `params.steps` (pipeline runner) — Jira gates, GitHub issue, optional async BA
 # (`ba_codex_async` + `async_call` → consumer `business-analyst.yml` + `_reusable-codex-run.yml`), then
-# Tail steps may include `apply_ba_outcome` and optional `async_terminal_operation`. Codex does **not** run inline here.
+# Tail steps may include `apply_ba_outcome`, optional `stop_pipeline` (often runIf: ba_incomplete), and optional `async_terminal_operation`. Codex does **not** run inline here.
 #
 # Resume: early steps detect `caller_config.params.async_child_run_id`, download parent + child artifacts,
 # main `pipeline_ci` step reads `caller_config.params.async_child_run_id` + `async_trigger_step` to resume the step loop (skip prior steps, complete async from artifacts, run tail).
@@ -157,6 +157,16 @@ jobs:
           github_token: ${{ secrets.COPILOT_PAT }}
           run_id: ${{ steps.resume_ctx.outputs.codex_run_id }}
           name: caller-handoff_codex_output
+          path: async-invocation-handoff/${{ inputs.concurrency_key }}/
+
+      - name: Download BA invocation status artifact (async child run, resume only)
+        if: steps.resume_ctx.outputs.is_resume == 'true'
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.COPILOT_PAT }}
+          run_id: ${{ steps.resume_ctx.outputs.codex_run_id }}
+          name: caller-handoff_ba_invocation_status
           path: async-invocation-handoff/${{ inputs.concurrency_key }}/
 
       - name: AI Teammate — pipeline (config steps or resume finish)
