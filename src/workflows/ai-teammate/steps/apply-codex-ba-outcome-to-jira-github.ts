@@ -89,5 +89,6 @@ export async function applyCodexBaOutcomeToJiraAndGithub(
     }
   }
 
-  return { status: 'stop', reason: 'BA analysis incomplete — questions posted, ticket blocked' };
+  // Halt is expressed in agent config via a `stop_pipeline` step with runIf: "ba_incomplete".
+  return { status: 'continue' };
 }

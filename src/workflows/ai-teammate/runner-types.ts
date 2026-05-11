@@ -52,6 +52,11 @@ export interface RunnerContext {
   githubIssueNumber?: number;
   /** Set after BA (Codex) analysis; may be used by later pipeline steps. */
   baOutcome?: BaOutcome;
+  /**
+   * After async parent resume: parsed `invocation-output-status.json` keyed by async step id
+   * (for `runIf` like `ba_async.output.completed = false`).
+   */
+  asyncStepOutputById?: Record<string, { output: Record<string, unknown> }>;
   /** Prior step records from pipeline execution (used by async_operation prepare for checkpoint). */
   priorStepRecords?: StepRecord[];
 }

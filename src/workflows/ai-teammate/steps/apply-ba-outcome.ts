@@ -56,5 +56,6 @@ export async function runApplyBaOutcome(
   const outcome = interpretBaModelOutput(codexOutput, raw.ticketCtx);
   ctx.baOutcome = outcome;
 
-  return applyCodexBaOutcomeToJiraAndGithub(ctx, agentLabelParams, deps, outcome);
+  await applyCodexBaOutcomeToJiraAndGithub(ctx, agentLabelParams, deps, outcome);
+  return { status: 'continue' };
 }

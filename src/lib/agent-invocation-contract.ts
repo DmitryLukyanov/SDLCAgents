@@ -87,14 +87,26 @@ export const BA_CODEX_WORKFLOW_DISPATCH_INPUT_KEYS: Readonly<Record<BaCodexPrepa
 
 export const BA_CODEX_WORKFLOW_DISPATCH_OUTPUT_KEY = 'invocation_output_file' as const;
 
+/** Logical key for machine-readable BA run status JSON (written by BA child after Codex). */
+export const INVOCATION_OUTPUT_STATUS_PARAM_KEY = 'outputStatus' as const;
+
+/** Default relative path for {@link INVOCATION_OUTPUT_STATUS_PARAM_KEY} (under the issue handoff directory). */
+export const INVOCATION_OUTPUT_STATUS_DEFAULT_RELATIVE_PATH = 'invocation-output-status.json' as const;
+
 /** Agent-agnostic default filenames (under `${ASYNC_INVOCATION_HANDOFF_ROOT_DIR}/<issueKey>/`). */
 export const DEFAULT_AGENT_INVOCATION_CONTRACT: AgentInvocationContract = {
+  primaryOutputKey: 'resultState',
   inputParams: {
     prompt: { kind: 'artifact', scope: 'handoff_workspace', relativePath: 'invocation-prompt.md' },
     jiraContext: { kind: 'artifact', scope: 'handoff_workspace', relativePath: 'invocation-jira-context.md' },
   },
   outputParams: {
     resultState: { kind: 'artifact', scope: 'handoff_workspace', relativePath: 'invocation-output.txt' },
+    [INVOCATION_OUTPUT_STATUS_PARAM_KEY]: {
+      kind: 'artifact',
+      scope: 'handoff_workspace',
+      relativePath: INVOCATION_OUTPUT_STATUS_DEFAULT_RELATIVE_PATH,
+    },
   },
 };
 
@@ -480,30 +492,55 @@ export function handoffWorkspacePaths(issueKey: string, contract: AgentInvocatio
 }
 
 /**
- * After the async child run, the parent job restores the handoff tree; the primary `contract.outputParams`
- * file must exist before runner-specific resume logic runs.
+ * After the async child run, the parent job restores the handoff tree; **every** `contract.outputParams`
+ * artifact must exist (Codex writes the primary; the BA child workflow writes e.g. `outputStatus`).
  */
-export function assertAsyncHandoffPrimaryOutputPresent(issueKey: string, contract: AgentInvocationContract): void {
+export function assertAsyncHandoffContractOutputsPresent(issueKey: string, contract: AgentInvocationContract): void {
   const p = handoffWorkspacePaths(issueKey, contract);
   const primaryKey = resolvePrimaryOutputKey(contract);
-  const abs = p.outputPaths[primaryKey];
-  if (!abs) {
-    throw new Error(`[assertAsyncHandoffPrimaryOutputPresent] missing outputPaths.${primaryKey}`);
-  }
-  if (!existsSync(abs)) {
-    throw new Error(
-      `[assertAsyncHandoffPrimaryOutputPresent] expected primary async output artifact at ${abs} ` +
-        `(contract.outputParams.${primaryKey}.relativePath). Ensure the child workflow produced it and ` +
-        'the parent job downloaded the post-async artifact bundle.',
-    );
-  }
-  for (const [k, path] of Object.entries(p.outputPaths)) {
-    if (k === primaryKey) continue;
-    if (!existsSync(path)) {
-      console.warn(
-        `[assertAsyncHandoffPrimaryOutputPresent] non-primary output "${k}" missing at ${path} (ignored)`,
+  for (const [k, abs] of Object.entries(p.outputPaths)) {
+    if (!abs) {
+      throw new Error(`[assertAsyncHandoffContractOutputsPresent] missing outputPaths.${k}`);
+    }
+    if (!existsSync(abs)) {
+      const label = k === primaryKey ? 'primary' : 'secondary';
+      throw new Error(
+        `[assertAsyncHandoffContractOutputsPresent] expected ${label} async output artifact at ${abs} ` +
+          `(contract.outputParams.${k}.relativePath). Ensure the child workflow produced it and ` +
+          'the parent job downloaded the post-async artifact bundle(s).',
       );
     }
+  }
+}
+
+/** @deprecated Use {@link assertAsyncHandoffContractOutputsPresent}. */
+export function assertAsyncHandoffPrimaryOutputPresent(issueKey: string, contract: AgentInvocationContract): void {
+  assertAsyncHandoffContractOutputsPresent(issueKey, contract);
+}
+
+/**
+ * Load parsed `invocation-output-status.json` for pipeline `runIf` (e.g. `ba_async.output.completed = false`).
+ * Returns a map keyed by the async step id → `{ output: statusJson }`.
+ */
+export function loadAsyncStepStatusEnvelopeForRunIf(
+  issueKey: string,
+  contract: AgentInvocationContract,
+  asyncStepId: string,
+): Record<string, { output: Record<string, unknown> }> {
+  const sk = INVOCATION_OUTPUT_STATUS_PARAM_KEY;
+  if (!contract.outputParams[sk]) return {};
+  const paths = handoffWorkspacePaths(issueKey, contract);
+  const abs = paths.outputPaths[sk];
+  if (!abs || !existsSync(abs)) {
+    return {};
+  }
+  try {
+    const j = JSON.parse(readFileSync(abs, 'utf8')) as Record<string, unknown>;
+    return { [asyncStepId]: { output: j } };
+  } catch (e) {
+    throw new Error(
+      `Invalid invocation output status JSON at ${abs}: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
