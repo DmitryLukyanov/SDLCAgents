@@ -11,6 +11,7 @@ export const IMPLEMENTED_PIPELINE_RUNNERS = new Set<string>([
   'async_operation',
   'async_terminal_operation',
   'apply_ba_outcome',
+  'stop_pipeline',
   // SpecKit Developer Agent — src/workflows/speckit-developer-agent/speckit-developer-agent-pipeline.ts
   'validate_spec_kit_prerequisites',
   'spec_kit_step',
@@ -25,6 +26,7 @@ export const PIPELINE_RUNNER_IMPLEMENTATION_HINT: Readonly<Record<string, string
   async_operation: 'src/workflows/ai-teammate/ai-teammate-pipeline.ts (async_operation)',
   async_terminal_operation: 'src/workflows/ai-teammate/ai-teammate-pipeline.ts (async_terminal_operation)',
   apply_ba_outcome: 'src/workflows/ai-teammate/steps/apply-ba-outcome.ts',
+  stop_pipeline: 'src/workflows/ai-teammate/steps/stop-pipeline.ts',
   validate_spec_kit_prerequisites: 'src/workflows/speckit-developer-agent/speckit-developer-agent-pipeline.ts',
   spec_kit_step: 'src/workflows/speckit-developer-agent/speckit-developer-agent-pipeline.ts',
   validate_spec_kit_output: 'src/workflows/speckit-developer-agent/speckit-developer-agent-pipeline.ts',
