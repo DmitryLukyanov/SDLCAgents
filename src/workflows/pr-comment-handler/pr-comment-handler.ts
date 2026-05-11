@@ -114,7 +114,7 @@ async function main(): Promise<void> {
   const command        = commandLine.split(/\s+/)[0] ?? '';
 
   // For /fix: pass only from the command line onwards so `prompt` still starts with /fix;
-  // speckit-developer-agent-setup strips the /fix prefix when building the fix template.
+  // speckit-developer-agent-codex-prepare strips the /fix prefix when building the fix template.
   const commandBody = commandLineIdx >= 0
     ? lines.slice(commandLineIdx).join('\n').trimStart()
     : body;

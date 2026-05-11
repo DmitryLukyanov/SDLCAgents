@@ -3,9 +3,10 @@
  *
  * ⚠️  This file is no longer called by _reusable-speckit-developer-agent.yml.
  *     The workflow uses prepare / dedicated Codex job / teardown:
- *       speckit-developer-agent-setup.ts    → creates branch/PR, writes prompt file
- *       _reusable-codex-run.yml             → runs Codex skill
- *       speckit-developer-agent-teardown.ts → stages files, commits, pushes, comments
+ *       speckit-developer-agent-github-bootstrap.ts → branch + draft PR + speckit-state (specify only, when used)
+ *       speckit-developer-agent-codex-prepare.ts    → writes input_prompt.md for Codex
+ *       _reusable-codex-run.yml                      → runs Codex skill
+ *       speckit-developer-agent-teardown.ts          → stages files, commits, pushes, comments
  *     Kept for reference only.
  *
  * Executes a single spec-kit step on behalf of the speckit developer agent workflow.

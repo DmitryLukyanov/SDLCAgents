@@ -1,10 +1,10 @@
 # Reusable SpecKit Developer Agent workflow.
 #
 # Modes (`inputs.mode`):
-#   • speckit (default) — issue-driven spec-kit steps: speckit-developer-agent-setup.ts → input_prompt.md, Codex, speckit-developer-agent-teardown.ts.
+#   • speckit (default) — issue-driven spec-kit steps: speckit-developer-agent-codex-prepare.ts → input_prompt.md, Codex, speckit-developer-agent-teardown.ts.
 #     For `specify` with empty `speckit_pr_number` and `fix_pr_number`, runs `_reusable-speckit-developer-agent-bootstrap.yml` first
 #     (branch + draft PR + speckit-state.json). Otherwise pass `branch_name` / PR from dispatch or prior bootstrap.
-#   • fix — PR /fix flow: checkout PR head (inputs.branch_name), read state, speckit-developer-agent-setup.ts (AGENT_MODE=fix) → input_prompt.md …
+#   • fix — PR /fix flow: checkout PR head (inputs.branch_name), read state, speckit-developer-agent-codex-prepare.ts (AGENT_MODE=fix) → input_prompt.md …
 #
 # Codex always reads `.sdlc-agents/input_prompt.md` (artifact + `_reusable-codex-run.yml`).
 #
@@ -13,7 +13,7 @@
 #   OPENAI_API_KEY  — passed through to `_reusable-codex-run.yml`
 #
 # Optional secrets (consumer repo): when `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` are set,
-# speckit-developer-agent-setup writes `spec-output/<ISSUE_KEY>/issueContext.md` (Jira + merged spec-kit directives).
+# speckit-developer-agent-codex-prepare writes `spec-output/<ISSUE_KEY>/issueContext.md` (Jira + merged spec-kit directives).
 #
 # Consumer usage: dispatch `speckit-developer-agent.yml` (thin wrapper) or call this workflow with `workflow_call`.
 name: "[Reusable] SpecKit Developer Agent"
@@ -52,7 +52,7 @@ on:
         type: string
         default: ''
       prompt:
-        description: "Optional workflow input; echoed as job output input_prompt for teardown. Fix: /fix body (+ HIL). Speckit: after setup, if set — repo path copies to input_prompt.md, else raw text (skipped when fix template already wrote that file)."
+        description: "Optional workflow input; echoed as job output input_prompt for teardown. Fix: /fix body (+ HIL). Speckit: after codex prepare, if set — repo path copies to input_prompt.md, else raw text (skipped when fix template already wrote that file)."
         required: false
         type: string
         default: ''
@@ -172,7 +172,7 @@ jobs:
           git config user.email "speckit-developer-agent@sdlc-agents.bot"
           git config user.name "SDLC SpecKit Developer Agent"
 
-      - name: Run speckit developer agent — setup
+      - name: Run speckit developer agent — codex prepare
         id: agent_setup
         env:
           AGENT_MODE: ${{ inputs.mode }}
@@ -192,7 +192,7 @@ jobs:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           TICKET_CONTEXT_DEPTH: ${{ vars.TICKET_CONTEXT_DEPTH }}
           CONFIG_FILE: ${{ inputs.config_file }}
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-setup.ts
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-codex-prepare.ts
 
       - name: Resolve tracking issue for history comments
         id: history_target
@@ -231,7 +231,7 @@ jobs:
           issue_number: ${{ steps.history_target.outputs.issue_number }}
           heading: SpecKit developer agent — started
           body: |
-            Prepare (**setup**) finished successfully. Codex job is next.
+            Prepare (**codex prepare**) finished successfully. Codex job is next.
 
             | Field | Value |
             | --- | --- |

@@ -1,6 +1,6 @@
 # SpecKit Developer Agent — pipeline config
 
-This folder holds the **agent JSON** consumed by `speckit-developer-agent-setup.ts` when the consumer repo runs **`_reusable-speckit-developer-agent.yml`**.
+This folder holds the **agent JSON** consumed by `speckit-developer-agent-codex-prepare.ts` when the consumer repo runs **`_reusable-speckit-developer-agent.yml`**.
 
 ## Configuration Structure
 
@@ -60,7 +60,9 @@ All agent behaviour is configured inside `params`:
 
 When the SpecKit Developer Agent runs:
 
-1. **Setup phase** (`speckit-developer-agent-setup.ts`):
+For **specify** when no PR exists yet, CI may run **GitHub bootstrap** first (`speckit-developer-agent-github-bootstrap.ts`): feature branch, draft PR, and initial `speckit-state.json`.
+
+1. **Codex prepare phase** (`speckit-developer-agent-codex-prepare.ts`):
    - Reads the config file from `CONFIG_FILE` environment variable when set
    - Resolves Codex model via `getEffectiveModel`: `params.model` (or root `model`), then `DEVELOPER_MODEL`, legacy `DEVELOPER_AGENT_MODEL`, then `o4-mini`
    - Uses `params.ticketContextDepth` / `TICKET_CONTEXT_DEPTH` env var for Jira context depth

@@ -43,7 +43,7 @@ on:
         type: string
         default: ''
       prompt:
-        description: "mode=fix: /fix comment (+ optional HIL). mode=speckit: optional path or text after setup. See SDLCAgents reusable docs."
+        description: "mode=fix: /fix comment (+ optional HIL). mode=speckit: optional path or text after codex prepare. See SDLCAgents reusable docs."
         required: false
         type: string
         default: ''

@@ -1,10 +1,10 @@
 /**
- * SpecKit Developer Agent — Bootstrap (runs before speckit-developer-agent for specify).
+ * SpecKit Developer Agent — GitHub bootstrap (specify: branch + draft PR + initial state).
  *
  * Ensures a remote feature branch, draft PR linked to the GitHub issue, and an
  * initial `speckit-state.json` under `.specify/features/{ISSUE_KEY}/` exist and
- * are pushed. `_reusable-speckit-developer-agent.yml` (prepare/setup) then consumes BRANCH_NAME,
- * PR_NUMBER, and ISSUE_* (no branch/PR/state creation in setup for that path).
+ * are pushed. `_reusable-speckit-developer-agent.yml` (codex-prepare) then consumes BRANCH_NAME,
+ * PR_NUMBER, and ISSUE_* (no branch/PR/state creation there when bootstrap already ran).
  *
  * Environment:
  *   GITHUB_REPOSITORY, ISSUE_NUMBER, ISSUE_KEY
@@ -50,7 +50,7 @@ function git(args: string): string {
 function setOutput(name: string, value: string): void {
   const outputFile = process.env['GITHUB_OUTPUT'];
   if (outputFile) appendFileSync(outputFile, `${name}=${value}\n`);
-  console.log(`[dev-agent-bootstrap] output: ${name}=${value}`);
+  console.log(`[github-bootstrap] output: ${name}=${value}`);
 }
 
 const featureSlug = (issueKey: string): string =>
@@ -82,7 +82,7 @@ async function findExistingSpecifyBranch(
   if (candidates.length === 0) return null;
   const pick = candidates.find(p => p.draft === true) ?? candidates[0];
   console.log(
-    `[dev-agent-bootstrap] Reusing existing PR #${pick.number} branch \`${pick.head.ref}\`.`,
+    `[github-bootstrap] Reusing existing PR #${pick.number} branch \`${pick.head.ref}\`.`,
   );
   return pick.head.ref;
 }
@@ -124,7 +124,7 @@ async function createRemoteFeatureBranch(
     throw err;
   }
   console.log(
-    `[dev-agent-bootstrap] Created remote branch ${branchName} from ${defaultBranch} (${newCommit.sha.slice(0, 7)})`,
+    `[github-bootstrap] Created remote branch ${branchName} from ${defaultBranch} (${newCommit.sha.slice(0, 7)})`,
   );
   return branchName;
 }
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   let branchName: string;
   if (desiredBranch) {
     branchName = desiredBranch;
-    console.log(`[dev-agent-bootstrap] Using requested branch ${branchName}`);
+    console.log(`[github-bootstrap] Using requested branch ${branchName}`);
   } else {
     const existing = await findExistingSpecifyBranch(octokit, owner, repo, issueNumber, issueKey);
     branchName = existing ?? (await createRemoteFeatureBranch(owner, repo, issueKey, octokit));
@@ -173,7 +173,7 @@ async function main(): Promise<void> {
   let prNumber: number;
   if (prs.length > 0) {
     prNumber = prs[0].number;
-    console.log(`[dev-agent-bootstrap] Using open PR #${prNumber}`);
+    console.log(`[github-bootstrap] Using open PR #${prNumber}`);
   } else {
     const { data: issueData } = await octokit.rest.issues.get({
       owner,
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
       .catch(() => {
         /* label may not exist yet */
       });
-    console.log(`[dev-agent-bootstrap] Created draft PR #${prNumber}`);
+    console.log(`[github-bootstrap] Created draft PR #${prNumber}`);
   }
 
   const featureDir = `.specify/features/${issueKey}`;
@@ -235,9 +235,9 @@ async function main(): Promise<void> {
     git(`add ${statePath}`);
     git(`commit -m "chore(${issueKey}): bootstrap speckit-state.json"`);
     git(`push origin ${branchName}`);
-    console.log(`[dev-agent-bootstrap] Pushed speckit-state.json`);
+    console.log(`[github-bootstrap] Pushed speckit-state.json`);
   } else {
-    console.log(`[dev-agent-bootstrap] speckit-state.json already up to date on branch`);
+    console.log(`[github-bootstrap] speckit-state.json already up to date on branch`);
   }
 
   setOutput('branch_name', branchName);
@@ -246,6 +246,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(err => {
-  console.error('[dev-agent-bootstrap] Fatal error:', err);
+  console.error('[github-bootstrap] Fatal error:', err);
   process.exit(1);
 });

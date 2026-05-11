@@ -1,9 +1,9 @@
 /**
- * SpecKit Developer Agent — Setup phase (speckit + fix).
+ * SpecKit Developer Agent — Codex prepare phase (speckit + fix).
  *
  * Branch on `AGENT_MODE` / Codex model (`getEffectiveModel` in speckit-developer-agent-config):
- *   speckit (default) — pipeline config + `$speckit-{step}` → input_prompt.md. Branch/PR/bootstrap state normally come from
- *     CI: `_reusable-speckit-developer-agent.yml` may run `speckit-developer-agent-bootstrap.ts` before this job; specify reads `speckit-state.json` when present (else legacy branch/PR create).
+ *   speckit (default) — pipeline config + `$speckit-{step}` → input_prompt.md. Branch/PR/state normally come from
+ *     CI: `_reusable-speckit-developer-agent.yml` may run `speckit-developer-agent-github-bootstrap.ts` first for specify; then this script reads `speckit-state.json` when present (else legacy branch/PR create).
  *   fix — targeted fix prompt from speckit-state + INPUT_PROMPT → input_prompt.md
  *
  * Environment — common:
@@ -114,7 +114,7 @@ function git(args: string): string {
 function setOutput(name: string, value: string): void {
   const outputFile = process.env['GITHUB_OUTPUT'];
   if (outputFile) appendFileSync(outputFile, `${name}=${value}\n`);
-  console.log(`[dev-agent-setup] output: ${name}=${value}`);
+  console.log(`[codex-prepare] output: ${name}=${value}`);
 }
 
 function extractPipelineConfig(issueBody: string): PipelineConfig {
@@ -180,7 +180,7 @@ async function runSpeckitSetup(): Promise<void> {
       }
       featureDir = saved.featureDir ?? dirname(statePathEarly);
       console.log(
-        `[dev-agent-setup] specify: using speckit-state at ${statePathEarly} — PR #${prNumber}`,
+        `[codex-prepare] specify: using speckit-state at ${statePathEarly} — PR #${prNumber}`,
       );
     } else {
       const { data: repoInfo } = await octokit.rest.repos.get({ owner, repo });
@@ -190,7 +190,7 @@ async function runSpeckitSetup(): Promise<void> {
       if (remoteRef.length > 0) {
         git(`fetch origin ${branchName}`);
         git(`checkout -B ${branchName} origin/${branchName}`);
-        console.log(`[dev-agent-setup] Switched to existing branch ${branchName}`);
+        console.log(`[codex-prepare] Switched to existing branch ${branchName}`);
 
         const { data: prs } = await octokit.rest.pulls.list({
           owner,
@@ -200,7 +200,7 @@ async function runSpeckitSetup(): Promise<void> {
         });
         if (prs.length > 0) {
           prNumber = prs[0].number;
-          console.log(`[dev-agent-setup] Using existing PR #${prNumber}`);
+          console.log(`[codex-prepare] Using existing PR #${prNumber}`);
         } else {
           const { data: issueData } = await octokit.rest.issues.get({
             owner,
@@ -217,7 +217,7 @@ async function runSpeckitSetup(): Promise<void> {
             body: `Resolves #${issueNumber}\n\n_Spec-kit pipeline in progress — managed by SDLC Developer Agent._`,
           });
           prNumber = pr.number;
-          console.log(`[dev-agent-setup] Created PR #${prNumber} (branch existed, no open PR found)`);
+          console.log(`[codex-prepare] Created PR #${prNumber} (branch existed, no open PR found)`);
         }
       } else {
         git(`checkout -b ${branchName}`);
@@ -246,7 +246,7 @@ async function runSpeckitSetup(): Promise<void> {
             /* label may not exist yet */
           });
 
-        console.log(`[dev-agent-setup] Draft PR #${prNumber} created`);
+        console.log(`[codex-prepare] Draft PR #${prNumber} created`);
       }
     }
   } else {
@@ -256,7 +256,7 @@ async function runSpeckitSetup(): Promise<void> {
     branchName = saved.branchName;
     prNumber = saved.prNumber;
     featureDir = saved.featureDir ?? dirname(statePath);
-    console.log(`[dev-agent-setup] Continuing on PR #${prNumber} (branch: ${branchName})`);
+    console.log(`[codex-prepare] Continuing on PR #${prNumber} (branch: ${branchName})`);
   }
 
   const ticketContextDepth = getEffectiveTicketContextDepth(config);
@@ -297,14 +297,14 @@ async function runSpeckitSetup(): Promise<void> {
 
   mkdirSync('.sdlc-agents', { recursive: true });
   writeFileSync('.sdlc-agents/input_prompt.md', promptContent + '\n');
-  console.log(`[dev-agent-setup] Wrote prompt to .sdlc-agents/input_prompt.md`);
+  console.log(`[codex-prepare] Wrote prompt to .sdlc-agents/input_prompt.md`);
 
   setOutput('branch_name', branchName);
   setOutput('pr_number', String(prNumber));
   setOutput('feature_dir', featureDir);
   setOutput('model', codexModel);
 
-  console.log(`[dev-agent-setup] Setup complete — step=${step} branch=${branchName} pr=#${prNumber}`);
+  console.log(`[codex-prepare] Codex prepare complete — step=${step} branch=${branchName} pr=#${prNumber}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -332,17 +332,17 @@ async function runFixSetup(): Promise<void> {
   setOutput('branch_name', state.branchName);
   setOutput('pr_number', String(state.prNumber));
 
-  console.log(`[dev-agent-setup] fix: featureDir=${featureDir} model=${codexModel}`);
+  console.log(`[codex-prepare] fix: featureDir=${featureDir} model=${codexModel}`);
 
   const pathCandidate = fixInstructions.trim();
   if (pathCandidate && existsSync(pathCandidate) && statSync(pathCandidate).isFile()) {
     const body = readFileSync(pathCandidate, 'utf8');
     mkdirSync('.sdlc-agents', { recursive: true });
     writeFileSync('.sdlc-agents/input_prompt.md', body.endsWith('\n') ? body : `${body}\n`);
-    console.log(`[dev-agent-setup] fix: copied prompt from file ${pathCandidate}`);
+    console.log(`[codex-prepare] fix: copied prompt from file ${pathCandidate}`);
     setOutput('feature_dir', featureDir);
     setOutput('model', codexModel);
-    console.log('[dev-agent-setup] fix: setup complete (raw prompt file)');
+    console.log('[codex-prepare] fix: setup complete (raw prompt file)');
     return;
   }
 
@@ -366,9 +366,9 @@ async function runFixSetup(): Promise<void> {
         `**Issue #${issueNumber}**: ${issue.title}`,
         ...(cleanBody ? [``, cleanBody] : []),
       ].join('\n');
-      console.log(`[dev-agent-setup] fix: fetched issue #${issueNumber}: "${issue.title}"`);
+      console.log(`[codex-prepare] fix: fetched issue #${issueNumber}: "${issue.title}"`);
     } catch (err) {
-      console.warn('[dev-agent-setup] fix: could not fetch issue (non-fatal):', err);
+      console.warn('[codex-prepare] fix: could not fetch issue (non-fatal):', err);
     }
   }
 
@@ -393,13 +393,13 @@ async function runFixSetup(): Promise<void> {
   mkdirSync('.sdlc-agents', { recursive: true });
   writeFileSync('.sdlc-agents/input_prompt.md', prompt + '\n');
   console.log(
-    `[dev-agent-setup] fix: wrote prompt to .sdlc-agents/input_prompt.md (${prompt.length} chars)`,
+    `[codex-prepare] fix: wrote prompt to .sdlc-agents/input_prompt.md (${prompt.length} chars)`,
   );
 
   setOutput('feature_dir', featureDir);
   setOutput('model', codexModel);
 
-  console.log('[dev-agent-setup] fix: setup complete');
+  console.log('[codex-prepare] fix: setup complete');
 }
 
 /* ------------------------------------------------------------------ */
@@ -413,6 +413,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(err => {
-  console.error('[dev-agent-setup] Fatal error:', err);
+  console.error('[codex-prepare] Fatal error:', err);
   process.exit(1);
 });

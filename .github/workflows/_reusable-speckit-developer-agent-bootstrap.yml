@@ -93,7 +93,7 @@ jobs:
           git config user.email "speckit-developer-agent@sdlc-agents.bot"
           git config user.name "SDLC SpecKit Developer Agent"
 
-      - name: Run speckit-developer-agent bootstrap
+      - name: Run speckit-developer-agent — GitHub bootstrap
         id: run
         env:
           GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
@@ -102,7 +102,7 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           ISSUE_KEY: ${{ inputs.issue_key }}
           BRANCH_NAME: ${{ inputs.branch_name }}
-        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-bootstrap.ts
+        run: .sdlc-agents/node_modules/.bin/tsx .sdlc-agents/src/workflows/speckit-developer-agent/speckit-developer-agent-github-bootstrap.ts
 
       - name: Post bootstrap on tracking issue
         if: success()
