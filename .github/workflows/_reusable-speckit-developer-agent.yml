@@ -166,7 +166,7 @@ jobs:
         working-directory: .sdlc-agents
 
       - name: Check spec-kit prerequisites
-        uses: ./.sdlc-agents/.github/actions/check-speckit-prerequisites
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/check-speckit-prerequisites@master
         with:
           fail_on_not_ready: 'true'
 
@@ -229,7 +229,7 @@ jobs:
 
       - name: Post workflow start on tracking issue
         if: steps.history_target.outputs.enabled == 'true'
-        uses: ./.github/actions/post-issue-history
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/post-issue-history@master
         with:
           issue_number: ${{ steps.history_target.outputs.issue_number }}
           heading: SpecKit developer agent — started
@@ -372,7 +372,7 @@ jobs:
 
       - name: Post workflow completion on tracking issue
         if: success() && needs.prepare.outputs.history_post_enabled == 'true'
-        uses: ./.github/actions/post-issue-history
+        uses: DmitryLukyanov/SDLCAgents/.github/actions/post-issue-history@master
         with:
           issue_number: ${{ needs.prepare.outputs.history_issue_number }}
           heading: SpecKit developer agent — finished
