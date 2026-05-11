@@ -40,41 +40,16 @@ import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
 import { getEffectiveModel, tryLoadConfig } from './speckit-developer-agent-config.js';
+import {
+  SPECKIT_STEP_ORDER,
+  type SpeckitStep,
+  type SpeckitWorkflowBaseState,
+  nextSpeckitStepAfter,
+  parseSpeckitStep,
+  speckitStepLabel,
+} from './speckit-step-model.js';
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-type SpeckitStep =
-  | 'specify'
-  | 'clarify'
-  | 'plan'
-  | 'tasks'
-  | 'implement'
-  | 'code_review';
-
-const STEP_ORDER: SpeckitStep[] = [
-  'specify',
-  'clarify',
-  'plan',
-  'tasks',
-  'implement',
-  'code_review',
-];
-
-interface SpeckitState {
-  completedSteps: SpeckitStep[];
-  nextStep: SpeckitStep | null;
-  lastUpdated: string;
-  issueNumber: number;
-  issueKey: string;
-  prNumber: number;
-  branchName: string;
-  /** Absolute or repo-relative path to the artifacts directory.
-   *  Set by the specify step. Subsequent steps read this so that the
-   *  actual location (e.g. `specs/001-auth/`) is always authoritative. */
-  featureDir?: string;
-}
+type SpeckitState = SpeckitWorkflowBaseState;
 
 interface PipelineConfig {
   specifyInput: string;
@@ -157,15 +132,6 @@ function stepInput(config: PipelineConfig, step: SpeckitStep): string {
   return map[step];
 }
 
-function nextStepAfter(step: SpeckitStep): SpeckitStep | null {
-  const idx = STEP_ORDER.indexOf(step);
-  return idx >= 0 && idx < STEP_ORDER.length - 1 ? STEP_ORDER[idx + 1] : null;
-}
-
-function stepLabel(step: SpeckitStep): string {
-  return `${step} (${STEP_ORDER.indexOf(step) + 1}/${STEP_ORDER.length})`;
-}
-
 /** Extract the JSON pipeline config block from the GitHub issue body.
  *
  * The block is wrapped in HTML comment sentinels rather than a markdown
@@ -190,11 +156,7 @@ async function main(): Promise<void> {
   const repository = requireEnv('GITHUB_REPOSITORY');
   const issueNumber = parseInt(requireEnv('ISSUE_NUMBER'), 10);
   const issueKey = requireEnv('ISSUE_KEY');
-  const step = requireEnv('STEP') as SpeckitStep;
-
-  if (!STEP_ORDER.includes(step)) {
-    throw new Error(`Unknown step: "${step}". Valid: ${STEP_ORDER.join(', ')}`);
-  }
+  const step = parseSpeckitStep(requireEnv('STEP'));
 
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) throw new Error(`Invalid GITHUB_REPOSITORY: "${repository}"`);
@@ -389,7 +351,7 @@ async function main(): Promise<void> {
 
   const state: SpeckitState = {
     completedSteps,
-    nextStep: nextStepAfter(step),
+    nextStep: nextSpeckitStepAfter(step),
     lastUpdated: new Date().toISOString(),
     issueNumber,
     issueKey,
@@ -429,7 +391,7 @@ async function main(): Promise<void> {
   commits.push(commitLink(stateCommitSha, repoUrl, `speckit(${step}): update speckit-state.json`));
 
   appendSummary([
-    `# Spec-Kit · \`${step}\` (${STEP_ORDER.indexOf(step) + 1}/${STEP_ORDER.length}) — ${issueKey}`,
+    `# Spec-Kit · \`${step}\` (${SPECKIT_STEP_ORDER.indexOf(step) + 1}/${SPECKIT_STEP_ORDER.length}) — ${issueKey}`,
     '',
     '## Execution',
     '',
@@ -472,13 +434,13 @@ async function main(): Promise<void> {
   const commentBody = next
     ? fillTemplate(STEP_COMPLETE_TEMPLATE, {
         STEP:        step,
-        STEP_LABEL:  stepLabel(step),
+        STEP_LABEL:  speckitStepLabel(step),
         BRANCH_NAME: branchName,
         NEXT_STEP:   next,
         RUN_LINK:    runLink,
       })
     : fillTemplate(IMPLEMENT_COMPLETE_TEMPLATE, {
-        STEP_LABEL: stepLabel(step),
+        STEP_LABEL: speckitStepLabel(step),
         RUN_LINK:   runLink,
       });
 

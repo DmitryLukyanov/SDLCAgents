@@ -21,6 +21,14 @@ import { dirname, join } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { loadTemplate, fillTemplate } from '../../lib/template-utils.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
+import {
+  SPECKIT_STEP_ORDER,
+  type SpeckitStep,
+  type SpeckitWorkflowBaseState,
+  nextSpeckitStepAfter,
+  parseSpeckitStep,
+  speckitStepLabel,
+} from './speckit-step-model.js';
 
 /* ------------------------------------------------------------------ */
 /*  Mode                                                               */
@@ -35,37 +43,7 @@ function getAgentMode(): AgentMode {
   return m === 'fix' ? 'fix' : 'speckit';
 }
 
-/* ------------------------------------------------------------------ */
-/*  Types (speckit)                                                    */
-/* ------------------------------------------------------------------ */
-
-type SpeckitStep =
-  | 'specify'
-  | 'clarify'
-  | 'plan'
-  | 'tasks'
-  | 'implement'
-  | 'code_review';
-
-const STEP_ORDER: SpeckitStep[] = [
-  'specify',
-  'clarify',
-  'plan',
-  'tasks',
-  'implement',
-  'code_review',
-];
-
-interface SpeckitState {
-  completedSteps: SpeckitStep[];
-  nextStep: SpeckitStep | null;
-  lastUpdated: string;
-  issueNumber: number;
-  issueKey: string;
-  prNumber: number;
-  branchName: string;
-  featureDir?: string;
-}
+type SpeckitState = SpeckitWorkflowBaseState;
 
 /* ------------------------------------------------------------------ */
 /*  Templates                                                          */
@@ -132,23 +110,6 @@ async function postComment(
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
-}
-
-function nextStepAfter(step: SpeckitStep): SpeckitStep | null {
-  const idx = STEP_ORDER.indexOf(step);
-  return idx >= 0 && idx < STEP_ORDER.length - 1 ? STEP_ORDER[idx + 1] : null;
-}
-
-function stepLabel(step: SpeckitStep): string {
-  return `${step} (${STEP_ORDER.indexOf(step) + 1}/${STEP_ORDER.length})`;
-}
-
-function parseSpeckitStep(raw: string): SpeckitStep {
-  const s = raw.trim().toLowerCase().replace(/-/g, '_') as SpeckitStep;
-  if (!STEP_ORDER.includes(s)) {
-    throw new Error(`Unknown STEP "${raw}". Expected one of: ${STEP_ORDER.join(', ')}`);
-  }
-  return s;
 }
 
 function graphqlUrl(): string {
@@ -270,7 +231,7 @@ async function runSpeckitTeardown(): Promise<void> {
 
   const state: SpeckitState = {
     completedSteps,
-    nextStep: nextStepAfter(step),
+    nextStep: nextSpeckitStepAfter(step),
     lastUpdated: new Date().toISOString(),
     issueNumber,
     issueKey,
@@ -299,8 +260,8 @@ async function runSpeckitTeardown(): Promise<void> {
   appendSummary(
     fillTemplate(JOB_SUMMARY_STEP_TEMPLATE, {
       STEP: step,
-      STEP_INDEX: String(STEP_ORDER.indexOf(step) + 1),
-      STEP_TOTAL: String(STEP_ORDER.length),
+      STEP_INDEX: String(SPECKIT_STEP_ORDER.indexOf(step) + 1),
+      STEP_TOTAL: String(SPECKIT_STEP_ORDER.length),
       ISSUE_KEY: issueKey,
       FEATURE_DIR: featureDir,
       COMMITS_MD: commitsMd,
@@ -318,18 +279,18 @@ async function runSpeckitTeardown(): Promise<void> {
   const commentBody = next
     ? fillTemplate(STEP_COMPLETE_TEMPLATE, {
         STEP: step,
-        STEP_LABEL: stepLabel(step),
+        STEP_LABEL: speckitStepLabel(step),
         BRANCH_NAME: branchName,
         NEXT_STEP: next,
         RUN_LINK: runLink,
       })
     : step === 'code_review'
       ? fillTemplate(CODE_REVIEW_COMPLETE_TEMPLATE, {
-          STEP_LABEL: stepLabel(step),
+          STEP_LABEL: speckitStepLabel(step),
           RUN_LINK: runLink,
         })
       : fillTemplate(IMPLEMENT_COMPLETE_TEMPLATE, {
-          STEP_LABEL: stepLabel(step),
+          STEP_LABEL: speckitStepLabel(step),
           RUN_LINK: runLink,
         });
 

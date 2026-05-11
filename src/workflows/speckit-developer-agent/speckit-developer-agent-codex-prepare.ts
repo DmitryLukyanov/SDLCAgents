@@ -30,6 +30,11 @@ import {
   getEffectiveModel,
   getEffectiveTicketContextDepth,
 } from './speckit-developer-agent-config.js';
+import {
+  type SpeckitStep,
+  type SpeckitWorkflowBaseState,
+  parseSpeckitStep,
+} from './speckit-step-model.js';
 
 /* ------------------------------------------------------------------ */
 /*  Mode                                                               */
@@ -44,37 +49,7 @@ function getAgentMode(): AgentMode {
   return m === 'fix' ? 'fix' : 'speckit';
 }
 
-/* ------------------------------------------------------------------ */
-/*  Types (speckit)                                                    */
-/* ------------------------------------------------------------------ */
-
-type SpeckitStep =
-  | 'specify'
-  | 'clarify'
-  | 'plan'
-  | 'tasks'
-  | 'implement'
-  | 'code_review';
-
-const STEP_ORDER: SpeckitStep[] = [
-  'specify',
-  'clarify',
-  'plan',
-  'tasks',
-  'implement',
-  'code_review',
-];
-
-interface SpeckitState {
-  completedSteps: SpeckitStep[];
-  nextStep: SpeckitStep | null;
-  lastUpdated: string;
-  issueNumber: number;
-  issueKey: string;
-  prNumber: number;
-  branchName: string;
-  featureDir?: string;
-}
+type SpeckitState = SpeckitWorkflowBaseState;
 
 interface PipelineConfig {
   specifyInput: string;
@@ -125,14 +100,6 @@ function extractPipelineConfig(issueBody: string): PipelineConfig {
     );
   }
   return JSON.parse(match[1]) as PipelineConfig;
-}
-
-function parseSpeckitStep(raw: string): SpeckitStep {
-  const s = raw.trim().toLowerCase().replace(/-/g, '_') as SpeckitStep;
-  if (!STEP_ORDER.includes(s)) {
-    throw new Error(`Unknown STEP "${raw}". Expected one of: ${STEP_ORDER.join(', ')}`);
-  }
-  return s;
 }
 
 /* ------------------------------------------------------------------ */

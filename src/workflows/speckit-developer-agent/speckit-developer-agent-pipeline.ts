@@ -30,6 +30,7 @@ import {
 } from '../../lib/pipeline-expected-step-helper.js';
 import { loadSpeckitDeveloperAgentConfig } from './speckit-developer-agent-config.js';
 import { findSpeckitStateFilePath } from './speckit-state-path.js';
+import { nextSpeckitStepAfter, parseSpeckitStep } from './speckit-step-model.js';
 import type {
   RunnerContext,
   PipelineStep,
@@ -272,17 +273,14 @@ async function updateSpeckitStateAfterStep(ctx: RunnerContext, stepName: string)
     };
   }
 
+  const step = parseSpeckitStep(stepName);
+
   // Add step to completed steps if not already there
-  if (!state.completedSteps.includes(stepName)) {
-    state.completedSteps.push(stepName);
+  if (!state.completedSteps.includes(step)) {
+    state.completedSteps.push(step);
   }
 
-  // Determine next step
-  const stepOrder = ['specify', 'clarify', 'plan', 'tasks', 'implement', 'code_review'];
-  const currentIndex = stepOrder.indexOf(stepName);
-  state.nextStep = currentIndex >= 0 && currentIndex < stepOrder.length - 1
-    ? stepOrder[currentIndex + 1]
-    : null;
+  state.nextStep = nextSpeckitStepAfter(step);
 
   state.lastUpdated = new Date().toISOString();
 

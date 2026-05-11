@@ -4,6 +4,10 @@
  * Similar to AI-Teammate runner types but adapted for spec-kit workflow.
  */
 
+import type { SpeckitWorkflowBaseState } from './speckit-step-model.js';
+
+export type { SpeckitStep, SpeckitWorkflowBaseState } from './speckit-step-model.js';
+
 /** Record of a single pipeline step execution (persisted for resume). */
 export interface StepRecord {
   runner: string;
@@ -88,16 +92,8 @@ export interface PipelineStep {
   [key: string]: unknown;
 }
 
-/** Spec-kit state persisted between steps */
-export interface SpeckitState {
-  completedSteps: string[];
-  nextStep: string | null;
-  lastUpdated: string;
-  issueNumber: number;
-  issueKey: string;
-  prNumber: number;
-  branchName: string;
-  featureDir?: string;
+/** Spec-kit state persisted between steps (`speckit-state.json`) */
+export interface SpeckitState extends SpeckitWorkflowBaseState {
   /** Pipeline step records for resume capability */
   pipelineRecords?: StepRecord[];
   /** Commit SHA recorded just before dispatching an async step; used to detect new commits on resume */

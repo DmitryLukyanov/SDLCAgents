@@ -18,24 +18,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from 'node:path';
 import { Octokit } from '@octokit/rest';
 
-type SpeckitStep =
-  | 'specify'
-  | 'clarify'
-  | 'plan'
-  | 'tasks'
-  | 'implement'
-  | 'code_review';
-
-interface SpeckitState {
-  completedSteps: SpeckitStep[];
-  nextStep: SpeckitStep | null;
-  lastUpdated: string;
-  issueNumber: number;
-  issueKey: string;
-  prNumber: number;
-  branchName: string;
-  featureDir?: string;
-}
+import type { SpeckitWorkflowBaseState } from './speckit-step-model.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -202,9 +185,9 @@ async function main(): Promise<void> {
   const statePath = join(featureDir, 'speckit-state.json');
   const now = new Date().toISOString();
 
-  let state: SpeckitState;
+  let state: SpeckitWorkflowBaseState;
   if (existsSync(statePath)) {
-    const prev = JSON.parse(readFileSync(statePath, 'utf8')) as SpeckitState;
+    const prev = JSON.parse(readFileSync(statePath, 'utf8')) as SpeckitWorkflowBaseState;
     state = {
       ...prev,
       issueNumber,
