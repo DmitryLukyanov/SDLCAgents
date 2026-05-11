@@ -144,6 +144,42 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Create workflow inputs JSON artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p workflow-inputs-artifact
+          cat > workflow-inputs-artifact/codex_workflow_inputs.json <<'EOF'
+          {
+            "download_artifact_name": "${{ inputs.download_artifact_name }}",
+            "download_path": "${{ inputs.download_path }}",
+            "prompt_file": "${{ inputs.prompt_file }}",
+            "prompt_content": "${{ inputs.prompt_content }}",
+            "output_file": "${{ inputs.output_file }}",
+            "upload_artifact_name": "${{ inputs.upload_artifact_name }}",
+            "upload_path": "${{ inputs.upload_path }}",
+            "upload_if_no_files_found": "${{ inputs.upload_if_no_files_found }}",
+            "model": "${{ steps.pick_model.outputs.model }}",
+            "codex_step_name": "${{ inputs.codex_step_name }}",
+            "timeout_minutes": ${{ inputs.timeout_minutes }},
+            "checkout_ref": "${{ inputs.checkout_ref }}",
+            "commit_workspace_after_codex": ${{ inputs.commit_workspace_after_codex }},
+            "workspace_commit_message": "${{ inputs.workspace_commit_message }}",
+            "git_commit_user_email": "${{ inputs.git_commit_user_email }}",
+            "git_commit_user_name": "${{ inputs.git_commit_user_name }}",
+            "extra_git_add_paths": "${{ inputs.extra_git_add_paths }}"
+          }
+          EOF
+          echo "Codex workflow inputs captured to artifact:"
+          cat workflow-inputs-artifact/codex_workflow_inputs.json
+
+      - name: Upload workflow inputs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-workflow-inputs-${{ github.run_id }}
+          path: workflow-inputs-artifact/
+          if-no-files-found: error
+
       - name: Checkout consumer repo
         if: ${{ inputs.checkout_ref == '' }}
         uses: actions/checkout@v4
@@ -243,7 +279,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit and push workspace changes after Codex
-        if: success() && inputs.commit_workspace_after_codex == true
+        if: success() && inputs.commit_workspace_after_codex
         env:
           COMMIT_MSG: ${{ inputs.workspace_commit_message }}
           GIT_USER_EMAIL: ${{ inputs.git_commit_user_email }}
@@ -263,6 +299,24 @@ jobs:
           fi
           git config user.email "$GIT_USER_EMAIL"
           git config user.name "$GIT_USER_NAME"
+
+          # Sync modified consumer templates from .sdlc-agents subdirectory to root
+          # (Codex may modify files in .sdlc-agents which are excluded from commit)
+          if [ -d ".sdlc-agents/.github/consumer-templates" ] && [ -d ".github/consumer-templates" ]; then
+            echo "Checking for modified consumer templates in .sdlc-agents..."
+            while IFS= read -r -d '' src_file; do
+              rel_path="${src_file#.sdlc-agents/}"
+              dest_file="$rel_path"
+              # Only copy if the file was modified (different from root copy)
+              if [ -f "$dest_file" ]; then
+                if ! cmp -s "$src_file" "$dest_file"; then
+                  echo "  Syncing modified: $rel_path"
+                  cp "$src_file" "$dest_file"
+                fi
+              fi
+            done < <(find .sdlc-agents/.github/consumer-templates -type f -name "*.yml" -print0)
+          fi
+
           # Do not use `git add -A` + pathspec excludes: nested `**/node_modules` is easy to miss and
           # Git then tries to stage ignored trees and aborts ("ignored by .gitignore").
           git add -u
