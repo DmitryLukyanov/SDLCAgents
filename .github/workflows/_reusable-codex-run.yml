@@ -144,6 +144,42 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Create workflow inputs JSON artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p workflow-inputs-artifact
+          cat > workflow-inputs-artifact/codex_workflow_inputs.json <<'EOF'
+          {
+            "download_artifact_name": "${{ inputs.download_artifact_name }}",
+            "download_path": "${{ inputs.download_path }}",
+            "prompt_file": "${{ inputs.prompt_file }}",
+            "prompt_content": "${{ inputs.prompt_content }}",
+            "output_file": "${{ inputs.output_file }}",
+            "upload_artifact_name": "${{ inputs.upload_artifact_name }}",
+            "upload_path": "${{ inputs.upload_path }}",
+            "upload_if_no_files_found": "${{ inputs.upload_if_no_files_found }}",
+            "model": "${{ steps.pick_model.outputs.model }}",
+            "codex_step_name": "${{ inputs.codex_step_name }}",
+            "timeout_minutes": ${{ inputs.timeout_minutes }},
+            "checkout_ref": "${{ inputs.checkout_ref }}",
+            "commit_workspace_after_codex": ${{ inputs.commit_workspace_after_codex }},
+            "workspace_commit_message": "${{ inputs.workspace_commit_message }}",
+            "git_commit_user_email": "${{ inputs.git_commit_user_email }}",
+            "git_commit_user_name": "${{ inputs.git_commit_user_name }}",
+            "extra_git_add_paths": "${{ inputs.extra_git_add_paths }}"
+          }
+          EOF
+          echo "Codex workflow inputs captured to artifact:"
+          cat workflow-inputs-artifact/codex_workflow_inputs.json
+
+      - name: Upload workflow inputs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-workflow-inputs-${{ github.run_id }}
+          path: workflow-inputs-artifact/
+          if-no-files-found: error
+
       - name: Checkout consumer repo
         if: ${{ inputs.checkout_ref == '' }}
         uses: actions/checkout@v4

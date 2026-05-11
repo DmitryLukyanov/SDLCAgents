@@ -130,36 +130,6 @@ jobs:
           token: ${{ secrets.COPILOT_PAT }}
           fetch-depth: 0
 
-      - name: Upload workflow inputs artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p workflow-inputs-artifact
-          cat > workflow-inputs-artifact/workflow_inputs.json <<'EOF'
-          {
-            "mode": "${{ inputs.mode }}",
-            "issue_number": "${{ inputs.issue_number }}",
-            "issue_key": "${{ inputs.issue_key }}",
-            "step": "${{ inputs.step }}",
-            "branch_name": "${{ inputs.branch_name }}",
-            "fix_pr_number": "${{ inputs.fix_pr_number }}",
-            "speckit_pr_number": "${{ inputs.speckit_pr_number }}",
-            "prompt": "${{ inputs.prompt }}",
-            "config_file": "${{ inputs.config_file }}",
-            "resolved_branch": "${{ env.RESOLVED_BRANCH }}",
-            "resolved_pr": "${{ env.RESOLVED_SPECKIT_PR }}"
-          }
-          EOF
-          echo "Workflow inputs captured to artifact"
-          cat workflow-inputs-artifact/workflow_inputs.json
-
-      - name: Upload workflow inputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: speckit-developer-agent-${{ inputs.issue_key }}-workflow-inputs
-          path: workflow-inputs-artifact/
-          if-no-files-found: error
-
       - name: Require speckit state on PR (fix)
         if: inputs.mode == 'fix'
         run: |
