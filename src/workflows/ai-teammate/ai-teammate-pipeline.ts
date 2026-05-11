@@ -7,6 +7,7 @@
  * Supported step runners:
  *   ensure_jira_fields_expected  — validates Jira description; stops if empty
  *   create_github_issue          — creates a GitHub issue (Jira snapshot body); stores issue number in context
+ *   stop_pipeline                — explicitly halts the pipeline with an optional reason
  *   (developer agent dispatch is now typically done via a terminal async_call step)
  *
  * Jira context snapshot: `create_github_issue` appends a marked block to the issue body.
@@ -37,6 +38,7 @@ import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
+import { runStopPipeline } from './steps/stop-pipeline.js';
 import {
   assertConcurrencyKeyMatchesIssue,
   codexBaPaths,
@@ -78,10 +80,14 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
       return runApplyBaOutcome(ctx, step, deps);
     }
 
+    case 'stop_pipeline': {
+      return runStopPipeline(ctx, step as unknown as Parameters<typeof runStopPipeline>[1], deps);
+    }
+
     default:
       throw new Error(
         `Unknown pipeline step runner: "${step.runner}". ` +
-          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, async_terminal_operation, apply_ba_outcome.`,
+          `Supported: ensure_jira_fields_expected, create_github_issue, async_operation, async_terminal_operation, apply_ba_outcome, stop_pipeline.`,
       );
   }
 }
