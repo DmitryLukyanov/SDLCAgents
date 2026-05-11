@@ -46,6 +46,7 @@ import { runEnsureJiraFieldsExpected } from './steps/ensure-jira-fields-expected
 import { runCreateGithubIssue } from './steps/create-github-issue.js';
 import { prepareCodexBaArtifacts } from './ai-teammate-codex-ba-prepare.js';
 import { runApplyBaOutcome } from './steps/apply-ba-outcome.js';
+import { runStopPipeline } from './steps/stop-pipeline.js';
 import {
   assertConcurrencyKeyMatchesIssue,
   codexBaPaths,
@@ -88,11 +89,7 @@ export async function runPipelineStep(ctx: RunnerContext, step: PipelineStep, de
     }
 
     case 'stop_pipeline': {
-      const reason =
-        (typeof step.stopReason === 'string' && step.stopReason.trim())
-          ? step.stopReason.trim()
-          : 'Pipeline stopped by config (stop_pipeline)';
-      return { status: 'stop', reason };
+      return runStopPipeline(ctx, step as unknown as Parameters<typeof runStopPipeline>[1], deps);
     }
 
     default:
