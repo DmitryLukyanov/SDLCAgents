@@ -263,6 +263,24 @@ jobs:
           fi
           git config user.email "$GIT_USER_EMAIL"
           git config user.name "$GIT_USER_NAME"
+
+          # Sync modified consumer templates from .sdlc-agents subdirectory to root
+          # (Codex may modify files in .sdlc-agents which are excluded from commit)
+          if [ -d ".sdlc-agents/.github/consumer-templates" ] && [ -d ".github/consumer-templates" ]; then
+            echo "Checking for modified consumer templates in .sdlc-agents..."
+            while IFS= read -r -d '' src_file; do
+              rel_path="${src_file#.sdlc-agents/}"
+              dest_file="$rel_path"
+              # Only copy if the file was modified (different from root copy)
+              if [ -f "$dest_file" ]; then
+                if ! cmp -s "$src_file" "$dest_file"; then
+                  echo "  Syncing modified: $rel_path"
+                  cp "$src_file" "$dest_file"
+                fi
+              fi
+            done < <(find .sdlc-agents/.github/consumer-templates -type f -name "*.yml" -print0)
+          fi
+
           # Do not use `git add -A` + pathspec excludes: nested `**/node_modules` is easy to miss and
           # Git then tries to stage ignored trees and aborts ("ignored by .gitignore").
           git add -u
