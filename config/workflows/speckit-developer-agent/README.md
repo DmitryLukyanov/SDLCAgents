@@ -66,7 +66,7 @@ For **specify** when no PR exists yet, CI may run **GitHub bootstrap** first (`s
    - Reads the config file from `CONFIG_FILE` environment variable when set
    - Resolves Codex model via `getEffectiveModel`: `params.model` (or root `model`), then `DEVELOPER_MODEL`, legacy `DEVELOPER_AGENT_MODEL`, then `o4-mini`
    - Uses `params.ticketContextDepth` / `TICKET_CONTEXT_DEPTH` env var for Jira context depth
-   - Branch name, PR, and feature directory are derived from existing state/bootstrap logic and the `BRANCH_NAME` env var; they are **not** read from `branchNamePattern`/`featureDirPattern` in the config at runtime
+   - For **specify**, branch / PR / feature dir come from `speckit-state.json` (created by GitHub bootstrap); this phase does **not** run git or open PRs. Other steps read the same state file. Values are **not** taken from `branchNamePattern`/`featureDirPattern` in the config at runtime
    - Step prompts are driven by the `<!--sdlc-pipeline-config ...-->` block in the GitHub issue body; `params.defaultStepInputs` is informational and does **not** currently override them
 
 2. **Codex execution** (`_reusable-codex-run.yml`):

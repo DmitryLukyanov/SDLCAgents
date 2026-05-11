@@ -3,7 +3,7 @@
  *
  * Branch on `AGENT_MODE` / Codex model (`getEffectiveModel` in speckit-developer-agent-config):
  *   speckit (default) — pipeline config + `$speckit-{step}` → input_prompt.md. Branch/PR/state normally come from
- *     CI: `_reusable-speckit-developer-agent.yml` may run `speckit-developer-agent-github-bootstrap.ts` first for specify; then this script reads `speckit-state.json` when present (else legacy branch/PR create).
+ *     CI: for **specify**, `speckit-developer-agent-github-bootstrap.ts` runs first and writes `speckit-state.json`; this script only reads state and builds the Codex prompt (no git / no PR creation here).
  *   fix — targeted fix prompt from speckit-state + INPUT_PROMPT → input_prompt.md
  *
  * Environment — common:
@@ -17,7 +17,6 @@
  *     prompt file (if the path exists as a file, its contents are used as input_prompt.md as-is)
  */
 
-import { execSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { Octokit } from '@octokit/rest';
@@ -80,10 +79,6 @@ function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
-}
-
-function git(args: string): string {
-  return execSync(`git ${args}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 }
 
 function setOutput(name: string, value: string): void {
@@ -150,71 +145,10 @@ async function runSpeckitSetup(): Promise<void> {
         `[codex-prepare] specify: using speckit-state at ${statePathEarly} — PR #${prNumber}`,
       );
     } else {
-      const { data: repoInfo } = await octokit.rest.repos.get({ owner, repo });
-      const defaultBranch = repoInfo.default_branch;
-      const remoteRef = git(`ls-remote --heads origin ${branchName}`);
-
-      if (remoteRef.length > 0) {
-        git(`fetch origin ${branchName}`);
-        git(`checkout -B ${branchName} origin/${branchName}`);
-        console.log(`[codex-prepare] Switched to existing branch ${branchName}`);
-
-        const { data: prs } = await octokit.rest.pulls.list({
-          owner,
-          repo,
-          head: `${owner}:${branchName}`,
-          state: 'open',
-        });
-        if (prs.length > 0) {
-          prNumber = prs[0].number;
-          console.log(`[codex-prepare] Using existing PR #${prNumber}`);
-        } else {
-          const { data: issueData } = await octokit.rest.issues.get({
-            owner,
-            repo,
-            issue_number: issueNumber,
-          });
-          const { data: pr } = await octokit.rest.pulls.create({
-            owner,
-            repo,
-            title: issueData.title,
-            head: branchName,
-            base: defaultBranch,
-            draft: true,
-            body: `Resolves #${issueNumber}\n\n_Spec-kit pipeline in progress — managed by SDLC Developer Agent._`,
-          });
-          prNumber = pr.number;
-          console.log(`[codex-prepare] Created PR #${prNumber} (branch existed, no open PR found)`);
-        }
-      } else {
-        git(`checkout -b ${branchName}`);
-        git(`commit --allow-empty -m "chore(${issueKey}): init feature branch"`);
-        git(`push origin ${branchName}`);
-
-        const { data: issueData } = await octokit.rest.issues.get({
-          owner,
-          repo,
-          issue_number: issueNumber,
-        });
-        const { data: pr } = await octokit.rest.pulls.create({
-          owner,
-          repo,
-          title: issueData.title,
-          head: branchName,
-          base: defaultBranch,
-          draft: true,
-          body: `Resolves #${issueNumber}\n\n_Spec-kit pipeline in progress — managed by SDLC Developer Agent._`,
-        });
-        prNumber = pr.number;
-
-        await octokit.rest.issues
-          .addLabels({ owner, repo, issue_number: prNumber, labels: [`jira:${issueKey}`] })
-          .catch(() => {
-            /* label may not exist yet */
-          });
-
-        console.log(`[codex-prepare] Draft PR #${prNumber} created`);
-      }
+      throw new Error(
+        `speckit-state.json not found for specify (expected at ${statePathEarly}). ` +
+          'GitHub bootstrap must run before codex-prepare for specify, or the checked-out ref must already contain state from a prior bootstrap.',
+      );
     }
   } else {
     const statePath = findSpeckitStateFilePath(issueKey);
