@@ -1,5 +1,5 @@
 # SpecKit Developer Agent — thin entrypoint: dispatches the reusable runner (bootstrap, prepare, Codex, teardown).
-# Triggered by: AI Teammate (specify), proceed dispatch, or PR Comment Handler (/fix).
+# Copy to `.github/workflows/` and adjust `config_file` if your agent JSON lives elsewhere.
 #
 # Required secrets: COPILOT_PAT, OPENAI_API_KEY
 name: SpecKit Developer Agent
@@ -65,4 +65,5 @@ jobs:
       fix_pr_number: ${{ inputs.pr_number }}
       speckit_pr_number: ${{ inputs.pr_number }}
       prompt: ${{ inputs.prompt }}
+      config_file: config/workflows/speckit-developer-agent/speckit-developer-agent.config
     secrets: inherit
