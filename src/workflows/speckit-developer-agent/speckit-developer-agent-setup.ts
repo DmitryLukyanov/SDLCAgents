@@ -3,7 +3,7 @@
  *
  * Branch on `AGENT_MODE` / Codex model (`getEffectiveModel` in speckit-developer-agent-config):
  *   speckit (default) — pipeline config + `$speckit-{step}` → input_prompt.md. Branch/PR/bootstrap state normally come from
- *     `speckit-developer-agent-bootstrap.ts` + checkout; specify reads `speckit-state.json` when present (else legacy branch/PR create).
+ *     CI: `_reusable-speckit-developer-agent.yml` may run `speckit-developer-agent-bootstrap.ts` before this job; specify reads `speckit-state.json` when present (else legacy branch/PR create).
  *   fix — targeted fix prompt from speckit-state + INPUT_PROMPT → input_prompt.md
  *
  * Environment — common:

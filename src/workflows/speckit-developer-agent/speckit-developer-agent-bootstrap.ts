@@ -3,7 +3,7 @@
  *
  * Ensures a remote feature branch, draft PR linked to the GitHub issue, and an
  * initial `speckit-state.json` under `.specify/features/{ISSUE_KEY}/` exist and
- * are pushed. The speckit-developer-agent workflow then only consumes BRANCH_NAME,
+ * are pushed. `_reusable-speckit-developer-agent.yml` (prepare/setup) then consumes BRANCH_NAME,
  * PR_NUMBER, and ISSUE_* (no branch/PR/state creation in setup for that path).
  *
  * Environment:

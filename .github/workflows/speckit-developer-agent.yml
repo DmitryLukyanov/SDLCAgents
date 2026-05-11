@@ -1,9 +1,5 @@
-# SpecKit Developer Agent — bootstrap (specify only) then spec-kit steps and /fix (same reusable workflow; prompt differs by inputs).
-# Triggered by: AI Teammate (specify), proceed workflow, or PR Comment Handler (/fix).
-#
-# mode=speckit (default): For step=specify with empty pr_number, runs reusable bootstrap first (branch + draft PR +
-#   speckit-state.json), then speckit-developer-agent. Other steps: branch_name from dispatch (e.g. proceed); setup reads state.
-# mode=fix: issue_key, pr_number, prompt, branch_name (PR comment handler sets these); bootstrap job skipped.
+# SpecKit Developer Agent — thin entrypoint: dispatches the reusable runner (bootstrap, prepare, Codex, teardown).
+# Triggered by: AI Teammate (specify), proceed dispatch, or PR Comment Handler (/fix).
 #
 # Required secrets: COPILOT_PAT, OPENAI_API_KEY
 name: SpecKit Developer Agent
@@ -37,12 +33,12 @@ on:
         type: string
         default: ''
       branch_name:
-        description: "Git ref for speckit-developer-agent checkout. specify: usually from bootstrap output (leave blank for AI Teammate). Other steps / fix: feature branch or PR head."
+        description: "Git ref for checkout. specify: optional before bootstrap; other steps / fix: feature branch or PR head."
         required: false
         type: string
         default: ''
       pr_number:
-        description: "PR number (mode=fix). mode=speckit: optional; if set with specify, skips bootstrap (you must set branch_name)."
+        description: "PR number (mode=fix). mode=speckit: optional; if set with specify, skips bootstrap (set branch_name)."
         required: false
         type: string
         default: ''
@@ -53,24 +49,8 @@ on:
         default: ''
 
 jobs:
-  bootstrap:
-    name: Bootstrap (specify)
-    if: ${{ inputs.mode == 'speckit' && inputs.step == 'specify' && inputs.pr_number == '' }}
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-    uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-speckit-developer-agent-bootstrap.yml@master
-    with:
-      issue_number: ${{ inputs.issue_number }}
-      issue_key: ${{ inputs.issue_key }}
-      branch_name: ${{ inputs.branch_name }}
-    secrets: inherit
-
   agent:
     name: SpecKit Developer Agent
-    needs: [bootstrap]
-    if: ${{ !cancelled() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped') }}
     permissions:
       contents: write
       pull-requests: write
@@ -81,8 +61,8 @@ jobs:
       issue_number: ${{ inputs.issue_number }}
       issue_key: ${{ inputs.issue_key }}
       step: ${{ inputs.step }}
-      branch_name: ${{ inputs.branch_name || needs.bootstrap.outputs.branch_name || github.ref_name }}
+      branch_name: ${{ inputs.branch_name }}
       fix_pr_number: ${{ inputs.pr_number }}
+      speckit_pr_number: ${{ inputs.pr_number }}
       prompt: ${{ inputs.prompt }}
-      speckit_pr_number: ${{ needs.bootstrap.outputs.pr_number || inputs.pr_number }}
     secrets: inherit

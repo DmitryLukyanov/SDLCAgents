@@ -2,9 +2,8 @@
 #
 # Modes (`inputs.mode`):
 #   • speckit (default) — issue-driven spec-kit steps: speckit-developer-agent-setup.ts → input_prompt.md, Codex, speckit-developer-agent-teardown.ts.
-#     For `specify`, branch + draft PR + initial speckit-state.json are created by `_reusable-speckit-developer-agent-bootstrap.yml`
-#     in the consumer template; pass `speckit_pr_number` and `branch_name` from that job. Legacy: no state file on branch
-#     → setup still creates branch/PR.
+#     For `specify` with empty `speckit_pr_number` and `fix_pr_number`, runs `_reusable-speckit-developer-agent-bootstrap.yml` first
+#     (branch + draft PR + speckit-state.json). Otherwise pass `branch_name` / PR from dispatch or prior bootstrap.
 #   • fix — PR /fix flow: checkout PR head (inputs.branch_name), read state, speckit-developer-agent-setup.ts (AGENT_MODE=fix) → input_prompt.md …
 #
 # Codex always reads `.sdlc-agents/input_prompt.md` (artifact + `_reusable-codex-run.yml`).
@@ -16,7 +15,7 @@
 # Optional secrets (consumer repo): when `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` are set,
 # speckit-developer-agent-setup writes `spec-output/<ISSUE_KEY>/issueContext.md` (Jira + merged spec-kit directives).
 #
-# Consumer usage: `.github/consumer-templates/speckit-developer-agent.yml` (`mode=speckit` | `mode=fix`)
+# Consumer usage: dispatch `speckit-developer-agent.yml` (thin wrapper) or call this workflow with `workflow_call`.
 name: "[Reusable] SpecKit Developer Agent"
 
 on:
@@ -43,7 +42,7 @@ on:
         type: string
         default: ''
       branch_name:
-        description: "Required (non-empty). Git ref for actions/checkout and BRANCH_NAME in setup — the only branch the agent uses (feature branch, PR head, etc.). speckit specify: create that remote branch first (see start_developer_agent)."
+        description: "Git ref for checkout and setup. Required after resolve except for speckit specify with empty PR inputs (bootstrap creates the branch). Otherwise feature branch or PR head."
         required: false
         type: string
         default: ''
@@ -74,11 +73,30 @@ on:
         required: true
 
 jobs:
+  bootstrap:
+    name: Bootstrap (specify)
+    if: ${{ inputs.mode == 'speckit' && inputs.step == 'specify' && inputs.speckit_pr_number == '' && inputs.fix_pr_number == '' }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: ./.github/workflows/_reusable-speckit-developer-agent-bootstrap.yml
+    with:
+      issue_number: ${{ inputs.issue_number }}
+      issue_key: ${{ inputs.issue_key }}
+      branch_name: ${{ inputs.branch_name }}
+    secrets: inherit
+
   prepare:
+    needs: [bootstrap]
+    if: ${{ !cancelled() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       GITHUB_TOKEN: ${{ github.token }}
+      # Same merge as former thin wrapper: input → bootstrap outputs → ref / PR fallbacks (empty string is falsy for ||)
+      RESOLVED_BRANCH: ${{ inputs.branch_name || needs.bootstrap.outputs.branch_name || github.ref_name }}
+      RESOLVED_SPECKIT_PR: ${{ inputs.speckit_pr_number || inputs.fix_pr_number || needs.bootstrap.outputs.pr_number }}
     permissions:
       contents: write
       pull-requests: write
@@ -97,18 +115,18 @@ jobs:
     steps:
       - name: Require branch_name
         env:
-          BRANCH_NAME: ${{ inputs.branch_name }}
+          BRANCH_NAME: ${{ env.RESOLVED_BRANCH }}
         run: |
           set -euo pipefail
           if [ -z "$BRANCH_NAME" ]; then
-            echo "::error::inputs.branch_name is required (integration branch for speckit+specify, feature branch or PR head otherwise)"
+            echo "::error::No branch to checkout: set inputs.branch_name or run bootstrap (specify with empty pr inputs), or rely on a non-empty ref."
             exit 1
           fi
 
       - name: Checkout consumer
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch_name }}
+          ref: ${{ env.RESOLVED_BRANCH }}
           token: ${{ secrets.COPILOT_PAT }}
           fetch-depth: 0
 
@@ -164,8 +182,8 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           ISSUE_KEY: ${{ inputs.issue_key }}
           STEP: ${{ inputs.step }}
-          BRANCH_NAME: ${{ inputs.branch_name }}
-          PR_NUMBER: ${{ inputs.speckit_pr_number }}
+          BRANCH_NAME: ${{ env.RESOLVED_BRANCH }}
+          PR_NUMBER: ${{ env.RESOLVED_SPECKIT_PR }}
           INPUT_PROMPT: ${{ inputs.prompt }}
           DEVELOPER_MODEL: ${{ vars.DEVELOPER_MODEL }}
           DEVELOPER_AGENT_MODEL: ${{ vars.DEVELOPER_AGENT_MODEL }}

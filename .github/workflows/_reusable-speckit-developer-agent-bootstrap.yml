@@ -4,8 +4,7 @@
 # `.specify/features/{ISSUE_KEY}/speckit-state.json` so speckit-developer-agent setup only
 # reads state + builds the Codex prompt.
 #
-# Consumer: chain a job that `needs` this workflow, then call `_reusable-speckit-developer-agent.yml`
-# with `branch_name` / `speckit_pr_number` from this workflow's outputs.
+# Invoked from `_reusable-speckit-developer-agent.yml` for `specify` when PR inputs are empty; outputs feed the prepare job.
 #
 # Secrets: COPILOT_PAT (contents + PRs + issues)
 name: "[Reusable] SpecKit Developer Agent — Bootstrap"
