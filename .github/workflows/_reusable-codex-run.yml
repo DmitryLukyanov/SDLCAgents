@@ -243,7 +243,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit and push workspace changes after Codex
-        if: success() && inputs.commit_workspace_after_codex == true
+        if: success() && inputs.commit_workspace_after_codex
         env:
           COMMIT_MSG: ${{ inputs.workspace_commit_message }}
           GIT_USER_EMAIL: ${{ inputs.git_commit_user_email }}
