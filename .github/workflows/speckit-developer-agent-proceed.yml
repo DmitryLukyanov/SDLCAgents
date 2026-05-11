@@ -20,6 +20,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: write
       actions: write
     uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-speckit-developer-agent-proceed.yml@master
     with:
