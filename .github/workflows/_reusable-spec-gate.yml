@@ -183,16 +183,19 @@ jobs:
     uses: ./.github/workflows/_reusable-codex-run.yml
     secrets: inherit
     with:
-      download_artifact_name: spec-gate-codex-input-${{ github.run_id }}
-      download_path: spec-gate-codex-artifacts
-      prompt_file: spec-gate-codex-artifacts/spec-gate-codex-prompt.md
-      output_file: spec-gate-codex-artifacts/spec-gate-codex-output.txt
-      upload_artifact_name: spec-gate-codex-output-${{ github.run_id }}
-      upload_path: spec-gate-codex-artifacts/
-      upload_if_no_files_found: ignore
-      model: ${{ needs.prepare.outputs.model }}
-      codex_step_name: Spec gate - Codex analysis
-      timeout_minutes: 20
+      config: |
+        {
+          "download_artifact_name": "spec-gate-codex-input-${{ github.run_id }}",
+          "download_path": "spec-gate-codex-artifacts",
+          "prompt_file": "spec-gate-codex-artifacts/spec-gate-codex-prompt.md",
+          "output_file": "spec-gate-codex-artifacts/spec-gate-codex-output.txt",
+          "upload_artifact_name": "spec-gate-codex-output-${{ github.run_id }}",
+          "upload_path": "spec-gate-codex-artifacts/",
+          "upload_if_no_files_found": "ignore",
+          "model": "${{ needs.prepare.outputs.model }}",
+          "codex_step_name": "Spec gate - Codex analysis",
+          "timeout_minutes": 20
+        }
 
   finish:
     needs: [prepare, codex]

@@ -284,22 +284,23 @@ jobs:
     uses: ./.github/workflows/_reusable-codex-run.yml
     secrets: inherit
     with:
-      checkout_ref: ${{ needs.prepare.outputs.branch_name }}
-      download_artifact_name: developer-agent-codex-input-${{ github.run_id }}
-      download_path: .sdlc-agents
-      prompt_file: .sdlc-agents/input_prompt.md
-      output_file: .sdlc-agents/codex-output.txt
-      upload_artifact_name: developer-agent-codex-output-${{ github.run_id }}
-      upload_path: |
-        .sdlc-agents/codex-output.txt
-        .sdlc-agents/input_prompt.md
-      upload_if_no_files_found: ignore
-      model: ${{ needs.prepare.outputs.model }}
-      codex_step_name: ${{ needs.prepare.outputs.mode == 'fix' && 'Apply fix via Codex' || format('Run Codex skill — {0}', inputs.step) }}
-      timeout_minutes: ${{ needs.prepare.outputs.mode == 'fix' && 15 || 30 }}
-      commit_workspace_after_codex: true
-      workspace_commit_message: "${{ needs.prepare.outputs.mode == 'fix' && format('speckit(fix): apply targeted fixes for {0}', needs.prepare.outputs.issue_key) || format('speckit({0}): add {0} artifacts for {1}', inputs.step, needs.prepare.outputs.issue_key) }}"
-      extra_git_add_paths: ${{ needs.prepare.outputs.mode == 'fix' && '.sdlc-agents/codex-output.txt' || '' }}
+      config: |
+        {
+          "checkout_ref": "${{ needs.prepare.outputs.branch_name }}",
+          "download_artifact_name": "developer-agent-codex-input-${{ github.run_id }}",
+          "download_path": ".sdlc-agents",
+          "prompt_file": ".sdlc-agents/input_prompt.md",
+          "output_file": ".sdlc-agents/codex-output.txt",
+          "upload_artifact_name": "developer-agent-codex-output-${{ github.run_id }}",
+          "upload_path": ".sdlc-agents/codex-output.txt\n.sdlc-agents/input_prompt.md",
+          "upload_if_no_files_found": "ignore",
+          "model": "${{ needs.prepare.outputs.model }}",
+          "codex_step_name": "${{ needs.prepare.outputs.mode == 'fix' && 'Apply fix via Codex' || format('Run Codex skill — {0}', inputs.step) }}",
+          "timeout_minutes": ${{ needs.prepare.outputs.mode == 'fix' && 15 || 30 }},
+          "commit_workspace_after_codex": true,
+          "workspace_commit_message": "${{ needs.prepare.outputs.mode == 'fix' && format('speckit(fix): apply targeted fixes for {0}', needs.prepare.outputs.issue_key) || format('speckit({0}): add {0} artifacts for {1}', inputs.step, needs.prepare.outputs.issue_key) }}",
+          "extra_git_add_paths": "${{ needs.prepare.outputs.mode == 'fix' && '.sdlc-agents/codex-output.txt' || '' }}"
+        }
 
   teardown:
     needs: [prepare, codex]

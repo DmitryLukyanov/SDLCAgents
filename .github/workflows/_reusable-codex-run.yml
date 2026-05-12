@@ -28,88 +28,10 @@ name: "[Reusable] Codex run"
 on:
   workflow_call:
     inputs:
-      download_artifact_name:
-        description: "Artifact name to download before Codex (empty = skip download)"
-        required: false
-        type: string
-        default: ''
-      download_path:
-        description: "Directory for download-artifact extract (ignored when download is skipped). For single-file artifacts, basename lands here — use the same directory as in prompt_file (e.g. .sdlc-agents)."
-        required: false
-        type: string
-        default: '.'
-      prompt_file:
-        description: "Use existing prompt at this path (relative to workspace). Leave empty when using prompt_content instead. Do not set both prompt_file and prompt_content."
-        required: false
-        type: string
-        default: ''
-      prompt_content:
-        description: "Inline prompt text; written to a fixed path before Codex. Leave empty when using prompt_file instead. Do not set both."
-        required: false
-        type: string
-        default: ''
-      output_file:
-        description: "Codex output file path relative to workspace root"
+      config:
+        description: "JSON object containing all configuration parameters for the Codex run"
         required: true
         type: string
-      upload_artifact_name:
-        description: "Artifact name for post-Codex upload"
-        required: true
-        type: string
-      upload_path:
-        description: "Path or glob passed to upload-artifact (usually a directory ending with /)"
-        required: true
-        type: string
-      upload_if_no_files_found:
-        description: "error | ignore — passed to actions/upload-artifact"
-        required: false
-        type: string
-        default: ignore
-      model:
-        description: "OpenAI model id (empty defaults to o4-mini in the pick step)"
-        required: false
-        type: string
-        default: ''
-      codex_step_name:
-        description: "Display name for the Codex step in the Actions UI"
-        required: false
-        type: string
-        default: Run Codex
-      timeout_minutes:
-        description: "Job timeout in minutes"
-        required: false
-        type: number
-        default: 20
-      checkout_ref:
-        description: "When non-empty, checkout this ref with COPILOT_PAT (omit for default GITHUB_REF checkout). Required when commit_workspace_after_codex is true."
-        required: false
-        type: string
-        default: ''
-      commit_workspace_after_codex:
-        description: "When true, commit and push consumer changes after Codex (requires checkout_ref + workspace_commit_message)"
-        required: false
-        type: boolean
-        default: false
-      workspace_commit_message:
-        description: "Commit message when commit_workspace_after_codex is true"
-        required: false
-        type: string
-        default: ''
-      git_commit_user_email:
-        description: "Author email for workspace_commit step"
-        required: false
-        type: string
-        default: 'speckit-developer-agent@sdlc-agents.bot'
-      git_commit_user_name:
-        description: "Author name for workspace_commit step"
-        required: false
-        type: string
-        default: 'SDLC SpecKit Developer Agent'
-      extra_git_add_paths:
-        description: "Optional newline-separated paths to `git add -f` after the main add (e.g. Codex log under .sdlc-agents)"
-        required: false
-        type: string
-        default: ''
     secrets:
       OPENAI_API_KEY:
         required: true
@@ -120,18 +42,67 @@ on:
 jobs:
   codex:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.timeout_minutes }}
+    timeout-minutes: ${{ fromJson(inputs.config).timeout_minutes || 20 }}
     env:
       GITHUB_TOKEN: ${{ github.token }}
     permissions:
       contents: write
     steps:
-      - name: Pick Codex model
-        id: pick_model
+      - name: Parse JSON config and set variables
+        id: parse_config
+        shell: bash
         run: |
-          M="${{ inputs.model }}"
-          if [ -z "$M" ]; then M="o4-mini"; fi
-          echo "model=$M" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          # Parse JSON config
+          CONFIG='${{ inputs.config }}'
+
+          # Extract all parameters with defaults
+          download_artifact_name=$(echo "$CONFIG" | jq -r '.download_artifact_name // ""')
+          download_path=$(echo "$CONFIG" | jq -r '.download_path // "."')
+          prompt_file=$(echo "$CONFIG" | jq -r '.prompt_file // ""')
+          prompt_content=$(echo "$CONFIG" | jq -r '.prompt_content // ""')
+          output_file=$(echo "$CONFIG" | jq -r '.output_file')
+          upload_artifact_name=$(echo "$CONFIG" | jq -r '.upload_artifact_name')
+          upload_path=$(echo "$CONFIG" | jq -r '.upload_path')
+          upload_if_no_files_found=$(echo "$CONFIG" | jq -r '.upload_if_no_files_found // "ignore"')
+          model=$(echo "$CONFIG" | jq -r '.model // ""')
+          codex_step_name=$(echo "$CONFIG" | jq -r '.codex_step_name // "Run Codex"')
+          checkout_ref=$(echo "$CONFIG" | jq -r '.checkout_ref // ""')
+          commit_workspace_after_codex=$(echo "$CONFIG" | jq -r '.commit_workspace_after_codex // false')
+          workspace_commit_message=$(echo "$CONFIG" | jq -r '.workspace_commit_message // ""')
+          git_commit_user_email=$(echo "$CONFIG" | jq -r '.git_commit_user_email // "speckit-developer-agent@sdlc-agents.bot"')
+          git_commit_user_name=$(echo "$CONFIG" | jq -r '.git_commit_user_name // "SDLC SpecKit Developer Agent"')
+          extra_git_add_paths=$(echo "$CONFIG" | jq -r '.extra_git_add_paths // ""')
+
+          # Set model default
+          if [ -z "$model" ]; then model="o4-mini"; fi
+
+          # Output all variables
+          echo "download_artifact_name=$download_artifact_name" >> "$GITHUB_OUTPUT"
+          echo "download_path=$download_path" >> "$GITHUB_OUTPUT"
+          echo "prompt_file=$prompt_file" >> "$GITHUB_OUTPUT"
+          {
+            echo "prompt_content<<__PROMPT_CONTENT_EOF__"
+            echo "$prompt_content"
+            echo "__PROMPT_CONTENT_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "output_file=$output_file" >> "$GITHUB_OUTPUT"
+          echo "upload_artifact_name=$upload_artifact_name" >> "$GITHUB_OUTPUT"
+          echo "upload_path=$upload_path" >> "$GITHUB_OUTPUT"
+          echo "upload_if_no_files_found=$upload_if_no_files_found" >> "$GITHUB_OUTPUT"
+          echo "model=$model" >> "$GITHUB_OUTPUT"
+          echo "codex_step_name=$codex_step_name" >> "$GITHUB_OUTPUT"
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "commit_workspace_after_codex=$commit_workspace_after_codex" >> "$GITHUB_OUTPUT"
+          echo "workspace_commit_message=$workspace_commit_message" >> "$GITHUB_OUTPUT"
+          echo "git_commit_user_email=$git_commit_user_email" >> "$GITHUB_OUTPUT"
+          echo "git_commit_user_name=$git_commit_user_name" >> "$GITHUB_OUTPUT"
+          {
+            echo "extra_git_add_paths<<__EXTRA_PATHS_EOF__"
+            echo "$extra_git_add_paths"
+            echo "__EXTRA_PATHS_EOF__"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log model to GitHub Summary
         run: |
@@ -140,7 +111,7 @@ jobs:
             echo ""
             echo "| Parameter | Value |"
             echo "|-----------|-------|"
-            echo "| **Model** | \`${{ steps.pick_model.outputs.model }}\` |"
+            echo "| **Model** | \`${{ steps.parse_config.outputs.model }}\` |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -150,25 +121,7 @@ jobs:
           set -euo pipefail
           mkdir -p workflow-inputs-artifact
           cat > workflow-inputs-artifact/codex_workflow_inputs.json <<'EOF'
-          {
-            "download_artifact_name": "${{ inputs.download_artifact_name }}",
-            "download_path": "${{ inputs.download_path }}",
-            "prompt_file": "${{ inputs.prompt_file }}",
-            "prompt_content": "${{ inputs.prompt_content }}",
-            "output_file": "${{ inputs.output_file }}",
-            "upload_artifact_name": "${{ inputs.upload_artifact_name }}",
-            "upload_path": "${{ inputs.upload_path }}",
-            "upload_if_no_files_found": "${{ inputs.upload_if_no_files_found }}",
-            "model": "${{ steps.pick_model.outputs.model }}",
-            "codex_step_name": "${{ inputs.codex_step_name }}",
-            "timeout_minutes": ${{ inputs.timeout_minutes }},
-            "checkout_ref": "${{ inputs.checkout_ref }}",
-            "commit_workspace_after_codex": ${{ inputs.commit_workspace_after_codex }},
-            "workspace_commit_message": "${{ inputs.workspace_commit_message }}",
-            "git_commit_user_email": "${{ inputs.git_commit_user_email }}",
-            "git_commit_user_name": "${{ inputs.git_commit_user_name }}",
-            "extra_git_add_paths": "${{ inputs.extra_git_add_paths }}"
-          }
+          ${{ inputs.config }}
           EOF
           echo "Codex workflow inputs captured to artifact:"
           cat workflow-inputs-artifact/codex_workflow_inputs.json
@@ -181,35 +134,35 @@ jobs:
           if-no-files-found: error
 
       - name: Checkout consumer repo
-        if: ${{ inputs.checkout_ref == '' }}
+        if: ${{ steps.parse_config.outputs.checkout_ref == '' }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Checkout consumer repo (explicit ref)
-        if: ${{ inputs.checkout_ref != '' }}
+        if: ${{ steps.parse_config.outputs.checkout_ref != '' }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.checkout_ref }}
+          ref: ${{ steps.parse_config.outputs.checkout_ref }}
           token: ${{ secrets.COPILOT_PAT }}
 
       - name: Download workspace for Codex
-        if: ${{ inputs.download_artifact_name != '' }}
+        if: ${{ steps.parse_config.outputs.download_artifact_name != '' }}
         uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.download_artifact_name }}
-          path: ${{ inputs.download_path }}
+          name: ${{ steps.parse_config.outputs.download_artifact_name }}
+          path: ${{ steps.parse_config.outputs.download_path }}
 
       - name: Resolve prompt path (exactly one of prompt_file or prompt_content)
         id: resolve_prompt
         env:
-          IN_FILE: ${{ inputs.prompt_file }}
+          IN_FILE: ${{ steps.parse_config.outputs.prompt_file }}
         run: |
           set -euo pipefail
           # Booleans expanded by Actions (true/false) — avoid env coercion quirks.
-          HAS_FILE=${{ inputs.prompt_file != '' }}
-          HAS_CONTENT=${{ inputs.prompt_content != '' }}
+          HAS_FILE=${{ steps.parse_config.outputs.prompt_file != '' }}
+          HAS_CONTENT=${{ steps.parse_config.outputs.prompt_content != '' }}
           DEFAULT='.sdlc-agents/codex-prompt-from-workflow-input.md'
           if [ "$HAS_FILE" = "true" ] && [ "$HAS_CONTENT" = "true" ]; then
             echo '::error::Set only one of prompt_file (existing path) or prompt_content (inline text), not both.'
@@ -235,7 +188,7 @@ jobs:
         if: steps.resolve_prompt.outputs.mode == 'content'
         env:
           PROMPT_PATH: ${{ steps.resolve_prompt.outputs.prompt_path }}
-          PROMPT_CONTENT: ${{ inputs.prompt_content }}
+          PROMPT_CONTENT: ${{ steps.parse_config.outputs.prompt_content }}
         run: |
           set -euo pipefail
           python3 -c "import os, pathlib; p=pathlib.Path(os.environ['PROMPT_PATH']); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(os.environ['PROMPT_CONTENT'], encoding='utf-8')"
@@ -251,22 +204,22 @@ jobs:
             exit 1
           fi
 
-      - name: ${{ inputs.codex_step_name }}
+      - name: ${{ steps.parse_config.outputs.codex_step_name }}
         id: run_codex
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ steps.resolve_prompt.outputs.prompt_path }}
           sandbox: workspace-write
-          model: ${{ steps.pick_model.outputs.model }}
-          output-file: ${{ inputs.output_file }}
+          model: ${{ steps.parse_config.outputs.model }}
+          output-file: ${{ steps.parse_config.outputs.output_file }}
           allow-bots: true
 
       - name: Upload Codex input prompt artifact
         if: always() && steps.resolve_prompt.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: codex_input_${{ inputs.upload_artifact_name }}
+          name: codex_input_${{ steps.parse_config.outputs.upload_artifact_name }}
           path: ${{ steps.resolve_prompt.outputs.prompt_path }}
           if-no-files-found: error
 
@@ -274,19 +227,19 @@ jobs:
         if: always() && steps.resolve_prompt.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: codex_output_${{ inputs.upload_artifact_name }}
-          path: ${{ inputs.output_file }}
+          name: codex_output_${{ steps.parse_config.outputs.upload_artifact_name }}
+          path: ${{ steps.parse_config.outputs.output_file }}
           if-no-files-found: ignore
 
       - name: Commit and push workspace changes after Codex
-        if: success() && inputs.commit_workspace_after_codex
+        if: success() && steps.parse_config.outputs.commit_workspace_after_codex == 'true'
         env:
-          COMMIT_MSG: ${{ inputs.workspace_commit_message }}
-          GIT_USER_EMAIL: ${{ inputs.git_commit_user_email }}
-          GIT_USER_NAME: ${{ inputs.git_commit_user_name }}
-          BRANCH: ${{ inputs.checkout_ref }}
-          EXTRA_PATHS: ${{ inputs.extra_git_add_paths }}
-          CODEX_OUTPUT_FILE: ${{ inputs.output_file }}
+          COMMIT_MSG: ${{ steps.parse_config.outputs.workspace_commit_message }}
+          GIT_USER_EMAIL: ${{ steps.parse_config.outputs.git_commit_user_email }}
+          GIT_USER_NAME: ${{ steps.parse_config.outputs.git_commit_user_name }}
+          BRANCH: ${{ steps.parse_config.outputs.checkout_ref }}
+          EXTRA_PATHS: ${{ steps.parse_config.outputs.extra_git_add_paths }}
+          CODEX_OUTPUT_FILE: ${{ steps.parse_config.outputs.output_file }}
         run: |
           set -euo pipefail
           if [ -z "${COMMIT_MSG// }" ]; then
@@ -384,6 +337,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.upload_artifact_name }}
-          path: ${{ inputs.upload_path }}
-          if-no-files-found: ${{ inputs.upload_if_no_files_found }}
+          name: ${{ steps.parse_config.outputs.upload_artifact_name }}
+          path: ${{ steps.parse_config.outputs.upload_path }}
+          if-no-files-found: ${{ steps.parse_config.outputs.upload_if_no_files_found }}
