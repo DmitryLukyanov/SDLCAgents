@@ -133,16 +133,19 @@ jobs:
     uses: DmitryLukyanov/SDLCAgents/.github/workflows/_reusable-codex-run.yml@master
     secrets: inherit
     with:
-      download_artifact_name: caller-handoff_input
-      download_path: async-invocation-handoff/${{ inputs.concurrency_key }}
-      prompt_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.prompt_rel }}
-      output_file: async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.output_rel }}
-      upload_artifact_name: caller-handoff_codex_output
-      upload_path: async-invocation-handoff/${{ inputs.concurrency_key }}/
-      upload_if_no_files_found: error
-      model: ${{ needs.rehydrate_ba_workspace.outputs.model }}
-      codex_step_name: Run Codex - Business Analyst
-      timeout_minutes: 30
+      config: |
+        {
+          "download_artifact_name": "caller-handoff_input",
+          "download_path": "async-invocation-handoff/${{ inputs.concurrency_key }}",
+          "prompt_file": "async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.prompt_rel }}",
+          "output_file": "async-invocation-handoff/${{ inputs.concurrency_key }}/${{ needs.rehydrate_ba_workspace.outputs.output_rel }}",
+          "upload_artifact_name": "caller-handoff_codex_output",
+          "upload_path": "async-invocation-handoff/${{ inputs.concurrency_key }}/",
+          "upload_if_no_files_found": "error",
+          "model": "${{ needs.rehydrate_ba_workspace.outputs.model }}",
+          "codex_step_name": "Run Codex - Business Analyst",
+          "timeout_minutes": 30
+        }
 
   finalize_ba_invocation_status:
     name: Write invocation-output-status.json
