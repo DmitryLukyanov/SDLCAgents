@@ -1,0 +1,23 @@
+---
+description: QA Agent modes, exit codes, and secrets handling
+alwaysApply: true
+---
+
+# QA Agent — Modes & security
+
+## Modes
+
+- `plan-only`: QA Agent prepares Claude input → Claude CLI Action step → validate (+1 repair via second Claude CLI Action step) → PR comment. Job stays green if generation/validation succeeds.
+- `plan-and-run`: same planning path → run P0 → PR comment. Fail the job if any P0 fails.
+
+## Artifacts
+
+- Always save Claude CLI Action **input** and **output** as artifacts.
+- In `plan-and-run`, also save runner screenshots/logs as artifacts.
+
+## Security & config
+
+- Secrets only from GitHub Secrets; never hardcode keys.
+- Pass `ANTHROPIC_API_KEY` only into the Claude CLI Action step.
+- Require `base-url` for runs; optional staging auth via secrets/inputs.
+- Do not log secrets or full unredacted Claude output.

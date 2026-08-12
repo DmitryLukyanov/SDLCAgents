@@ -1,0 +1,14 @@
+---
+description: Test-plan JSON Schema and Ajv validation rules
+globs: schemas/**,src/qa-agent/schemas/**,src/qa-agent/agent/**,src/claude-cli/**
+alwaysApply: false
+---
+
+# QA Agent — Test-plan contract
+
+- Validate with Ajv against `schemas/test-plan.schema.json` — not Zod.
+- The same schema is the prompt contract and the runtime validator.
+- Each case requires: `id`, `title`, `priority` (`P0` | `P1` | `P2`), `type` (`ui` | `api`).
+- UI cases: declarative actions only — `goto`, `click`, `fill`, `expectText`, `expectUrl`. No arbitrary code from the LLM.
+- API cases: `method`, `path`, and response asserts only.
+- Enforce limits: max cases, timeouts, max Claude turns.

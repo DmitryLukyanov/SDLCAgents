@@ -1,0 +1,72 @@
+---
+description: Canonical QA Agent flow — Mermaid sequence is the implementation goal
+alwaysApply: true
+---
+
+# QA Agent — Goal flow (authoritative)
+
+The Mermaid sequence below is the **implementation goal**. Behavior must match it end-to-end.
+
+**Mapping:** `Claude CLI` in the diagram = the dedicated **Claude CLI GitHub Action** (inner job step). Its input and output are Action I/O and must be saved as **artifacts**. `QA Agent` = the QA Agent Action / our orchestration in `src/qa-agent/`. Do not spawn Claude from Node.
+
+```mermaid
+sequenceDiagram
+  participant Dev as Developer
+  participant GH as GitHub
+  participant GHA as GitHub Action
+  participant Agent as QA Agent
+  participant Claude as Claude CLI
+  participant PW as Playwright
+  participant HTTP as HTTP checks
+
+  Dev->>GH: Creates or updates a pull request
+  GH->>GHA: Starts the workflow for this PR
+  GHA->>GHA: Checks out the repo and installs Claude CLI
+  GHA->>Agent: Starts the agent with its settings
+
+  Agent->>GH: Reads the PR diff, changed files, and description
+  GH-->>Agent: Returns the PR context
+
+  Note over Agent,Claude: Claude runs in readonly mode for planning
+  Agent->>Claude: Ask to generate new test cases as JSON matching our JSON Schema
+  Note over Claude: Here new test cases are generated
+  Claude-->>Agent: Returns generated test cases as JSON
+
+  Agent->>Agent: Checks that the JSON matches the schema
+
+  alt The JSON does not match the schema
+    Agent->>Claude: Send the validation errors and ask to fix the JSON
+    Claude-->>Agent: Returns fixed test cases JSON
+    Agent->>Agent: Checks the JSON against the schema again
+  end
+
+  Note over Agent: From here we use the generated test cases
+
+  alt Mode is plan-only
+    Agent->>GH: Posts the generated test cases as a PR comment
+    Note over Agent,GHA: The job is green because we only wrote a plan
+    Agent-->>GHA: Mark the job as success
+  else Mode is plan-and-run
+    loop For each critical P0 test case
+      alt The case is a UI test
+        Agent->>PW: Open the page and run the steps
+        PW-->>Agent: Returns pass or fail plus a screenshot
+      else The case is an API HTTP check
+        Agent->>HTTP: Send the HTTP request and check the response
+        HTTP-->>Agent: Returns pass or fail
+      end
+    end
+    Agent->>GHA: Save screenshots and logs as artifacts
+    Agent->>GH: Posts the test cases and run results as a PR comment
+    alt Any critical P0 case failed
+      Agent-->>GHA: Mark the job as failed
+    else All critical P0 cases passed
+      Agent-->>GHA: Mark the job as success
+    end
+  end
+
+  GHA-->>GH: Publishes the check status on the PR
+  GH-->>Dev: Shows the comment and pass or fail status
+```
+
+When rules conflict with informal notes, **this diagram wins** for control flow. Claude-as-dedicated-Action + artifact I/O still apply as the how for the Agent↔Claude arrows.
