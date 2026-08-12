@@ -1,0 +1,7 @@
+name: Claude CLI
+description: Runs Claude Code CLI for readonly test-plan generation
+author: SDLCAgents
+
+runs:
+  using: node20
+  main: ../../dist/claude-cli/index.js
