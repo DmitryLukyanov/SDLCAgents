@@ -2,6 +2,11 @@ name: QA Agent
 description: Orchestrates PR ingest, test-plan validation, runners, and reporting
 author: SDLCAgents
 
+inputs:
+  github-token:
+    description: GitHub token used to read the PR and post comments
+    required: true
+
 runs:
   using: node20
   main: ../../dist/qa-agent/index.js
