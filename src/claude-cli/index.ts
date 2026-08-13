@@ -16,8 +16,8 @@ async function run(): Promise<void> {
   const apiKey = core.getInput("anthropic-api-key", { required: true });
   const validationErrors = core.getInput("validation-errors");
 
-  const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
-  const schemaPath = path.join(workspace, "schemas", "testcase.schema.json");
+  const repoRoot = path.join(__dirname, "..", "..");
+  const schemaPath = path.join(repoRoot, "schemas", "testcase.schema.json");
   const schemaJson = fs.readFileSync(schemaPath, "utf8");
 
   const pr = JSON.parse(
@@ -27,7 +27,7 @@ async function run(): Promise<void> {
   let prompt: string;
   if (validationErrors.length > 0) {
     const template = loadPromptTemplate(
-      path.join(workspace, "prompts", "testcase-repair.txt"),
+      path.join(repoRoot, "prompts", "testcase-repair.txt"),
     );
     const previousJson = fs.readFileSync(outputFile, "utf8");
     prompt = buildRepairPrompt(
@@ -39,7 +39,7 @@ async function run(): Promise<void> {
     );
   } else {
     const template = loadPromptTemplate(
-      path.join(workspace, "prompts", "testcase-generation.txt"),
+      path.join(repoRoot, "prompts", "testcase-generation.txt"),
     );
     prompt = buildTestcasePrompt(template, pr, schemaJson);
   }
