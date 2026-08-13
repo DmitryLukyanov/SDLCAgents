@@ -1,0 +1,77 @@
+---
+description: QA Agent architecture, layout, and MVP scope
+alwaysApply: true
+---
+
+# QA Agent — Architecture
+
+## Goal
+
+Implement the control flow in `qa-agent-flow.mdc` (Mermaid sequence). That diagram is the behavioral goal; this file covers structure and constraints.
+
+## Two Actions
+
+- **QA Agent Action** — orchestrates PR ingest, validation, runners, reporting.
+- **Claude CLI Action** — dedicated Action that runs Claude Code CLI. The QA Agent job must call it as an **inner workflow step**, not by spawning `claude` from Node (`child_process` / shell inside the QA Agent).
+
+## Claude step contract
+
+- The job passes **inputs** into the Claude CLI Action (prompt payload / files, schema, API key, etc.).
+- The Claude CLI Action returns **outputs** (generated JSON / result files).
+- **Both** the Claude input and Claude output must be uploaded as **GitHub Actions artifacts** for that job run.
+- Repair retry = call the Claude CLI Action again as a step with validation errors in the input (still no in-process CLI spawn).
+
+## Source layout
+
+- All application code lives under `src/` (split by Action: e.g. `src/qa-agent/`, `src/claude-cli/`).
+- All unit tests live under the root `tests/` folder (not under `src/`).
+- All prompts and templates live under the root `prompts/` folder as text files (not inline strings in TypeScript).
+- Each Action’s `action.yml` runs the compiled output of its own `src/` tree (`dist/`). No parallel implementations outside `src/`.
+- Keep shared contracts at repo root: `schemas/`, `prompts/`, `package.json`, `tsconfig.json` as needed.
+
+Agreed tree (shape):
+
+```
+actions/qa-agent/action.yml
+actions/claude-cli/action.yml
+schemas/testcase.schema.json
+prompts/
+fixtures/
+tests/
+src/qa-agent/index.ts
+src/qa-agent/prepare.ts
+src/qa-agent/validate.ts
+src/qa-agent/run.ts
+src/qa-agent/publish.ts
+src/qa-agent/ingest/prContext.ts
+src/qa-agent/agent/testcase.ts
+src/qa-agent/schemas/validateTestcase.ts
+src/qa-agent/runner/playwright.ts
+src/qa-agent/runner/httpChecks.ts
+src/qa-agent/report/prComment.ts
+src/qa-agent/report/formatComment.ts
+src/claude-cli/index.ts
+src/claude-cli/prompts.ts
+src/claude-cli/runClaude.ts
+prompts/testcase-generation.txt
+prompts/testcase-repair.txt
+examples/qa-agent.yml
+.github/workflows/qa-agent.yml
+.github/workflows/self-test.yml
+README.md
+```
+
+## Stack & responsibility
+
+- TypeScript / Node 22; both packaged as JS GitHub Actions (`action.yml` + `dist/`).
+- Claude CLI Action generates testcase JSON only (readonly planning).
+- QA Agent validates (Ajv) and executes (Playwright UI + HTTP checks).
+- Do not use Vercel AI SDK or the Anthropic Messages API for planning.
+
+## Implementation order
+
+Follow Steps 1→8. Step 4 = Claude CLI Action (+ artifact I/O), not an in-process CLI wrapper. The shipped flow is generate → validate → run P0 → comment.
+
+## Out of scope (MVP)
+
+Slack/Teams, Jira/Linear, flaky detection, target-repo config file, exploratory Claude tool loops, committing generated Playwright tests into the consumer repo.

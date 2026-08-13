@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {
+      "id": "bad-case",
+      "title": "Missing type-specific fields",
+      "priority": "P9",
+      "type": "ui"
+    }
+  ]
+}

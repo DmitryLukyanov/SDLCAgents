@@ -1,0 +1,104 @@
+name: QA Agent
+
+on:
+  pull_request:
+
+jobs:
+  qa-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare PR context
+        uses: ./actions/qa-agent
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          step: prepare
+          pr-context-file: claude-work/pr-context.json
+
+      - name: Generate testcases
+        uses: ./actions/claude-cli
+        with:
+          pr-context-file: claude-work/pr-context.json
+          input-file: claude-work/input.txt
+          output-file: claude-work/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Upload Claude generate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-generate
+          path: |
+            claude-work/input.txt
+            claude-work/output.json
+
+      - name: Validate testcases
+        id: validate
+        uses: ./actions/qa-agent
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          step: validate
+          claude-output-file: claude-work/output.json
+
+      - name: Repair testcases
+        if: steps.validate.outputs.valid == 'false'
+        uses: ./actions/claude-cli
+        with:
+          pr-context-file: claude-work/pr-context.json
+          input-file: claude-work/input-repair.txt
+          output-file: claude-work/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          validation-errors: ${{ steps.validate.outputs.errors }}
+
+      - name: Upload Claude repair artifacts
+        if: steps.validate.outputs.valid == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-repair
+          path: |
+            claude-work/input-repair.txt
+            claude-work/output.json
+
+      - name: Run P0 testcases
+        uses: ./actions/qa-agent
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          step: run
+          claude-output-file: claude-work/output.json
+          results-file: claude-work/results.json
+          screenshot-dir: claude-work/screenshots
+          log-file: claude-work/run.log
+          base-url: ${{ vars.STAGING_URL }}
+
+      - name: Upload runner artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-results
+          path: |
+            claude-work/results.json
+            claude-work/run.log
+            claude-work/screenshots
+
+      - name: Publish comment
+        uses: ./actions/qa-agent
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          step: publish
+          claude-output-file: claude-work/output.json
+          results-file: claude-work/results.json

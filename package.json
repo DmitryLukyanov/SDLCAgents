@@ -1,0 +1,25 @@
+{
+  "name": "sdlc-qa-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QA Agent and Claude CLI GitHub Actions",
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && tsc -p tests && node --test ./dist-tests/*.test.js",
+    "start:qa-agent": "node dist/qa-agent/index.js",
+    "start:claude-cli": "node dist/claude-cli/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.1",
+    "ajv": "^8.17.1",
+    "playwright": "^1.54.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}
