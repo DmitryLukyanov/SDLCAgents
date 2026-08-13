@@ -31,3 +31,13 @@ npm run build
 - `prompts/` — generation and repair templates
 
 Claude input/output, screenshots, and logs are uploaded as job artifacts.
+
+## Calculator (GitHub Pages)
+
+React calculator site: https://dmitrylukyanov.github.io/SDLCAgents/
+
+```bash
+cd calculator
+npm install
+npm run dev
+```
