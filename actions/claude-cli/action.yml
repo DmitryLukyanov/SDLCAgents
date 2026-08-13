@@ -15,6 +15,10 @@ inputs:
   anthropic-api-key:
     description: Anthropic API key for Claude Code CLI
     required: true
+  validation-errors:
+    description: If set, run repair prompt using these Ajv errors and the existing output-file
+    required: false
+    default: ""
 
 outputs:
   input-file:

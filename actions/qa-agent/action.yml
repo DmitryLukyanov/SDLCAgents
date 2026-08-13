@@ -6,6 +6,26 @@ inputs:
   github-token:
     description: GitHub token used to read the PR and post comments
     required: true
+  step:
+    description: "prepare | validate | publish"
+    required: true
+  mode:
+    description: "plan-only | plan-and-run"
+    required: false
+  pr-context-file:
+    description: Path to write or read PR context JSON
+    required: false
+  claude-output-file:
+    description: Path to Claude output JSON text
+    required: false
+
+outputs:
+  pr-context-file:
+    description: Path to written PR context (prepare)
+  valid:
+    description: '"true" or "false" (validate)'
+  errors:
+    description: Validation errors (validate)
 
 runs:
   using: node20

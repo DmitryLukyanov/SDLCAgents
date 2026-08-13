@@ -11,11 +11,71 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+
       - run: npm ci
       - run: npm run build
-      - uses: ./actions/qa-agent
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Prepare PR context
+        uses: ./actions/qa-agent
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          step: prepare
+          pr-context-file: claude-work/pr-context.json
+
+      - name: Generate testcases
+        uses: ./actions/claude-cli
+        with:
+          pr-context-file: claude-work/pr-context.json
+          input-file: claude-work/input.txt
+          output-file: claude-work/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Upload Claude generate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-generate
+          path: |
+            claude-work/input.txt
+            claude-work/output.json
+
+      - name: Validate testcases
+        id: validate
+        uses: ./actions/qa-agent
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          step: validate
+          claude-output-file: claude-work/output.json
+
+      - name: Repair testcases
+        if: steps.validate.outputs.valid == 'false'
+        uses: ./actions/claude-cli
+        with:
+          pr-context-file: claude-work/pr-context.json
+          input-file: claude-work/input-repair.txt
+          output-file: claude-work/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          validation-errors: ${{ steps.validate.outputs.errors }}
+
+      - name: Upload Claude repair artifacts
+        if: steps.validate.outputs.valid == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-repair
+          path: |
+            claude-work/input-repair.txt
+            claude-work/output.json
+
+      - name: Publish plan-only comment
+        uses: ./actions/qa-agent
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          step: publish
+          mode: plan-only
+          claude-output-file: claude-work/output.json

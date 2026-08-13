@@ -1,22 +1,27 @@
 import * as core from "@actions/core";
-import { loadPrContext } from "./ingest/prContext";
-import { postPrComment } from "./report/prComment";
+import { prepare } from "./prepare";
+import { publish } from "./publish";
+import { validate } from "./validate";
 
 async function run(): Promise<void> {
-  const token = core.getInput("github-token", { required: true });
-  const pr = await loadPrContext(token);
+  const step = core.getInput("step", { required: true });
 
-  const body = [
-    "<!-- qa-agent-mock -->",
-    `QA Agent mock comment for PR #${pr.number}`,
-    "",
-    `Title: ${pr.title}`,
-    `Changed files: ${pr.changedFiles.length}`,
-    ...pr.changedFiles.map((file) => `- ${file.status}: ${file.filename}`),
-  ].join("\n");
+  if (step === "prepare") {
+    await prepare();
+    return;
+  }
 
-  await postPrComment(token, body);
-  core.info(`Posted mock comment for PR #${pr.number}`);
+  if (step === "validate") {
+    validate();
+    return;
+  }
+
+  if (step === "publish") {
+    await publish();
+    return;
+  }
+
+  throw new Error(`Unknown step: ${step}`);
 }
 
 run().catch((error: unknown) => {
