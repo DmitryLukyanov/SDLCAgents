@@ -7,7 +7,7 @@ jobs:
   qa-agent:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
@@ -113,6 +113,36 @@ jobs:
             claude-work/results.json
             claude-work/run.log
             claude-work/screenshots
+
+      - name: Publish screenshots for summary
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          pngs=("$GITHUB_WORKSPACE"/claude-work/screenshots/*.png)
+          if [ ${#pngs[@]} -eq 0 ]; then
+            echo "No screenshots to publish"
+            exit 0
+          fi
+          workdir="$(mktemp -d)"
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init "$workdir"
+          cd "$workdir"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "$remote"
+          if git fetch --depth 1 origin qa-screenshots; then
+            git checkout -b qa-screenshots FETCH_HEAD
+          else
+            git checkout --orphan qa-screenshots
+          fi
+          mkdir -p "$GITHUB_RUN_ID"
+          cp "${pngs[@]}" "$GITHUB_RUN_ID/"
+          git add "$GITHUB_RUN_ID"
+          git commit -m "QA screenshots for run ${GITHUB_RUN_ID}"
+          git push origin HEAD:qa-screenshots
 
       - name: Publish comment
         uses: ./actions/qa-agent

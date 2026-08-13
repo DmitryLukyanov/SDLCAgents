@@ -60,10 +60,6 @@ function formatRunSuffix(result: CommentRunResult | undefined): string {
   return ` — FAIL: ${result.error ?? "unknown"}`;
 }
 
-function escapeCell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll(/\r?\n/g, " ");
-}
-
 function formatResult(result: CommentRunResult | undefined): string {
   if (!result) {
     return "";
@@ -77,31 +73,63 @@ function formatResult(result: CommentRunResult | undefined): string {
   return `FAIL: ${result.error ?? "unknown"}`;
 }
 
-export function formatSummaryTable(
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll(/\r?\n/g, " ");
+}
+
+function screenshotCell(
+  id: string,
+  runResult: CommentRunResult | undefined,
+  screenshotBaseUrl?: string,
+): string {
+  if (!screenshotBaseUrl || !runResult?.screenshot) {
+    return "—";
+  }
+
+  const src = `${screenshotBaseUrl.replace(/\/$/, "")}/${encodeURIComponent(id)}.png`;
+  return `<img src="${src}" alt="${escapeHtml(id)}" width="240" />`;
+}
+
+export type SummaryTableCell = {
+  data: string;
+  header?: boolean;
+};
+
+export function buildSummaryTableRows(
   data: unknown,
   runResults: CommentRunResult[],
-): string {
+  screenshotBaseUrl?: string,
+): SummaryTableCell[][] {
   const cases = getCases(data);
   const resultById = new Map(runResults.map((result) => [result.id, result]));
-  const lines = [
-    "## QA Agent — testcases",
-    "",
-    "| ID | Priority | Type | Title | Result |",
-    "| --- | --- | --- | --- | --- |",
+  const rows: SummaryTableCell[][] = [
+    [
+      { data: "ID", header: true },
+      { data: "Priority", header: true },
+      { data: "Type", header: true },
+      { data: "Title", header: true },
+      { data: "Result", header: true },
+      { data: "Screenshot", header: true },
+    ],
   ];
-
-  if (cases.length === 0) {
-    return ["## QA Agent — testcases", "", "_No cases in generated output._"].join(
-      "\n",
-    );
-  }
 
   for (const testCase of cases) {
     const id = String(testCase.id);
-    lines.push(
-      `| ${escapeCell(id)} | ${escapeCell(String(testCase.priority))} | ${escapeCell(String(testCase.type))} | ${escapeCell(String(testCase.title))} | ${escapeCell(formatResult(resultById.get(id)))} |`,
-    );
+    const runResult = resultById.get(id);
+    rows.push([
+      { data: escapeHtml(id) },
+      { data: escapeHtml(String(testCase.priority)) },
+      { data: escapeHtml(String(testCase.type)) },
+      { data: escapeHtml(String(testCase.title)) },
+      { data: escapeHtml(formatResult(runResult)) },
+      { data: screenshotCell(id, runResult, screenshotBaseUrl) },
+    ]);
   }
 
-  return lines.join("\n");
+  return rows;
 }

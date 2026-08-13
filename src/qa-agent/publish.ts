@@ -2,13 +2,22 @@ import fs from "node:fs";
 import * as core from "@actions/core";
 import { hasFailedP0 } from "./run";
 import {
-  formatSummaryTable,
+  buildSummaryTableRows,
   formatTestcaseComment,
   type CommentRunResult,
 } from "./report/formatComment";
 import { postPrComment } from "./report/prComment";
 import { validateTestcase } from "./schemas/validateTestcase";
 import { parseClaudeOutputFile } from "./validate";
+
+function screenshotBaseUrl(): string | undefined {
+  const repo = process.env.GITHUB_REPOSITORY;
+  const runId = process.env.GITHUB_RUN_ID;
+  if (!repo || !runId) {
+    return undefined;
+  }
+  return `https://raw.githubusercontent.com/${repo}/qa-screenshots/${runId}`;
+}
 
 export async function publish(): Promise<void> {
   const token = core.getInput("github-token", { required: true });
@@ -36,34 +45,10 @@ export async function publish(): Promise<void> {
   await postPrComment(token, body);
   core.info("Posted testcase comment");
 
-  const summary = core.summary.addRaw(
-    formatSummaryTable(parsed.data, runResults),
-    true,
-  );
-
-  const screenshotResults = runResults.filter((runResult) => {
-    return (
-      typeof runResult.screenshot === "string" &&
-      fs.existsSync(runResult.screenshot)
-    );
-  });
-  if (screenshotResults.length > 0) {
-    summary.addHeading("Screenshots", 2);
-    for (const runResult of screenshotResults) {
-      const screenshotPath = runResult.screenshot;
-      if (!screenshotPath) {
-        continue;
-      }
-      const png = fs.readFileSync(screenshotPath);
-      summary.addHeading(runResult.id, 3);
-      summary.addImage(
-        `data:image/png;base64,${png.toString("base64")}`,
-        runResult.id,
-      );
-    }
-  }
-
-  await summary.write();
+  await core.summary
+    .addHeading("QA Agent — testcases", 2)
+    .addTable(buildSummaryTableRows(parsed.data, runResults, screenshotBaseUrl()))
+    .write();
   core.info("Wrote job summary");
 
   if (hasFailedP0(runResults)) {
