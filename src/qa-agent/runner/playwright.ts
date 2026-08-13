@@ -10,26 +10,39 @@ import {
 
 export async function runPlaywrightCase(
   testCase: UiCase,
-  options: { baseUrl: string; timeoutMs: number; screenshotPath: string },
-): Promise<RunResult> {
-  fs.mkdirSync(path.dirname(options.screenshotPath), { recursive: true });
+  options: {
+    baseUrl: string;
+    timeoutMs: number;
+    screenshotBeforePath: string;
+    screenshotAfterPath: string;
+  },
+): Promise<RunResult & { screenshotBefore?: string; screenshotAfter?: string }> {
+  fs.mkdirSync(path.dirname(options.screenshotBeforePath), { recursive: true });
+  fs.mkdirSync(path.dirname(options.screenshotAfterPath), { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(options.timeoutMs);
+  let screenshotBefore: string | undefined;
 
   try {
     for (const step of testCase.steps) {
       await runStep(page, step, options.baseUrl);
+      if (!screenshotBefore && step.action === "goto") {
+        await page.screenshot({ path: options.screenshotBeforePath });
+        screenshotBefore = options.screenshotBeforePath;
+      }
     }
-    return { ok: true };
+    return { ok: true, screenshotBefore, screenshotAfter: options.screenshotAfterPath };
   } catch (error: unknown) {
     return {
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      screenshotBefore,
+      screenshotAfter: options.screenshotAfterPath,
     };
   } finally {
-    await page.screenshot({ path: options.screenshotPath });
+    await page.screenshot({ path: options.screenshotAfterPath });
     await browser.close();
   }
 }

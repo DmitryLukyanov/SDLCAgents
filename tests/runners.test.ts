@@ -143,24 +143,30 @@ test("Playwright UI case passes and fails predictably", async () => {
       ],
     };
 
-    const passScreenshot = path.join(screenshotDir, "pass.png");
-    const failScreenshot = path.join(screenshotDir, "fail.png");
+    const passBefore = path.join(screenshotDir, "pass-before.png");
+    const passAfter = path.join(screenshotDir, "pass-after.png");
+    const failBefore = path.join(screenshotDir, "fail-before.png");
+    const failAfter = path.join(screenshotDir, "fail-after.png");
 
     const pass = await runPlaywrightCase(passing, {
       baseUrl: server.baseUrl,
       timeoutMs,
-      screenshotPath: passScreenshot,
+      screenshotBeforePath: passBefore,
+      screenshotAfterPath: passAfter,
     });
     const fail = await runPlaywrightCase(failing, {
       baseUrl: server.baseUrl,
       timeoutMs,
-      screenshotPath: failScreenshot,
+      screenshotBeforePath: failBefore,
+      screenshotAfterPath: failAfter,
     });
 
     assert.equal(pass.ok, true);
     assert.equal(fail.ok, false);
-    assert.ok(fs.existsSync(passScreenshot));
-    assert.ok(fs.existsSync(failScreenshot));
+    assert.ok(fs.existsSync(passBefore));
+    assert.ok(fs.existsSync(passAfter));
+    assert.ok(fs.existsSync(failBefore));
+    assert.ok(fs.existsSync(failAfter));
   } finally {
     await server.close();
   }

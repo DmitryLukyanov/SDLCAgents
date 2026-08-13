@@ -14,7 +14,8 @@ export type CaseRunResult = {
   ok: boolean;
   skipped: boolean;
   error?: string;
-  screenshot?: string;
+  screenshotBefore?: string;
+  screenshotAfter?: string;
 };
 
 export async function runP0Cases(
@@ -30,18 +31,27 @@ export async function runP0Cases(
     }
 
     if (testCase.type === "ui") {
-      const screenshotPath = path.join(options.screenshotDir, `${testCase.id}.png`);
+      const screenshotBeforePath = path.join(
+        options.screenshotDir,
+        `${testCase.id}-before.png`,
+      );
+      const screenshotAfterPath = path.join(
+        options.screenshotDir,
+        `${testCase.id}-after.png`,
+      );
       const result = await runPlaywrightCase(testCase, {
         baseUrl: options.baseUrl,
         timeoutMs: options.timeoutMs,
-        screenshotPath,
+        screenshotBeforePath,
+        screenshotAfterPath,
       });
       results.push({
         id: testCase.id,
         ok: result.ok,
         skipped: false,
         error: result.ok ? undefined : result.error,
-        screenshot: screenshotPath,
+        screenshotBefore: result.screenshotBefore,
+        screenshotAfter: result.screenshotAfter,
       });
       continue;
     }
