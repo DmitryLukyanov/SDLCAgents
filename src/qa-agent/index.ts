@@ -1,6 +1,7 @@
 import * as core from "@actions/core";
 import { prepare } from "./prepare";
 import { publish } from "./publish";
+import { runP0 } from "./run";
 import { validate } from "./validate";
 
 async function run(): Promise<void> {
@@ -13,6 +14,11 @@ async function run(): Promise<void> {
 
   if (step === "validate") {
     validate();
+    return;
+  }
+
+  if (step === "run") {
+    await runP0();
     return;
   }
 

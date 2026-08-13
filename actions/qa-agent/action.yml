@@ -7,7 +7,7 @@ inputs:
     description: GitHub token used to read the PR and post comments
     required: true
   step:
-    description: "prepare | validate | publish"
+    description: "prepare | validate | run | publish"
     required: true
   mode:
     description: "plan-only | plan-and-run"
@@ -18,6 +18,18 @@ inputs:
   claude-output-file:
     description: Path to Claude output JSON text
     required: false
+  results-file:
+    description: Path to write or read P0 run results JSON
+    required: false
+  screenshot-dir:
+    description: Directory for Playwright screenshots
+    required: false
+  log-file:
+    description: Path to write runner log text
+    required: false
+  base-url:
+    description: Base URL for running P0 UI and API cases
+    required: false
 
 outputs:
   pr-context-file:
@@ -26,6 +38,10 @@ outputs:
     description: '"true" or "false" (validate)'
   errors:
     description: Validation errors (validate)
+  results-file:
+    description: Path to P0 run results (run)
+  log-file:
+    description: Path to runner log (run)
 
 runs:
   using: node20

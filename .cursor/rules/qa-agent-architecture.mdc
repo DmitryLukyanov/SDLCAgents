@@ -41,6 +41,7 @@ tests/
 src/qa-agent/index.ts
 src/qa-agent/prepare.ts
 src/qa-agent/validate.ts
+src/qa-agent/run.ts
 src/qa-agent/publish.ts
 src/qa-agent/ingest/prContext.ts
 src/qa-agent/agent/testcase.ts
