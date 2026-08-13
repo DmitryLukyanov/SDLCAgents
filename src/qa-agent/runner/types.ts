@@ -34,6 +34,11 @@ export type ApiCase = {
 };
 
 export function resolveUrl(baseUrl: string, urlOrPath: string): string {
+  if (/^https?:\/\//i.test(urlOrPath)) {
+    return urlOrPath;
+  }
+
   const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  return new URL(urlOrPath, base).href;
+  const relative = urlOrPath.startsWith("/") ? urlOrPath.slice(1) : urlOrPath;
+  return new URL(relative, base).href;
 }

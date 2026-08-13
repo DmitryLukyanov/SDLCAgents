@@ -184,7 +184,7 @@ export function Calculator() {
 
   return (
     <main className="calculator">
-      <output className="display" aria-live="polite">
+      <output className="display" data-label="display" aria-live="polite">
         {display}
       </output>
       <div className="keys">
@@ -192,6 +192,7 @@ export function Calculator() {
           <button
             key={button.label}
             type="button"
+            data-label={button.label}
             className={[button.className, button.span ? 'span-2' : '']
               .filter(Boolean)
               .join(' ')}

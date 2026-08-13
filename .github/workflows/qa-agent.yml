@@ -75,6 +75,25 @@ jobs:
             claude-work/input-repair.txt
             claude-work/output.json
 
+      - name: Build calculator
+        working-directory: calculator
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start calculator preview
+        working-directory: calculator
+        run: |
+          npx vite preview --host 127.0.0.1 --port 4173 &
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:4173/SDLCAgents/" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "calculator preview did not start"
+          exit 1
+
       - name: Run P0 testcases
         uses: ./actions/qa-agent
         with:

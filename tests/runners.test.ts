@@ -6,9 +6,24 @@ import path from "node:path";
 import test from "node:test";
 import { runHttpCheck } from "../dist/qa-agent/runner/httpChecks";
 import { runPlaywrightCase } from "../dist/qa-agent/runner/playwright";
-import type { ApiCase, UiCase } from "../dist/qa-agent/runner/types";
+import { resolveUrl, type ApiCase, type UiCase } from "../dist/qa-agent/runner/types";
 
 const timeoutMs = 10_000;
+
+test("resolveUrl keeps subdirectory base for root paths", () => {
+  assert.equal(
+    resolveUrl("http://127.0.0.1:4173/SDLCAgents/", "/"),
+    "http://127.0.0.1:4173/SDLCAgents/",
+  );
+  assert.equal(
+    resolveUrl("http://127.0.0.1:4173/SDLCAgents", "/health"),
+    "http://127.0.0.1:4173/SDLCAgents/health",
+  );
+  assert.equal(
+    resolveUrl("http://127.0.0.1:4173/SDLCAgents/", "https://example.test/x"),
+    "https://example.test/x",
+  );
+});
 
 function startFixtureServer(): Promise<{
   baseUrl: string;
