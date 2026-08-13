@@ -1,0 +1,12 @@
+{
+  "number": 1,
+  "title": "Add health endpoint",
+  "body": "Expose GET /health that returns {\"status\":\"ok\"}.",
+  "changedFiles": [
+    {
+      "filename": "src/server.ts",
+      "status": "modified",
+      "patch": "@@\n+app.get('/health', (_req, res) => {\n+  res.json({ status: 'ok' });\n+});"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+Generate QA testcases for this pull request.
+Reply with JSON only. No markdown. No explanation.
+The JSON must conform to this JSON Schema:
+{{SCHEMA_JSON}}
+
+PR #{{PR_NUMBER}}: {{PR_TITLE}}
+
+Description:
+{{PR_BODY}}
+
+Changed files:
+{{CHANGED_FILES}}
