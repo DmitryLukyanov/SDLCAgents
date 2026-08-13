@@ -2,6 +2,7 @@ import fs from "node:fs";
 import * as core from "@actions/core";
 import { hasFailedP0 } from "./run";
 import {
+  formatSummaryTable,
   formatTestcaseComment,
   type CommentRunResult,
 } from "./report/formatComment";
@@ -34,6 +35,9 @@ export async function publish(): Promise<void> {
   const body = formatTestcaseComment(parsed.data, runResults);
   await postPrComment(token, body);
   core.info("Posted testcase comment");
+
+  await core.summary.addRaw(formatSummaryTable(parsed.data, runResults), true).write();
+  core.info("Wrote job summary");
 
   if (hasFailedP0(runResults)) {
     core.setFailed("One or more P0 testcases failed");
