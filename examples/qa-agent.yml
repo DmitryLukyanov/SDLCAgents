@@ -84,7 +84,7 @@ jobs:
             claude-work/input-repair.txt
             claude-work/output.json
 
-      - name: Run P0 testcases
+      - name: Run testcases
         uses: ./.sdlc-qa-agent/actions/qa-agent
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

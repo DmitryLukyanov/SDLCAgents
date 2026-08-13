@@ -94,7 +94,7 @@ jobs:
           echo "calculator preview did not start"
           exit 1
 
-      - name: Run P0 testcases
+      - name: Run testcases
         uses: ./actions/qa-agent
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

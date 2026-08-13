@@ -25,11 +25,6 @@ export async function runP0Cases(
   const results: CaseRunResult[] = [];
 
   for (const testCase of cases) {
-    if (testCase.priority !== "P0") {
-      results.push({ id: testCase.id, ok: true, skipped: true });
-      continue;
-    }
-
     if (testCase.type === "ui") {
       const screenshotBeforePath = path.join(
         options.screenshotDir,
@@ -71,7 +66,7 @@ export async function runP0Cases(
   return results;
 }
 
-export function hasFailedP0(
+export function hasFailedCase(
   results: Array<{ ok: boolean; skipped?: boolean }>,
 ): boolean {
   return results.some((result) => !result.skipped && !result.ok);
@@ -122,5 +117,5 @@ export async function runP0(): Promise<void> {
 
   core.setOutput("results-file", resultsFile);
   core.setOutput("log-file", logFile);
-  core.info(`Wrote P0 run results to ${resultsFile}`);
+  core.info(`Wrote run results to ${resultsFile}`);
 }

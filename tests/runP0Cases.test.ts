@@ -3,7 +3,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { hasFailedP0, runP0Cases } from "../dist/qa-agent/run";
+import { hasFailedCase, runP0Cases } from "../dist/qa-agent/run";
 import type { ApiCase } from "../dist/qa-agent/runner/types";
 
 function startHealthServer(): Promise<{
@@ -44,7 +44,7 @@ function startHealthServer(): Promise<{
   });
 }
 
-test("runP0Cases runs P0 API cases and skips P1", async () => {
+test("runP0Cases runs all priorities", async () => {
   const server = await startHealthServer();
   try {
     const passing: ApiCase = {
@@ -55,13 +55,13 @@ test("runP0Cases runs P0 API cases and skips P1", async () => {
       request: { method: "GET", path: "/health" },
       asserts: { status: 200, bodyContains: "ok" },
     };
-    const skipped: ApiCase = {
+    const p1: ApiCase = {
       id: "api-later",
       title: "Later check",
       priority: "P1",
       type: "api",
-      request: { method: "GET", path: "/missing" },
-      asserts: { status: 200 },
+      request: { method: "GET", path: "/health" },
+      asserts: { status: 200, bodyContains: "ok" },
     };
     const failing: ApiCase = {
       id: "api-wrong",
@@ -72,7 +72,7 @@ test("runP0Cases runs P0 API cases and skips P1", async () => {
       asserts: { status: 201 },
     };
 
-    const results = await runP0Cases([passing, skipped, failing], {
+    const results = await runP0Cases([passing, p1, failing], {
       baseUrl: server.baseUrl,
       timeoutMs: 5_000,
       screenshotDir: path.join(os.tmpdir(), "qa-agent-run-p0"),
@@ -80,9 +80,10 @@ test("runP0Cases runs P0 API cases and skips P1", async () => {
 
     assert.equal(results[0]?.ok, true);
     assert.equal(results[0]?.skipped, false);
-    assert.equal(results[1]?.skipped, true);
+    assert.equal(results[1]?.ok, true);
+    assert.equal(results[1]?.skipped, false);
     assert.equal(results[2]?.ok, false);
-    assert.equal(hasFailedP0(results), true);
+    assert.equal(hasFailedCase(results), true);
   } finally {
     await server.close();
   }

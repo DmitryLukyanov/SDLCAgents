@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import * as core from "@actions/core";
-import { hasFailedP0 } from "./run";
+import { hasFailedCase } from "./run";
 import {
   buildSummaryTableRows,
   formatTestcaseComment,
@@ -51,7 +51,7 @@ export async function publish(): Promise<void> {
     .write();
   core.info("Wrote job summary");
 
-  if (hasFailedP0(runResults)) {
-    core.setFailed("One or more P0 testcases failed");
+  if (hasFailedCase(runResults)) {
+    core.setFailed("One or more testcases failed");
   }
 }
