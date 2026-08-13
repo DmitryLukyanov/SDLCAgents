@@ -74,6 +74,13 @@ export function Calculator() {
     setDisplay(formatNumber(parseFloat(display) / 100))
   }
 
+  const sine = () => {
+    if (display === 'Error') return
+    const radians = parseFloat(display) * (Math.PI / 180)
+    setDisplay(formatNumber(Math.sin(radians)))
+    setWaitingForOperand(true)
+  }
+
   const chooseOperator = (nextOperator: Operator) => {
     if (display === 'Error') return
 
@@ -135,6 +142,11 @@ export function Calculator() {
 
       if (key === '%') {
         percent()
+        return
+      }
+
+      if (key === 's' || key === 'S') {
+        sine()
       }
     }
 
@@ -164,8 +176,9 @@ export function Calculator() {
     { label: '2', onClick: () => inputDigit('2') },
     { label: '3', onClick: () => inputDigit('3') },
     { label: '+', className: 'op', onClick: () => chooseOperator('+') },
-    { label: '0', span: true, onClick: () => inputDigit('0') },
+    { label: '0', onClick: () => inputDigit('0') },
     { label: '.', onClick: inputDecimal },
+    { label: 'sin', className: 'fn', onClick: sine },
     { label: '=', className: 'op', onClick: equals },
   ]
 
