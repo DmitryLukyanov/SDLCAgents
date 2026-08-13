@@ -10,6 +10,7 @@ export type CommentRunResult = {
   ok: boolean;
   skipped?: boolean;
   error?: string;
+  screenshot?: string;
 };
 
 function getCases(data: unknown): CommentCase[] {
