@@ -13,7 +13,7 @@ export async function runClaude(options: {
 }): Promise<ClaudeRunResult> {
   const { stdout } = await execFileAsync(
     "claude",
-    ["-p", "--output-format", "json", "--tools", "", options.prompt],
+    ["-p", "--output-format", "json", "--tools=", options.prompt],
     {
       env: {
         ...process.env,
