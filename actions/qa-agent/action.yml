@@ -1,5 +1,5 @@
 name: QA Agent
-description: Orchestrates PR ingest, test-plan validation, runners, and reporting
+description: Orchestrates PR ingest, testcase validation, runners, and reporting
 author: SDLCAgents
 
 inputs:

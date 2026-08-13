@@ -22,6 +22,6 @@ alwaysApply: true
 
 - Use Claude Code CLI inside that Action only, e.g. `claude --print --output-format json`.
 - Readonly: JSON only — no shell, no file edits, no mutating tool use.
-- Prompt includes `schemas/test-plan.schema.json`; require JSON conforming to that schema.
+- Prompt includes `schemas/testcase.schema.json`; require JSON conforming to that schema.
 - Auth with `ANTHROPIC_API_KEY` from GitHub Secrets (passed into the Claude CLI Action).
 - Never log full Claude stdout/stderr unredacted.

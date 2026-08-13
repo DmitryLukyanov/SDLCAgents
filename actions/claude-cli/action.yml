@@ -1,5 +1,5 @@
 name: Claude CLI
-description: Runs Claude Code CLI for readonly test-plan generation
+description: Runs Claude Code CLI for readonly testcase generation
 author: SDLCAgents
 
 runs:

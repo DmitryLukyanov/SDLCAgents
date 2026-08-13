@@ -24,6 +24,7 @@ Implement the control flow in `qa-agent-flow.mdc` (Mermaid sequence). That diagr
 ## Source layout
 
 - All application code lives under `src/` (split by Action: e.g. `src/qa-agent/`, `src/claude-cli/`).
+- All unit tests live under the root `tests/` folder (not under `src/`).
 - Each Action’s `action.yml` runs the compiled output of its own `src/` tree (`dist/`). No parallel implementations outside `src/`.
 - Keep shared contracts at repo root: `schemas/`, `package.json`, `tsconfig.json` as needed.
 
@@ -32,24 +33,26 @@ Agreed tree (shape):
 ```
 actions/qa-agent/action.yml
 actions/claude-cli/action.yml
-schemas/test-plan.schema.json
+schemas/testcase.schema.json
+fixtures/
+tests/
 src/qa-agent/index.ts
 src/qa-agent/ingest/prContext.ts
-src/qa-agent/agent/testPlan.ts
-src/qa-agent/schemas/validateTestPlan.ts
+src/qa-agent/agent/testcase.ts
+src/qa-agent/schemas/validateTestcase.ts
 src/qa-agent/runner/playwright.ts
 src/qa-agent/runner/httpChecks.ts
 src/qa-agent/report/prComment.ts
 src/claude-cli/index.ts
 src/claude-cli/prompts.ts
-.github/workflows/self-test.yml
+.github/workflows/qa-agent.yml
 README.md
 ```
 
 ## Stack & responsibility
 
 - TypeScript / Node 22; both packaged as JS GitHub Actions (`action.yml` + `dist/`).
-- Claude CLI Action generates test-plan JSON only (readonly planning).
+- Claude CLI Action generates testcase JSON only (readonly planning).
 - QA Agent validates (Ajv) and executes (Playwright UI + HTTP checks).
 - Do not use Vercel AI SDK or the Anthropic Messages API for planning.
 
