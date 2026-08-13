@@ -14,8 +14,7 @@ export type CommentRunResult = {
 
 export function formatTestcaseComment(
   data: unknown,
-  mode: "plan-only" | "plan-and-run",
-  runResults: CommentRunResult[] = [],
+  runResults: CommentRunResult[],
 ): string {
   const cases =
     data &&
@@ -26,11 +25,7 @@ export function formatTestcaseComment(
 
   const resultById = new Map(runResults.map((result) => [result.id, result]));
 
-  const lines = [
-    "<!-- qa-agent-report -->",
-    `## QA Agent — testcases (${mode})`,
-    "",
-  ];
+  const lines = ["<!-- qa-agent-report -->", "## QA Agent — testcases", ""];
 
   if (cases.length === 0) {
     lines.push("_No cases in generated output._");
@@ -38,7 +33,7 @@ export function formatTestcaseComment(
     for (const testCase of cases) {
       const id = String(testCase.id);
       lines.push(
-        `- **${id}** (${String(testCase.priority)}, ${String(testCase.type)}): ${String(testCase.title)}${formatRunSuffix(mode, resultById.get(id))}`,
+        `- **${id}** (${String(testCase.priority)}, ${String(testCase.type)}): ${String(testCase.title)}${formatRunSuffix(resultById.get(id))}`,
       );
     }
   }
@@ -46,11 +41,8 @@ export function formatTestcaseComment(
   return lines.join("\n");
 }
 
-function formatRunSuffix(
-  mode: "plan-only" | "plan-and-run",
-  result: CommentRunResult | undefined,
-): string {
-  if (mode !== "plan-and-run" || !result) {
+function formatRunSuffix(result: CommentRunResult | undefined): string {
+  if (!result) {
     return "";
   }
   if (result.skipped) {

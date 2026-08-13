@@ -9,9 +9,6 @@ inputs:
   step:
     description: "prepare | validate | run | publish"
     required: true
-  mode:
-    description: "plan-only | plan-and-run"
-    required: false
   pr-context-file:
     description: Path to write or read PR context JSON
     required: false

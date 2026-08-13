@@ -11,14 +11,10 @@ import { parseClaudeOutputFile } from "./validate";
 
 export async function publish(): Promise<void> {
   const token = core.getInput("github-token", { required: true });
-  const mode = core.getInput("mode", { required: true });
   const claudeOutputFile = core.getInput("claude-output-file", {
     required: true,
   });
-
-  if (mode !== "plan-only" && mode !== "plan-and-run") {
-    throw new Error(`Unsupported mode: ${mode}`);
-  }
+  const resultsFile = core.getInput("results-file", { required: true });
 
   const parsed = parseClaudeOutputFile(claudeOutputFile);
   if (!parsed.ok) {
@@ -30,20 +26,16 @@ export async function publish(): Promise<void> {
     throw new Error(result.errors);
   }
 
-  let runResults: CommentRunResult[] = [];
-  if (mode === "plan-and-run") {
-    const resultsFile = core.getInput("results-file", { required: true });
-    const parsedResults = JSON.parse(fs.readFileSync(resultsFile, "utf8")) as {
-      results: CommentRunResult[];
-    };
-    runResults = parsedResults.results;
-  }
+  const parsedResults = JSON.parse(fs.readFileSync(resultsFile, "utf8")) as {
+    results: CommentRunResult[];
+  };
+  const runResults = parsedResults.results;
 
-  const body = formatTestcaseComment(parsed.data, mode, runResults);
+  const body = formatTestcaseComment(parsed.data, runResults);
   await postPrComment(token, body);
-  core.info(`Posted ${mode} testcase comment`);
+  core.info("Posted testcase comment");
 
-  if (mode === "plan-and-run" && hasFailedP0(runResults)) {
+  if (hasFailedP0(runResults)) {
     core.setFailed("One or more P0 testcases failed");
   }
 }

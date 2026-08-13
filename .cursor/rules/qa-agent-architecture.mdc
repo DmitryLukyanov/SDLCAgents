@@ -70,7 +70,7 @@ README.md
 
 ## Implementation order
 
-Follow Steps 1→8; do not implement runners or plan-and-run before plan-only MVP dependencies are done. Steps 3 and 4 may run in parallel after Step 2. Step 4 = Claude CLI Action (+ artifact I/O), not an in-process CLI wrapper.
+Follow Steps 1→8. Step 4 = Claude CLI Action (+ artifact I/O), not an in-process CLI wrapper. The shipped flow is generate → validate → run P0 → comment.
 
 ## Out of scope (MVP)
 

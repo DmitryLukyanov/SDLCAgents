@@ -6,9 +6,6 @@ on:
 jobs:
   qa-agent:
     runs-on: ubuntu-latest
-    env:
-      QA_MODE: plan-only
-      BASE_URL: ${{ vars.STAGING_URL }}
     permissions:
       contents: read
       pull-requests: write
@@ -26,7 +23,6 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Install Playwright Chromium
-        if: env.QA_MODE == 'plan-and-run'
         run: npx playwright install --with-deps chromium
 
       - name: Prepare PR context
@@ -80,7 +76,6 @@ jobs:
             claude-work/output.json
 
       - name: Run P0 testcases
-        if: env.QA_MODE == 'plan-and-run'
         uses: ./actions/qa-agent
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -89,10 +84,9 @@ jobs:
           results-file: claude-work/results.json
           screenshot-dir: claude-work/screenshots
           log-file: claude-work/run.log
-          base-url: ${{ env.BASE_URL }}
+          base-url: ${{ vars.STAGING_URL }}
 
       - name: Upload runner artifacts
-        if: env.QA_MODE == 'plan-and-run'
         uses: actions/upload-artifact@v4
         with:
           name: runner-results
@@ -106,6 +100,5 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           step: publish
-          mode: ${{ env.QA_MODE }}
           claude-output-file: claude-work/output.json
           results-file: claude-work/results.json

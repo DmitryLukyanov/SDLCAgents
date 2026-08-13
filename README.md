@@ -2,24 +2,17 @@
 
 GitHub Action that runs on each pull request:
 
-analyze PR → generate testcases (Claude Code CLI) → optionally run P0 → post a PR comment
+analyze PR → generate testcases (Claude Code CLI) → run P0 → post a PR comment
 
-## Modes
-
-- `plan-only` — generate and comment. Job stays green if generation/validation succeeds.
-- `plan-and-run` — same, then run P0 UI (Playwright) and API (HTTP checks). Job fails if any P0 fails.
-
-Set `QA_MODE` in the workflow. For `plan-and-run`, also set `vars.STAGING_URL` (`base-url`).
+P0 UI cases run with Playwright. P0 API cases run as HTTP checks. The job fails if any P0 fails.
 
 ## Wire it into another repo (~5 minutes)
 
 1. Add secret `ANTHROPIC_API_KEY`.
-2. For `plan-and-run`, add variable `STAGING_URL`.
+2. Add variable `STAGING_URL` (base URL used to run the cases).
 3. Copy [`examples/qa-agent.yml`](examples/qa-agent.yml) to `.github/workflows/qa-agent.yml`.
 4. Replace `OWNER/SDLCAgents` with this repository (`owner/name`).
-5. Open a PR. You should get a QA Agent comment.
-
-To execute P0 cases, set `QA_MODE: plan-and-run` in that workflow.
+5. Open a PR. You should get a QA Agent comment with pass/fail results.
 
 ## Local
 
@@ -37,4 +30,4 @@ npm run build
 - `schemas/testcase.schema.json` — testcase contract
 - `prompts/` — generation and repair templates
 
-Claude input and output are uploaded as job artifacts. In `plan-and-run`, screenshots and logs are uploaded too.
+Claude input/output, screenshots, and logs are uploaded as job artifacts.
