@@ -13,15 +13,23 @@ export type PrContext = {
   changedFiles: PrChangedFile[];
 };
 
-export async function loadPrContext(token: string): Promise<PrContext> {
-  const pullRequest = github.context.payload.pull_request;
-  if (!pullRequest) {
-    throw new Error("Not a pull_request event");
+export function resolvePullNumber(payload: {
+  pull_request?: { number?: number };
+  issue?: { number?: number; pull_request?: unknown };
+}): number {
+  if (payload.pull_request?.number) {
+    return payload.pull_request.number;
   }
+  if (payload.issue?.pull_request && payload.issue.number) {
+    return payload.issue.number;
+  }
+  throw new Error("Not a pull request event");
+}
 
+export async function loadPrContext(token: string): Promise<PrContext> {
+  const pull_number = resolvePullNumber(github.context.payload);
   const octokit = github.getOctokit(token);
   const { owner, repo } = github.context.repo;
-  const pull_number = pullRequest.number;
 
   const { data: pr } = await octokit.rest.pulls.get({
     owner,

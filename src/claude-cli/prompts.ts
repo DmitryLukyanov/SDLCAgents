@@ -43,6 +43,19 @@ export function buildTestcasePrompt(
   );
 }
 
+export function buildAddPrompt(
+  template: string,
+  pr: PromptPrContext,
+  schemaJson: string,
+  humanComment: string,
+  previousJson: string,
+): string {
+  return applyPrPlaceholders(template, pr)
+    .replaceAll("{{SCHEMA_JSON}}", schemaJson)
+    .replaceAll("{{HUMAN_COMMENT}}", humanComment)
+    .replaceAll("{{PREVIOUS_JSON}}", previousJson);
+}
+
 export function buildRepairPrompt(
   template: string,
   pr: PromptPrContext,

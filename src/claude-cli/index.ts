@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as core from "@actions/core";
 import {
+  buildAddPrompt,
   buildRepairPrompt,
   buildTestcasePrompt,
   loadPromptTemplate,
@@ -15,6 +16,7 @@ async function run(): Promise<void> {
   const outputFile = core.getInput("output-file", { required: true });
   const apiKey = core.getInput("anthropic-api-key", { required: true });
   const validationErrors = core.getInput("validation-errors");
+  const humanComment = core.getInput("human-comment");
 
   const repoRoot = path.join(__dirname, "..", "..");
   const schemaPath = path.join(repoRoot, "schemas", "testcase.schema.json");
@@ -25,7 +27,21 @@ async function run(): Promise<void> {
   ) as PromptPrContext;
 
   let prompt: string;
-  if (validationErrors.length > 0) {
+  if (humanComment.length > 0) {
+    const template = loadPromptTemplate(
+      path.join(repoRoot, "prompts", "testcase-add.txt"),
+    );
+    const previousJson = fs.existsSync(outputFile)
+      ? fs.readFileSync(outputFile, "utf8")
+      : '{"cases":[]}';
+    prompt = buildAddPrompt(
+      template,
+      pr,
+      schemaJson,
+      humanComment,
+      previousJson,
+    );
+  } else if (validationErrors.length > 0) {
     const template = loadPromptTemplate(
       path.join(repoRoot, "prompts", "testcase-repair.txt"),
     );

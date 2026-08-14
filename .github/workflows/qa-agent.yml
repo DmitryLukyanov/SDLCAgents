@@ -2,15 +2,36 @@ name: QA Agent
 
 on:
   pull_request:
+  issue_comment:
+    types: [created]
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
 jobs:
   qa-agent:
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       github.event.comment.user.type != 'Bot' &&
+       contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      issues: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number) }}
+
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.QA_APP_ID }}
+          private-key: ${{ secrets.QA_APP_PRIVATE_KEY }}
 
       - uses: actions/setup-node@v4
         with:
@@ -28,11 +49,32 @@ jobs:
       - name: Prepare PR context
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           step: prepare
           pr-context-file: claude-work/pr-context.json
 
+      - name: Download previous cases
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          mkdir -p claude-work
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=claude-work-pr-${PR_NUMBER}&per_page=1" --jq '.artifacts[0].id // empty')
+          if [ -z "$id" ]; then
+            echo '{"cases":[]}' > claude-work/output.json
+            exit 0
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/claude-work.zip
+          unzip -o /tmp/claude-work.zip -d /tmp/prev
+          found=$(find /tmp/prev -name output.json | head -n 1)
+          if [ -n "$found" ]; then
+            cp "$found" claude-work/output.json
+          else
+            echo '{"cases":[]}' > claude-work/output.json
+          fi
+
       - name: Generate testcases
+        if: github.event_name != 'issue_comment'
         uses: ./actions/claude-cli
         with:
           pr-context-file: claude-work/pr-context.json
@@ -40,19 +82,31 @@ jobs:
           output-file: claude-work/output.json
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 
+      - name: Add testcases from @claude comment
+        if: github.event_name == 'issue_comment'
+        uses: ./actions/claude-cli
+        with:
+          pr-context-file: claude-work/pr-context.json
+          input-file: claude-work/input-add.txt
+          output-file: claude-work/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          human-comment: ${{ github.event.comment.body }}
+
       - name: Upload Claude generate artifacts
         uses: actions/upload-artifact@v4
         with:
           name: claude-generate
           path: |
             claude-work/input.txt
+            claude-work/input-add.txt
             claude-work/output.json
+          if-no-files-found: ignore
 
       - name: Validate testcases
         id: validate
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           step: validate
           claude-output-file: claude-work/output.json
 
@@ -74,6 +128,12 @@ jobs:
           path: |
             claude-work/input-repair.txt
             claude-work/output.json
+
+      - name: Upload Claude work
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-work-pr-${{ env.PR_NUMBER }}
+          path: claude-work
 
       - name: Build calculator
         working-directory: calculator
@@ -97,7 +157,7 @@ jobs:
       - name: Run testcases
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           step: run
           claude-output-file: claude-work/output.json
           results-file: claude-work/results.json
@@ -147,7 +207,7 @@ jobs:
       - name: Publish comment
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           step: publish
           claude-output-file: claude-work/output.json
           results-file: claude-work/results.json

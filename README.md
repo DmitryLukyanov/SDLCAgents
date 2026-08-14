@@ -32,6 +32,22 @@ npm run build
 
 Claude input/output, screenshots, and logs are uploaded as job artifacts.
 
+## @claude comments (GitHub App identity)
+
+On a PR, comment:
+
+```text
+@claude add a case: sin(270) should be -1
+```
+
+GitHub Actions hears the comment. The job posts the QA result with the App token, so the comment author is **SDLC QA Agent**, not `github-actions[bot]`. The same identity is used on the pull_request run.
+
+1. Install the GitHub App on this repo.
+2. Add secrets `QA_APP_ID` and `QA_APP_PRIVATE_KEY` (PEM).
+3. Merge the workflow to the default branch (`issue_comment` workflows run from default).
+
+`@claude` comments from bots are ignored. The last `claude-work-pr-<number>` artifact is the previous case list.
+
 ## Calculator (GitHub Pages)
 
 React calculator site: https://dmitrylukyanov.github.io/SDLCAgents/

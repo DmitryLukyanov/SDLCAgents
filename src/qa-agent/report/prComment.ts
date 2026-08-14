@@ -1,19 +1,16 @@
 import * as github from "@actions/github";
+import { resolvePullNumber } from "../ingest/prContext";
 
 export async function postPrComment(
   token: string,
   body: string,
 ): Promise<void> {
-  const pullRequest = github.context.payload.pull_request;
-  if (!pullRequest) {
-    throw new Error("Not a pull_request event");
-  }
-
+  const issue_number = resolvePullNumber(github.context.payload);
   const octokit = github.getOctokit(token);
   await octokit.rest.issues.createComment({
     owner: github.context.repo.owner,
     repo: github.context.repo.repo,
-    issue_number: pullRequest.number,
+    issue_number,
     body,
   });
 }

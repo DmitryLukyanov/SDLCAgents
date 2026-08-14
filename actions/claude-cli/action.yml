@@ -19,6 +19,10 @@ inputs:
     description: If set, run repair prompt using these Ajv errors and the existing output-file
     required: false
     default: ""
+  human-comment:
+    description: If set, keep existing output-file cases and add cases from this PR comment
+    required: false
+    default: ""
 
 outputs:
   input-file:

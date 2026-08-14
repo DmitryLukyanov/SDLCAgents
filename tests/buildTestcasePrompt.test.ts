@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
+  buildAddPrompt,
   buildRepairPrompt,
   buildTestcasePrompt,
   loadPromptTemplate,
@@ -61,6 +62,30 @@ test("buildRepairPrompt fills repair template", () => {
 
   assert.match(prompt, /Validation errors/);
   assert.match(prompt, /allowed values/);
+  assert.match(prompt, /\{"cases":\[\]\}/);
+  assert.match(prompt, /PR #7: Fix login/);
+  assert.doesNotMatch(prompt, /\{\{[A-Z_]+\}\}/);
+});
+
+test("buildAddPrompt fills add template", () => {
+  const schemaJson = fs.readFileSync(
+    path.join(__dirname, "..", "schemas", "testcase.schema.json"),
+    "utf8",
+  );
+  const template = loadPromptTemplate(
+    path.join(__dirname, "..", "prompts", "testcase-add.txt"),
+  );
+
+  const prompt = buildAddPrompt(
+    template,
+    pr,
+    schemaJson,
+    "@claude add sin(270) is -1",
+    '{"cases":[]}',
+  );
+
+  assert.match(prompt, /Human comment/);
+  assert.match(prompt, /sin\(270\) is -1/);
   assert.match(prompt, /\{"cases":\[\]\}/);
   assert.match(prompt, /PR #7: Fix login/);
   assert.doesNotMatch(prompt, /\{\{[A-Z_]+\}\}/);
