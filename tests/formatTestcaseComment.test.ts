@@ -51,7 +51,7 @@ test("buildSummaryTableRows includes steps and before/after screenshots", () => 
       },
       { id: "ui-2", ok: true },
     ],
-    "https://example.test/shots",
+    "https://github.com/acme/app/blob/qa-screenshots/99",
   );
 
   assert.deepEqual(
@@ -64,11 +64,11 @@ test("buildSummaryTableRows includes steps and before/after screenshots", () => 
   assert.equal(rows[1][5].data, "FAIL: expected Welcome");
   assert.match(
     rows[1][6].data,
-    /<a href="https:\/\/example\.test\/shots\/ui-1-before\.png">ui-1-before\.png<\/a>/,
+    /<a href="https:\/\/github.com\/acme\/app\/blob\/qa-screenshots\/99\/ui-1-before\.png"><img src="https:\/\/github.com\/acme\/app\/raw\/qa-screenshots\/99\/ui-1-before\.png" alt="ui-1-before\.png" width="240" \/><\/a>/,
   );
   assert.match(
     rows[1][7].data,
-    /<a href="https:\/\/example\.test\/shots\/ui-1-after\.png">ui-1-after\.png<\/a>/,
+    /<a href="https:\/\/github.com\/acme\/app\/blob\/qa-screenshots\/99\/ui-1-after\.png"><img src="https:\/\/github.com\/acme\/app\/raw\/qa-screenshots\/99\/ui-1-after\.png" alt="ui-1-after\.png" width="240" \/><\/a>/,
   );
   assert.equal(rows[2][5].data, "PASS");
   assert.equal(rows[2][6].data, "—");

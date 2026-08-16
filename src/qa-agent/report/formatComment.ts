@@ -140,7 +140,8 @@ function screenshotCell(
   }
 
   const href = `${screenshotBaseUrl.replace(/\/$/, "")}/${encodeURIComponent(fileName)}`;
-  return `<a href="${href}">${escapeHtml(fileName)}</a>`;
+  const src = href.replace("/blob/", "/raw/");
+  return `<a href="${href}"><img src="${src}" alt="${escapeHtml(fileName)}" width="240" /></a>`;
 }
 
 function screenshotFileName(screenshotPath: string | undefined): string | undefined {
