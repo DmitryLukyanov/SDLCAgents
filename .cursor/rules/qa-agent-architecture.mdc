@@ -44,7 +44,7 @@ src/qa-agent/validate.ts
 src/qa-agent/run.ts
 src/qa-agent/publish.ts
 src/qa-agent/ingest/prContext.ts
-src/qa-agent/schemas/validateTestcase.ts
+src/qa-agent/schemas/ensureValidTestcase.ts
 src/qa-agent/runner/playwright.ts
 src/qa-agent/runner/httpChecks.ts
 src/qa-agent/report/prComment.ts

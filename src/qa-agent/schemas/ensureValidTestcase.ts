@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020";
 
-export type ValidateTestcaseResult =
+export type EnsureValidTestcaseResult =
   | { ok: true }
   | { ok: false; errors: string };
 
@@ -20,7 +20,9 @@ const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8")) as object;
 const ajv = new Ajv2020({ allErrors: true });
 const validate: ValidateFunction = ajv.compile(schema);
 
-export function validateTestcase(data: unknown): ValidateTestcaseResult {
+export function ensureValidTestcase(
+  data: unknown,
+): EnsureValidTestcaseResult {
   if (validate(data)) {
     return { ok: true };
   }

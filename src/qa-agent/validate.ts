@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import * as core from "@actions/core";
-import { validateTestcase } from "./schemas/validateTestcase";
+import { ensureValidTestcase } from "./schemas/ensureValidTestcase";
 
 export type ParsedClaudeOutput =
   | { ok: true; data: unknown }
@@ -29,7 +29,7 @@ export function validate(): void {
     return;
   }
 
-  const result = validateTestcase(parsed.data);
+  const result = ensureValidTestcase(parsed.data);
   if (!result.ok) {
     core.setOutput("valid", "false");
     core.setOutput("errors", result.errors);

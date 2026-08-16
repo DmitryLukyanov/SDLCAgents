@@ -7,7 +7,7 @@ import {
   type CommentRunResult,
 } from "./report/formatComment";
 import { postPrComment } from "./report/prComment";
-import { validateTestcase } from "./schemas/validateTestcase";
+import { ensureValidTestcase } from "./schemas/ensureValidTestcase";
 import { parseClaudeOutputFile } from "./validate";
 
 function screenshotBaseUrl(): string {
@@ -31,7 +31,7 @@ export async function publish(): Promise<void> {
     throw new Error(parsed.errors);
   }
 
-  const result = validateTestcase(parsed.data);
+  const result = ensureValidTestcase(parsed.data);
   if (!result.ok) {
     throw new Error(result.errors);
   }

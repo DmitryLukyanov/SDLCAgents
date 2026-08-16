@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import { runHttpCheck } from "./runner/httpChecks";
 import { runPlaywrightCase } from "./runner/playwright";
 import type { ApiCase, UiCase } from "./runner/types";
-import { validateTestcase } from "./schemas/validateTestcase";
+import { ensureValidTestcase } from "./schemas/ensureValidTestcase";
 import { parseClaudeOutputFile } from "./validate";
 
 const CASE_TIMEOUT_MS = 30_000;
@@ -81,7 +81,7 @@ export async function runP0(): Promise<void> {
     throw new Error(parsed.errors);
   }
 
-  const valid = validateTestcase(parsed.data);
+  const valid = ensureValidTestcase(parsed.data);
   if (!valid.ok) {
     throw new Error(valid.errors);
   }
