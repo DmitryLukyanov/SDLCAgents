@@ -48,10 +48,4 @@ GitHub Actions hears the comment. The job posts the QA result with the App token
 
 ## Calculator (GitHub Pages)
 
-React calculator site: https://dmitrylukyanov.github.io/SDLCAgents/
-
-```bash
-cd calculator
-npm install
-npm run dev
-```
+Site: https://dmitrylukyanov.github.io/SDLCAgents/

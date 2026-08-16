@@ -143,16 +143,11 @@ jobs:
           name: claude-work-pr-${{ env.PR_NUMBER }}
           path: claude-work
 
-      - name: Build calculator
-        working-directory: calculator
-        run: |
-          npm ci
-          npm run build
-
       - name: Start calculator preview
-        working-directory: calculator
         run: |
-          npx vite preview --host 127.0.0.1 --port 4173 &
+          mkdir -p /tmp/preview/SDLCAgents
+          cp calculator/index.html /tmp/preview/SDLCAgents/
+          python -m http.server 4173 --bind 127.0.0.1 --directory /tmp/preview &
           for i in $(seq 1 30); do
             if curl -fsS "http://127.0.0.1:4173/SDLCAgents/" >/dev/null; then
               exit 0
