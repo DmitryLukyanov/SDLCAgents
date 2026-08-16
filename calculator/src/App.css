@@ -1,0 +1,77 @@
+.page {
+  min-height: 100svh;
+  display: grid;
+  place-content: center;
+  gap: 20px;
+  padding: 24px;
+}
+
+.page h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
+.calculator {
+  width: min(100%, 360px);
+  padding: 20px;
+  border-radius: 28px;
+  background: #1c1f27;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.display {
+  display: block;
+  min-height: 84px;
+  margin-bottom: 16px;
+  padding: 16px 8px;
+  overflow: hidden;
+  text-align: right;
+  font-size: 56px;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  word-break: break-all;
+}
+
+.keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+button {
+  height: 72px;
+  border: 0;
+  border-radius: 999px;
+  background: #2c3140;
+  color: inherit;
+  font: inherit;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.12);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button.fn {
+  background: #a5aab8;
+  color: #1c1f27;
+}
+
+button.op {
+  background: #f59e0b;
+  color: #1c1f27;
+  font-weight: 600;
+}
+
+button.span-2 {
+  grid-column: span 2;
+}

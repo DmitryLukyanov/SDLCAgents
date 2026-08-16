@@ -1,0 +1,22 @@
+---
+description: QA Agent exit codes and secrets handling
+alwaysApply: true
+---
+
+# QA Agent — Flow exit & security
+
+## Flow
+
+One path on every PR: prepare Claude input → Claude CLI Action → validate (+1 repair via second Claude CLI Action step) → run P0 → PR comment. Fail the job if any P0 fails.
+
+## Artifacts
+
+- Always save Claude CLI Action **input** and **output** as artifacts.
+- Always save runner screenshots/logs as artifacts.
+
+## Security & config
+
+- Secrets only from GitHub Secrets; never hardcode keys.
+- Pass `ANTHROPIC_API_KEY` only into the Claude CLI Action step.
+- Require `base-url` (`STAGING_URL`) for runs.
+- Do not log secrets or full unredacted Claude output.

@@ -1,0 +1,11 @@
+---
+description: Keep implementation simplest — no unasked fallbacks or complexity
+alwaysApply: true
+---
+
+# Simplicity
+
+- Write the simplest code that meets the current step. Prefer boring, explicit, minimal.
+- Do **not** add fallbacks, retries, defaults, feature flags, or abstractions that were not asked for.
+- Do **not** “future-proof” or add optional paths for unstated cases.
+- If something seems to require a complex approach, **stop and ask** before implementing it.

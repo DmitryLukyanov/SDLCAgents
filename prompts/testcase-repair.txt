@@ -1,0 +1,18 @@
+Fix the QA testcases JSON so it conforms to the JSON Schema.
+Reply with JSON only. No markdown. No explanation.
+The JSON must conform to this JSON Schema:
+{{SCHEMA_JSON}}
+
+Validation errors:
+{{VALIDATION_ERRORS}}
+
+Previous JSON:
+{{PREVIOUS_JSON}}
+
+PR #{{PR_NUMBER}}: {{PR_TITLE}}
+
+Description:
+{{PR_BODY}}
+
+Changed files:
+{{CHANGED_FILES}}
