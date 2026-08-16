@@ -5,9 +5,7 @@
   "description": "QA Agent and Claude CLI GitHub Actions",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && tsc -p tests && node --test ./dist-tests/*.test.js",
-    "start:qa-agent": "node dist/qa-agent/index.js",
-    "start:claude-cli": "node dist/claude-cli/index.js"
+    "test": "npm run build && tsc -p tests && node --test ./dist-tests/*.test.js"
   },
   "engines": {
     "node": ">=22"

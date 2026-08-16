@@ -11,21 +11,13 @@ type CommentCase = {
 export type CommentRunResult = {
   id: string;
   ok: boolean;
-  skipped?: boolean;
   error?: string;
   screenshotBefore?: string;
   screenshotAfter?: string;
 };
 
 function getCases(data: unknown): CommentCase[] {
-  if (
-    data &&
-    typeof data === "object" &&
-    Array.isArray((data as { cases?: unknown }).cases)
-  ) {
-    return (data as { cases: CommentCase[] }).cases;
-  }
-  return [];
+  return (data as { cases: CommentCase[] }).cases;
 }
 
 export function formatTestcaseComment(
@@ -55,9 +47,6 @@ function formatRunSuffix(result: CommentRunResult | undefined): string {
   if (!result) {
     return "";
   }
-  if (result.skipped) {
-    return " — skipped";
-  }
   if (result.ok) {
     return " — PASS";
   }
@@ -67,9 +56,6 @@ function formatRunSuffix(result: CommentRunResult | undefined): string {
 function formatResult(result: CommentRunResult | undefined): string {
   if (!result) {
     return "";
-  }
-  if (result.skipped) {
-    return "skipped";
   }
   if (result.ok) {
     return "PASS";
@@ -147,9 +133,9 @@ function formatSteps(testCase: CommentCase): string {
 
 function screenshotCell(
   fileName: string | undefined,
-  screenshotBaseUrl?: string,
+  screenshotBaseUrl: string,
 ): string {
-  if (!screenshotBaseUrl || !fileName) {
+  if (!fileName) {
     return "—";
   }
 
@@ -172,7 +158,7 @@ export type SummaryTableCell = {
 export function buildSummaryTableRows(
   data: unknown,
   runResults: CommentRunResult[],
-  screenshotBaseUrl?: string,
+  screenshotBaseUrl: string,
 ): SummaryTableCell[][] {
   const cases = getCases(data);
   const resultById = new Map(runResults.map((result) => [result.id, result]));

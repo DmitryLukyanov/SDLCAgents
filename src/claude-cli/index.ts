@@ -31,9 +31,7 @@ async function run(): Promise<void> {
     const template = loadPromptTemplate(
       path.join(repoRoot, "prompts", "testcase-add.txt"),
     );
-    const previousJson = fs.existsSync(outputFile)
-      ? fs.readFileSync(outputFile, "utf8")
-      : '{"cases":[]}';
+    const previousJson = fs.readFileSync(outputFile, "utf8");
     prompt = buildAddPrompt(
       template,
       pr,

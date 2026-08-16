@@ -79,9 +79,7 @@ test("runP0Cases runs all priorities", async () => {
     });
 
     assert.equal(results[0]?.ok, true);
-    assert.equal(results[0]?.skipped, false);
     assert.equal(results[1]?.ok, true);
-    assert.equal(results[1]?.skipped, false);
     assert.equal(results[2]?.ok, false);
     assert.equal(hasFailedCase(results), true);
   } finally {

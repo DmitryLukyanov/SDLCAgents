@@ -49,7 +49,7 @@ jobs:
       - name: Prepare PR context
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
           step: prepare
           pr-context-file: claude-work/pr-context.json
 
@@ -59,19 +59,19 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           mkdir -p claude-work
-          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=claude-work-pr-${PR_NUMBER}&per_page=1" --jq '.artifacts[0].id // empty')
-          if [ -z "$id" ]; then
-            echo '{"cases":[]}' > claude-work/output.json
-            exit 0
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=claude-work-pr-${PR_NUMBER}&per_page=1" --jq '.artifacts[0].id')
+          if [ "$id" = "null" ] || [ -z "$id" ]; then
+            echo "Previous claude-work-pr-${PR_NUMBER} artifact not found"
+            exit 1
           fi
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/claude-work.zip
           unzip -o /tmp/claude-work.zip -d /tmp/prev
           found=$(find /tmp/prev -name output.json | head -n 1)
-          if [ -n "$found" ]; then
-            cp "$found" claude-work/output.json
-          else
-            echo '{"cases":[]}' > claude-work/output.json
+          if [ -z "$found" ]; then
+            echo "output.json missing from previous artifact"
+            exit 1
           fi
+          cp "$found" claude-work/output.json
 
       - name: Generate testcases
         if: github.event_name != 'issue_comment'
@@ -93,20 +93,28 @@ jobs:
           human-comment: ${{ github.event.comment.body }}
 
       - name: Upload Claude generate artifacts
+        if: github.event_name != 'issue_comment'
         uses: actions/upload-artifact@v4
         with:
           name: claude-generate
           path: |
             claude-work/input.txt
+            claude-work/output.json
+
+      - name: Upload Claude add artifacts
+        if: github.event_name == 'issue_comment'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-generate
+          path: |
             claude-work/input-add.txt
             claude-work/output.json
-          if-no-files-found: ignore
 
       - name: Validate testcases
         id: validate
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
           step: validate
           claude-output-file: claude-work/output.json
 
@@ -157,7 +165,7 @@ jobs:
       - name: Run testcases
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
           step: run
           claude-output-file: claude-work/output.json
           results-file: claude-work/results.json
@@ -207,7 +215,7 @@ jobs:
       - name: Publish comment
         uses: ./actions/qa-agent
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
           step: publish
           claude-output-file: claude-work/output.json
           results-file: claude-work/results.json

@@ -10,11 +10,11 @@ import { postPrComment } from "./report/prComment";
 import { validateTestcase } from "./schemas/validateTestcase";
 import { parseClaudeOutputFile } from "./validate";
 
-function screenshotBaseUrl(): string | undefined {
+function screenshotBaseUrl(): string {
   const repo = process.env.GITHUB_REPOSITORY;
   const runId = process.env.GITHUB_RUN_ID;
   if (!repo || !runId) {
-    return undefined;
+    throw new Error("GITHUB_REPOSITORY and GITHUB_RUN_ID are required");
   }
   return `https://raw.githubusercontent.com/${repo}/qa-screenshots/${runId}`;
 }

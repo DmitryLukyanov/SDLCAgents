@@ -29,13 +29,13 @@ const cases = {
 
 test("formatTestcaseComment lists run results", () => {
   const body = formatTestcaseComment(cases, [
-    { id: "ui-1", ok: false, skipped: false, error: "expected Welcome" },
-    { id: "ui-2", ok: true, skipped: true },
+    { id: "ui-1", ok: false, error: "expected Welcome" },
+    { id: "ui-2", ok: true },
   ]);
 
   assert.match(body, /qa-agent-report/);
   assert.match(body, /\*\*ui-1\*\* \(P0, ui\): Home loads — FAIL: expected Welcome/);
-  assert.match(body, /\*\*ui-2\*\* \(P1, ui\): Extra check — skipped/);
+  assert.match(body, /\*\*ui-2\*\* \(P1, ui\): Extra check — PASS/);
 });
 
 test("buildSummaryTableRows includes steps and before/after screenshots", () => {
@@ -45,12 +45,11 @@ test("buildSummaryTableRows includes steps and before/after screenshots", () => 
       {
         id: "ui-1",
         ok: false,
-        skipped: false,
         error: "expected Welcome",
         screenshotBefore: "claude-work/screenshots/ui-1-before.png",
         screenshotAfter: "claude-work/screenshots/ui-1-after.png",
       },
-      { id: "ui-2", ok: true, skipped: true },
+      { id: "ui-2", ok: true },
     ],
     "https://example.test/shots",
   );
@@ -71,7 +70,7 @@ test("buildSummaryTableRows includes steps and before/after screenshots", () => 
     rows[1][7].data,
     /<img src="https:\/\/example\.test\/shots\/ui-1-after\.png"/,
   );
-  assert.equal(rows[2][5].data, "skipped");
+  assert.equal(rows[2][5].data, "PASS");
   assert.equal(rows[2][6].data, "—");
   assert.equal(rows[2][7].data, "—");
 });

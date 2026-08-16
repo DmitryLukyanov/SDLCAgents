@@ -12,7 +12,6 @@ const CASE_TIMEOUT_MS = 30_000;
 export type CaseRunResult = {
   id: string;
   ok: boolean;
-  skipped: boolean;
   error?: string;
   screenshotBefore?: string;
   screenshotAfter?: string;
@@ -43,7 +42,6 @@ export async function runP0Cases(
       results.push({
         id: testCase.id,
         ok: result.ok,
-        skipped: false,
         error: result.ok ? undefined : result.error,
         screenshotBefore: result.screenshotBefore,
         screenshotAfter: result.screenshotAfter,
@@ -58,7 +56,6 @@ export async function runP0Cases(
     results.push({
       id: testCase.id,
       ok: result.ok,
-      skipped: false,
       error: result.ok ? undefined : result.error,
     });
   }
@@ -66,10 +63,8 @@ export async function runP0Cases(
   return results;
 }
 
-export function hasFailedCase(
-  results: Array<{ ok: boolean; skipped?: boolean }>,
-): boolean {
-  return results.some((result) => !result.skipped && !result.ok);
+export function hasFailedCase(results: Array<{ ok: boolean }>): boolean {
+  return results.some((result) => !result.ok);
 }
 
 export async function runP0(): Promise<void> {
@@ -103,9 +98,6 @@ export async function runP0(): Promise<void> {
   });
 
   const logLines = results.map((result) => {
-    if (result.skipped) {
-      return `${result.id}: skipped`;
-    }
     if (result.ok) {
       return `${result.id}: pass`;
     }
