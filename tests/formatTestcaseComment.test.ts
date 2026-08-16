@@ -64,11 +64,11 @@ test("buildSummaryTableRows includes steps and before/after screenshots", () => 
   assert.equal(rows[1][5].data, "FAIL: expected Welcome");
   assert.match(
     rows[1][6].data,
-    /<img src="https:\/\/example\.test\/shots\/ui-1-before\.png"/,
+    /<a href="https:\/\/example\.test\/shots\/ui-1-before\.png">ui-1-before\.png<\/a>/,
   );
   assert.match(
     rows[1][7].data,
-    /<img src="https:\/\/example\.test\/shots\/ui-1-after\.png"/,
+    /<a href="https:\/\/example\.test\/shots\/ui-1-after\.png">ui-1-after\.png<\/a>/,
   );
   assert.equal(rows[2][5].data, "PASS");
   assert.equal(rows[2][6].data, "—");

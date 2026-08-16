@@ -16,7 +16,7 @@ function screenshotBaseUrl(): string {
   if (!repo || !runId) {
     throw new Error("GITHUB_REPOSITORY and GITHUB_RUN_ID are required");
   }
-  return `https://raw.githubusercontent.com/${repo}/qa-screenshots/${runId}`;
+  return `https://github.com/${repo}/blob/qa-screenshots/${runId}`;
 }
 
 export async function publish(): Promise<void> {
