@@ -44,7 +44,7 @@ GitHub Actions hears the comment. The job posts the QA result with the App token
 2. Add secrets `QA_APP_ID` and `QA_APP_PRIVATE_KEY` (PEM).
 3. Merge the workflow to the default branch (`issue_comment` workflows run from default).
 
-`@claude` comments from bots are ignored. The last `claude-work-pr-<number>` artifact is the previous case list.
+`@claude` comments from bots are ignored. The last `githubaction-workspace-pr-<number>` artifact is the previous case list.
 
 ## Calculator (GitHub Pages)
 

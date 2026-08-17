@@ -51,44 +51,44 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: prepare
-          pr-context-file: claude-work/pr-context.json
+          pr-context-file: githubaction-workspace/pr-context.json
 
       - name: Download previous cases
         if: github.event_name == 'issue_comment'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          mkdir -p claude-work
-          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=claude-work-pr-${PR_NUMBER}&per_page=1" --jq '.artifacts[0].id')
+          mkdir -p githubaction-workspace
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=githubaction-workspace-pr-${PR_NUMBER}&per_page=1" --jq '.artifacts[0].id')
           if [ "$id" = "null" ] || [ -z "$id" ]; then
-            echo "Previous claude-work-pr-${PR_NUMBER} artifact not found"
+            echo "Previous githubaction-workspace-pr-${PR_NUMBER} artifact not found"
             exit 1
           fi
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/claude-work.zip
-          unzip -o /tmp/claude-work.zip -d /tmp/prev
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/githubaction-workspace.zip
+          unzip -o /tmp/githubaction-workspace.zip -d /tmp/prev
           found=$(find /tmp/prev -name output.json | head -n 1)
           if [ -z "$found" ]; then
             echo "output.json missing from previous artifact"
             exit 1
           fi
-          cp "$found" claude-work/output.json
+          cp "$found" githubaction-workspace/output.json
 
       - name: Generate testcases
         if: github.event_name != 'issue_comment'
         uses: ./actions/claude-cli
         with:
-          pr-context-file: claude-work/pr-context.json
-          input-file: claude-work/input.txt
-          output-file: claude-work/output.json
+          pr-context-file: githubaction-workspace/pr-context.json
+          input-file: githubaction-workspace/input.txt
+          output-file: githubaction-workspace/output.json
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Add testcases from @claude comment
         if: github.event_name == 'issue_comment'
         uses: ./actions/claude-cli
         with:
-          pr-context-file: claude-work/pr-context.json
-          input-file: claude-work/input-add.txt
-          output-file: claude-work/output.json
+          pr-context-file: githubaction-workspace/pr-context.json
+          input-file: githubaction-workspace/input-add.txt
+          output-file: githubaction-workspace/output.json
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           human-comment: ${{ github.event.comment.body }}
 
@@ -98,8 +98,8 @@ jobs:
         with:
           name: claude-generate
           path: |
-            claude-work/input.txt
-            claude-work/output.json
+            githubaction-workspace/input.txt
+            githubaction-workspace/output.json
 
       - name: Upload Claude add artifacts
         if: github.event_name == 'issue_comment'
@@ -107,8 +107,8 @@ jobs:
         with:
           name: claude-generate
           path: |
-            claude-work/input-add.txt
-            claude-work/output.json
+            githubaction-workspace/input-add.txt
+            githubaction-workspace/output.json
 
       - name: Validate testcases
         id: validate
@@ -116,15 +116,15 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: validate
-          claude-output-file: claude-work/output.json
+          claude-output-file: githubaction-workspace/output.json
 
       - name: Repair testcases
         if: steps.validate.outputs.valid == 'false'
         uses: ./actions/claude-cli
         with:
-          pr-context-file: claude-work/pr-context.json
-          input-file: claude-work/input-repair.txt
-          output-file: claude-work/output.json
+          pr-context-file: githubaction-workspace/pr-context.json
+          input-file: githubaction-workspace/input-repair.txt
+          output-file: githubaction-workspace/output.json
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           validation-errors: ${{ steps.validate.outputs.errors }}
 
@@ -134,14 +134,14 @@ jobs:
         with:
           name: claude-repair
           path: |
-            claude-work/input-repair.txt
-            claude-work/output.json
+            githubaction-workspace/input-repair.txt
+            githubaction-workspace/output.json
 
-      - name: Upload Claude work
+      - name: Upload githubaction-workspace
         uses: actions/upload-artifact@v4
         with:
-          name: claude-work-pr-${{ env.PR_NUMBER }}
-          path: claude-work
+          name: githubaction-workspace-pr-${{ env.PR_NUMBER }}
+          path: githubaction-workspace
 
       - name: Start calculator preview
         run: |
@@ -162,10 +162,10 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: run
-          claude-output-file: claude-work/output.json
-          results-file: claude-work/results.json
-          screenshot-dir: claude-work/screenshots
-          log-file: claude-work/run.log
+          claude-output-file: githubaction-workspace/output.json
+          results-file: githubaction-workspace/results.json
+          screenshot-dir: githubaction-workspace/screenshots
+          log-file: githubaction-workspace/run.log
           base-url: ${{ vars.STAGING_URL }}
 
       - name: Upload runner artifacts
@@ -173,9 +173,9 @@ jobs:
         with:
           name: runner-results
           path: |
-            claude-work/results.json
-            claude-work/run.log
-            claude-work/screenshots
+            githubaction-workspace/results.json
+            githubaction-workspace/run.log
+            githubaction-workspace/screenshots
 
       - name: Publish screenshots for summary
         if: always()
@@ -184,7 +184,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          pngs=("$GITHUB_WORKSPACE"/claude-work/screenshots/*.png)
+          pngs=("$GITHUB_WORKSPACE"/githubaction-workspace/screenshots/*.png)
           if [ ${#pngs[@]} -eq 0 ]; then
             echo "No screenshots to publish"
             exit 0
@@ -212,5 +212,5 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: publish
-          claude-output-file: claude-work/output.json
-          results-file: claude-work/results.json
+          claude-output-file: githubaction-workspace/output.json
+          results-file: githubaction-workspace/results.json
