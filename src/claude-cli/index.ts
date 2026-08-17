@@ -19,6 +19,7 @@ async function run(): Promise<void> {
   const humanComment = core.getInput("human-comment");
 
   const repoRoot = path.join(__dirname, "..", "..");
+  const promptsDir = path.join(repoRoot, "actions", "claude-cli", "prompts");
   const schemaPath = path.join(repoRoot, "schemas", "testcase.schema.json");
   const schemaJson = fs.readFileSync(schemaPath, "utf8");
 
@@ -29,7 +30,7 @@ async function run(): Promise<void> {
   let prompt: string;
   if (humanComment.length > 0) {
     const template = loadPromptTemplate(
-      path.join(repoRoot, "prompts", "testcase-add.txt"),
+      path.join(promptsDir, "testcase-add.txt"),
     );
     const previousJson = fs.readFileSync(outputFile, "utf8");
     prompt = buildAddPrompt(
@@ -41,7 +42,7 @@ async function run(): Promise<void> {
     );
   } else if (validationErrors.length > 0) {
     const template = loadPromptTemplate(
-      path.join(repoRoot, "prompts", "testcase-repair.txt"),
+      path.join(promptsDir, "testcase-repair.txt"),
     );
     const previousJson = fs.readFileSync(outputFile, "utf8");
     prompt = buildRepairPrompt(
@@ -53,7 +54,7 @@ async function run(): Promise<void> {
     );
   } else {
     const template = loadPromptTemplate(
-      path.join(repoRoot, "prompts", "testcase-generation.txt"),
+      path.join(promptsDir, "testcase-generation.txt"),
     );
     prompt = buildTestcasePrompt(template, pr, schemaJson);
   }

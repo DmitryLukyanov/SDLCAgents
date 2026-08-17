@@ -25,8 +25,8 @@ npm run build
 
 - `actions/qa-agent` — prepare, validate, run, publish
 - `actions/claude-cli` — readonly Claude Code CLI (inner job step)
+- `actions/claude-cli/prompts/` — generation, repair, and add templates
 - `schemas/testcase.schema.json` — testcase contract
-- `prompts/` — generation, repair, and add templates
 
 Claude input/output, screenshots, and logs are uploaded as job artifacts.
 

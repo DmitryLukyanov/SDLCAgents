@@ -28,7 +28,7 @@ test("buildTestcasePrompt fills generation template", () => {
     "utf8",
   );
   const template = loadPromptTemplate(
-    path.join(__dirname, "..", "prompts", "testcase-generation.txt"),
+    path.join(__dirname, "..", "actions", "claude-cli", "prompts", "testcase-generation.txt"),
   );
 
   const prompt = buildTestcasePrompt(template, pr, schemaJson);
@@ -49,7 +49,7 @@ test("buildRepairPrompt fills repair template", () => {
     "utf8",
   );
   const template = loadPromptTemplate(
-    path.join(__dirname, "..", "prompts", "testcase-repair.txt"),
+    path.join(__dirname, "..", "actions", "claude-cli", "prompts", "testcase-repair.txt"),
   );
 
   const prompt = buildRepairPrompt(
@@ -73,7 +73,7 @@ test("buildAddPrompt fills add template", () => {
     "utf8",
   );
   const template = loadPromptTemplate(
-    path.join(__dirname, "..", "prompts", "testcase-add.txt"),
+    path.join(__dirname, "..", "actions", "claude-cli", "prompts", "testcase-add.txt"),
   );
 
   const prompt = buildAddPrompt(
