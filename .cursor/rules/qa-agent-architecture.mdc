@@ -24,7 +24,7 @@ Implement the control flow in `qa-agent-flow.mdc` (Mermaid sequence). That diagr
 ## Source layout
 
 - All application code lives under `src/` (split by Action: e.g. `src/qa-agent/`, `src/claude-cli/`).
-- All unit tests live under the root `tests/` folder (not under `src/`).
+- All unit tests live under the root `tests/` folder (not under `src/`). Test-only files (fixtures, etc.) live there too.
 - All prompts and templates live under the root `prompts/` folder as text files (not inline strings in TypeScript).
 - Each Action’s `action.yml` runs the compiled output of its own `src/` tree (`dist/`). No parallel implementations outside `src/`.
 - Keep shared contracts at repo root: `schemas/`, `prompts/`, `package.json`, `tsconfig.json` as needed.
@@ -36,7 +36,6 @@ actions/qa-agent/action.yml
 actions/claude-cli/action.yml
 schemas/testcase.schema.json
 prompts/
-fixtures/
 tests/
 src/qa-agent/index.ts
 src/qa-agent/prepare.ts

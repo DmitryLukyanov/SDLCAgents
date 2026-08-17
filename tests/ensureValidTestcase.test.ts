@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { ensureValidTestcase } from "../dist/qa-agent/schemas/ensureValidTestcase";
 
-const fixturesDir = path.join(__dirname, "..", "fixtures");
+const fixturesDir = path.join(__dirname, "..", "tests", "fixtures");
 
 function readFixture(name: string): unknown {
   const raw = fs.readFileSync(path.join(fixturesDir, name), "utf8");
