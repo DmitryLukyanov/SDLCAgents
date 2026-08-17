@@ -1,0 +1,13 @@
+---
+description: Playwright and HTTP check runner constraints
+globs: src/qa-agent/runner/**
+alwaysApply: false
+---
+
+# QA Agent — Runners
+
+- Typed runners only: map validated JSON to an allowlisted step set. Never `eval` or run arbitrary LLM-generated code.
+- UI → Playwright (Chromium); API → our HTTP checks module.
+- Execute every generated case (P0, P1, and P2).
+- Every case has a timeout. Persist screenshots and logs as Action artifacts.
+- Runners live under `src/qa-agent/runner/` and are invoked only from the QA Agent Action.

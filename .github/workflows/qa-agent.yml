@@ -1,0 +1,216 @@
+name: QA Agent
+
+on:
+  pull_request:
+  issue_comment:
+    types: [created]
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+
+jobs:
+  qa-agent:
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       github.event.comment.user.type != 'Bot' &&
+       contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number) }}
+
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.QA_APP_ID }}
+          private-key: ${{ secrets.QA_APP_PRIVATE_KEY }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare PR context
+        uses: ./src/qa-agent
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          step: prepare
+          pr-context-file: githubaction-workspace/pr-context.json
+
+      - name: Download previous cases
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          mkdir -p githubaction-workspace
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=githubaction-workspace-pr-${PR_NUMBER}&per_page=1" --jq '.artifacts[0].id')
+          if [ "$id" = "null" ] || [ -z "$id" ]; then
+            echo "Previous githubaction-workspace-pr-${PR_NUMBER} artifact not found"
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/githubaction-workspace.zip
+          unzip -o /tmp/githubaction-workspace.zip -d /tmp/prev
+          found=$(find /tmp/prev -name output.json | head -n 1)
+          if [ -z "$found" ]; then
+            echo "output.json missing from previous artifact"
+            exit 1
+          fi
+          cp "$found" githubaction-workspace/output.json
+
+      - name: Generate testcases
+        if: github.event_name != 'issue_comment'
+        uses: ./src/claude-cli
+        with:
+          pr-context-file: githubaction-workspace/pr-context.json
+          input-file: githubaction-workspace/input.txt
+          output-file: githubaction-workspace/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Add testcases from @claude comment
+        if: github.event_name == 'issue_comment'
+        uses: ./src/claude-cli
+        with:
+          pr-context-file: githubaction-workspace/pr-context.json
+          input-file: githubaction-workspace/input-add.txt
+          output-file: githubaction-workspace/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          human-comment: ${{ github.event.comment.body }}
+
+      - name: Upload Claude generate artifacts
+        if: github.event_name != 'issue_comment'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-generate
+          path: |
+            githubaction-workspace/input.txt
+            githubaction-workspace/output.json
+
+      - name: Upload Claude add artifacts
+        if: github.event_name == 'issue_comment'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-generate
+          path: |
+            githubaction-workspace/input-add.txt
+            githubaction-workspace/output.json
+
+      - name: Validate testcases
+        id: validate
+        uses: ./src/qa-agent
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          step: validate
+          claude-output-file: githubaction-workspace/output.json
+
+      - name: Repair testcases
+        if: steps.validate.outputs.valid == 'false'
+        uses: ./src/claude-cli
+        with:
+          pr-context-file: githubaction-workspace/pr-context.json
+          input-file: githubaction-workspace/input-repair.txt
+          output-file: githubaction-workspace/output.json
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          validation-errors: ${{ steps.validate.outputs.errors }}
+
+      - name: Upload Claude repair artifacts
+        if: steps.validate.outputs.valid == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-repair
+          path: |
+            githubaction-workspace/input-repair.txt
+            githubaction-workspace/output.json
+
+      - name: Upload githubaction-workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: githubaction-workspace-pr-${{ env.PR_NUMBER }}
+          path: githubaction-workspace
+
+      - name: Start calculator preview
+        run: |
+          mkdir -p /tmp/preview/SDLCAgents
+          cp calculator/index.html /tmp/preview/SDLCAgents/
+          python -m http.server 4173 --bind 127.0.0.1 --directory /tmp/preview &
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:4173/SDLCAgents/" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "calculator preview did not start"
+          exit 1
+
+      - name: Run testcases
+        uses: ./src/qa-agent
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          step: run
+          claude-output-file: githubaction-workspace/output.json
+          results-file: githubaction-workspace/results.json
+          screenshot-dir: githubaction-workspace/screenshots
+          log-file: githubaction-workspace/run.log
+          base-url: ${{ vars.STAGING_URL }}
+
+      - name: Upload runner artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-results
+          path: |
+            githubaction-workspace/results.json
+            githubaction-workspace/run.log
+            githubaction-workspace/screenshots
+
+      - name: Publish screenshots for summary
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          pngs=("$GITHUB_WORKSPACE"/githubaction-workspace/screenshots/*.png)
+          if [ ${#pngs[@]} -eq 0 ]; then
+            echo "No screenshots to publish"
+            exit 0
+          fi
+          workdir="$(mktemp -d)"
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init "$workdir"
+          cd "$workdir"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "$remote"
+          if git fetch --depth 1 origin qa-screenshots; then
+            git checkout -b qa-screenshots FETCH_HEAD
+          else
+            git checkout --orphan qa-screenshots
+          fi
+          mkdir -p "$GITHUB_RUN_ID"
+          cp "${pngs[@]}" "$GITHUB_RUN_ID/"
+          git add "$GITHUB_RUN_ID"
+          git commit -m "QA screenshots for run ${GITHUB_RUN_ID}"
+          git push origin HEAD:qa-screenshots
+
+      - name: Publish comment
+        uses: ./src/qa-agent
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          step: publish
+          claude-output-file: githubaction-workspace/output.json
+          results-file: githubaction-workspace/results.json

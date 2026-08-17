@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdlcagents.local/schemas/testcase.schema.json",
+  "title": "QA Agent Testcases",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cases"],
+  "properties": {
+    "cases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/testCase" }
+    }
+  },
+  "$defs": {
+    "testCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "priority", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "priority": { "type": "string", "enum": ["P0", "P1", "P2"] },
+        "type": { "type": "string", "enum": ["ui", "api"] },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/uiStep" }
+        },
+        "request": { "$ref": "#/$defs/apiRequest" },
+        "asserts": { "$ref": "#/$defs/apiAsserts" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "ui" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["steps"],
+            "properties": {
+              "request": false,
+              "asserts": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "api" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["request", "asserts"],
+            "properties": {
+              "steps": false
+            }
+          }
+        }
+      ]
+    },
+    "uiStep": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "url"],
+          "properties": {
+            "action": { "const": "goto" },
+            "url": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "selector"],
+          "properties": {
+            "action": { "const": "click" },
+            "selector": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "selector", "value"],
+          "properties": {
+            "action": { "const": "fill" },
+            "selector": { "type": "string", "minLength": 1 },
+            "value": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "text"],
+          "properties": {
+            "action": { "const": "expectText" },
+            "text": { "type": "string" },
+            "selector": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "url"],
+          "properties": {
+            "action": { "const": "expectUrl" },
+            "url": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "apiRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "path"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+        },
+        "path": { "type": "string", "minLength": 1 },
+        "body": {}
+      }
+    },
+    "apiAsserts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "integer" },
+        "bodyContains": { "type": "string" }
+      }
+    }
+  }
+}

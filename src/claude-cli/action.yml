@@ -1,0 +1,35 @@
+name: Claude CLI
+description: Runs Claude Code CLI for readonly testcase generation
+author: SDLCAgents
+
+inputs:
+  pr-context-file:
+    description: Path to PR context JSON used to build the Claude prompt
+    required: true
+  input-file:
+    description: Path where the built Claude prompt will be written (upload as artifact)
+    required: true
+  output-file:
+    description: Path where Claude result text will be written (upload as artifact)
+    required: true
+  anthropic-api-key:
+    description: Anthropic API key for Claude Code CLI
+    required: true
+  validation-errors:
+    description: If set, run repair prompt using these Ajv errors and the existing output-file
+    required: false
+    default: ""
+  human-comment:
+    description: If set, keep existing output-file cases and add cases from this PR comment
+    required: false
+    default: ""
+
+outputs:
+  input-file:
+    description: Path to the written Claude prompt file
+  output-file:
+    description: Path to the written Claude result file
+
+runs:
+  using: node20
+  main: ../../dist/claude-cli/index.js
