@@ -47,7 +47,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Prepare PR context
-        uses: ./actions/qa-agent
+        uses: ./src/qa-agent
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: prepare
@@ -75,7 +75,7 @@ jobs:
 
       - name: Generate testcases
         if: github.event_name != 'issue_comment'
-        uses: ./actions/claude-cli
+        uses: ./src/claude-cli
         with:
           pr-context-file: githubaction-workspace/pr-context.json
           input-file: githubaction-workspace/input.txt
@@ -84,7 +84,7 @@ jobs:
 
       - name: Add testcases from @claude comment
         if: github.event_name == 'issue_comment'
-        uses: ./actions/claude-cli
+        uses: ./src/claude-cli
         with:
           pr-context-file: githubaction-workspace/pr-context.json
           input-file: githubaction-workspace/input-add.txt
@@ -112,7 +112,7 @@ jobs:
 
       - name: Validate testcases
         id: validate
-        uses: ./actions/qa-agent
+        uses: ./src/qa-agent
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: validate
@@ -120,7 +120,7 @@ jobs:
 
       - name: Repair testcases
         if: steps.validate.outputs.valid == 'false'
-        uses: ./actions/claude-cli
+        uses: ./src/claude-cli
         with:
           pr-context-file: githubaction-workspace/pr-context.json
           input-file: githubaction-workspace/input-repair.txt
@@ -158,7 +158,7 @@ jobs:
           exit 1
 
       - name: Run testcases
-        uses: ./actions/qa-agent
+        uses: ./src/qa-agent
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: run
@@ -208,7 +208,7 @@ jobs:
           git push origin HEAD:qa-screenshots
 
       - name: Publish comment
-        uses: ./actions/qa-agent
+        uses: ./src/qa-agent
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           step: publish

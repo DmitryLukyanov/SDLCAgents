@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolvePullNumber } from "../dist/qa-agent/ingest/prContext";
+import { resolvePullNumber } from "../../../dist/qa-agent/ingest/prContext";
 
 test("resolvePullNumber reads pull_request events", () => {
   assert.equal(resolvePullNumber({ pull_request: { number: 101 } }), 101);

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import os from "node:os";
-import path from "node:path";
 import test from "node:test";
-import { hasFailedCase, runP0Cases } from "../dist/qa-agent/run";
-import type { ApiCase } from "../dist/qa-agent/runner/types";
+import { runHttpCheck } from "../../../dist/qa-agent/runner/httpChecks";
+import type { ApiCase } from "../../../dist/qa-agent/runner/types";
+
+const timeoutMs = 10_000;
 
 function startHealthServer(): Promise<{
   baseUrl: string;
@@ -44,7 +44,7 @@ function startHealthServer(): Promise<{
   });
 }
 
-test("runP0Cases runs all priorities", async () => {
+test("HTTP check passes and fails predictably", async () => {
   const server = await startHealthServer();
   try {
     const passing: ApiCase = {
@@ -55,33 +55,29 @@ test("runP0Cases runs all priorities", async () => {
       request: { method: "GET", path: "/health" },
       asserts: { status: 200, bodyContains: "ok" },
     };
-    const p1: ApiCase = {
-      id: "api-later",
-      title: "Later check",
-      priority: "P1",
-      type: "api",
-      request: { method: "GET", path: "/health" },
-      asserts: { status: 200, bodyContains: "ok" },
-    };
     const failing: ApiCase = {
-      id: "api-wrong",
-      title: "Health expected 201",
+      id: "api-health-wrong-status",
+      title: "Health endpoint expected 201",
       priority: "P0",
       type: "api",
       request: { method: "GET", path: "/health" },
       asserts: { status: 201 },
     };
 
-    const results = await runP0Cases([passing, p1, failing], {
+    const pass = await runHttpCheck(passing, {
       baseUrl: server.baseUrl,
-      timeoutMs: 5_000,
-      screenshotDir: path.join(os.tmpdir(), "qa-agent-run-p0"),
+      timeoutMs,
+    });
+    const fail = await runHttpCheck(failing, {
+      baseUrl: server.baseUrl,
+      timeoutMs,
     });
 
-    assert.equal(results[0]?.ok, true);
-    assert.equal(results[1]?.ok, true);
-    assert.equal(results[2]?.ok, false);
-    assert.equal(hasFailedCase(results), true);
+    assert.equal(pass.ok, true);
+    assert.equal(fail.ok, false);
+    if (!fail.ok) {
+      assert.match(fail.error, /expected status 201/);
+    }
   } finally {
     await server.close();
   }

@@ -1,6 +1,6 @@
 ---
 description: Dedicated Claude CLI GitHub Action — invocation, I/O, artifacts
-globs: src/claude-cli/**,actions/claude-cli/**
+globs: src/claude-cli/**
 alwaysApply: true
 ---
 
@@ -22,7 +22,7 @@ alwaysApply: true
 
 - Use Claude Code CLI inside that Action only, e.g. `claude --print --output-format json`.
 - Readonly: JSON only — no shell, no file edits, no mutating tool use.
-- Prompt text lives in `actions/claude-cli/prompts/` (not inline in TypeScript).
+- Prompt text lives in `src/claude-cli/prompts/` (not inline in TypeScript).
 - Prompt includes `schemas/testcase.schema.json`; require JSON conforming to that schema.
 - Auth with `ANTHROPIC_API_KEY` from GitHub Secrets (passed into the Claude CLI Action).
 - Never log full Claude stdout/stderr unredacted.

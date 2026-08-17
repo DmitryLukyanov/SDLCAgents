@@ -2,9 +2,9 @@
 
 GitHub Action that runs on each pull request:
 
-analyze PR → generate testcases (Claude Code CLI) → run P0 → post a PR comment
+analyze PR → generate testcases (Claude Code CLI) → run all cases → post a PR comment
 
-P0 UI cases run with Playwright. P0 API cases run as HTTP checks. The job fails if any P0 fails.
+UI cases run with Playwright. API cases run as HTTP checks. The job fails if any case fails.
 
 ## Setup
 
@@ -23,9 +23,9 @@ npm run build
 
 ## Layout
 
-- `actions/qa-agent` — prepare, validate, run, publish
-- `actions/claude-cli` — readonly Claude Code CLI (inner job step)
-- `actions/claude-cli/prompts/` — generation, repair, and add templates
+- `src/qa-agent` — prepare, validate, run, publish (GitHub Action in this folder)
+- `src/claude-cli` — Claude CLI Action and its prompts
+- `tests/` — unit tests, same folder layout as `src/`
 - `schemas/testcase.schema.json` — testcase contract
 
 Claude input/output, screenshots, and logs are uploaded as job artifacts.

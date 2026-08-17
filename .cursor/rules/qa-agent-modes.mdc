@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Flow
 
-One path on every PR: prepare Claude input → Claude CLI Action → validate (+1 repair via second Claude CLI Action step) → run P0 → PR comment. Fail the job if any P0 fails.
+One path on every PR: prepare Claude input → Claude CLI Action → validate (+1 repair via second Claude CLI Action step) → run all cases → PR comment. Fail the job if any case fails.
 
 ## Artifacts
 

@@ -16,7 +16,7 @@ inputs:
     description: Path to Claude output JSON text
     required: false
   results-file:
-    description: Path to write or read P0 run results JSON
+    description: Path to write or read run results JSON
     required: false
   screenshot-dir:
     description: Directory for Playwright screenshots
@@ -25,7 +25,7 @@ inputs:
     description: Path to write runner log text
     required: false
   base-url:
-    description: Base URL for running P0 UI and API cases
+    description: Base URL for running UI and API cases
     required: false
 
 outputs:
@@ -36,7 +36,7 @@ outputs:
   errors:
     description: Validation errors (validate)
   results-file:
-    description: Path to P0 run results (run)
+    description: Path to run results (run)
   log-file:
     description: Path to runner log (run)
 

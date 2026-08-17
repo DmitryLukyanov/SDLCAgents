@@ -9,7 +9,7 @@ The Mermaid sequence below is the **implementation goal**. Behavior must match i
 
 **Mapping:** `Claude CLI` in the diagram = the dedicated **Claude CLI GitHub Action** (inner job step). Its input and output are Action I/O and must be saved as **artifacts**. `QA Agent` = the QA Agent Action / our orchestration in `src/qa-agent/`. Do not spawn Claude from Node.
 
-There is a **single flow** (no plan-only / plan-and-run modes): generate → validate → run P0 → comment → fail if any P0 failed.
+There is a **single flow** (no plan-only / plan-and-run modes): generate → validate → run all cases → comment → fail if any case failed.
 
 ```mermaid
 sequenceDiagram
@@ -44,7 +44,7 @@ sequenceDiagram
 
   Note over Agent: From here we use the generated test cases
 
-  loop For each critical P0 test case
+  loop For each test case
     alt The case is a UI test
       Agent->>PW: Open the page and run the steps
       PW-->>Agent: Returns pass or fail plus a screenshot
@@ -55,9 +55,9 @@ sequenceDiagram
   end
   Agent->>GHA: Save screenshots and logs as artifacts
   Agent->>GH: Posts the test cases and run results as a PR comment
-  alt Any critical P0 case failed
+  alt Any case failed
     Agent-->>GHA: Mark the job as failed
-  else All critical P0 cases passed
+  else All cases passed
     Agent-->>GHA: Mark the job as success
   end
 

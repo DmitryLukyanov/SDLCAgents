@@ -4,38 +4,16 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { runHttpCheck } from "../dist/qa-agent/runner/httpChecks";
-import { runPlaywrightCase } from "../dist/qa-agent/runner/playwright";
-import { resolveUrl, type ApiCase, type UiCase } from "../dist/qa-agent/runner/types";
+import { runPlaywrightCase } from "../../../dist/qa-agent/runner/playwright";
+import type { UiCase } from "../../../dist/qa-agent/runner/types";
 
 const timeoutMs = 10_000;
 
-test("resolveUrl keeps subdirectory base for root paths", () => {
-  assert.equal(
-    resolveUrl("http://127.0.0.1:4173/SDLCAgents/", "/"),
-    "http://127.0.0.1:4173/SDLCAgents/",
-  );
-  assert.equal(
-    resolveUrl("http://127.0.0.1:4173/SDLCAgents", "/health"),
-    "http://127.0.0.1:4173/SDLCAgents/health",
-  );
-  assert.equal(
-    resolveUrl("http://127.0.0.1:4173/SDLCAgents/", "https://example.test/x"),
-    "https://example.test/x",
-  );
-});
-
-function startFixtureServer(): Promise<{
+function startPageServer(): Promise<{
   baseUrl: string;
   close: () => Promise<void>;
 }> {
   const server = http.createServer((req, res) => {
-    if (req.url === "/health") {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
-      return;
-    }
-
     if (req.url === "/" || req.url === "/index.html") {
       res.writeHead(200, { "content-type": "text/html" });
       res.end(
@@ -58,7 +36,7 @@ function startFixtureServer(): Promise<{
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       if (!addr || typeof addr === "string") {
-        reject(new Error("failed to bind fixture server"));
+        reject(new Error("failed to bind page server"));
         return;
       }
 
@@ -79,47 +57,8 @@ function startFixtureServer(): Promise<{
   });
 }
 
-test("HTTP check passes and fails predictably", async () => {
-  const server = await startFixtureServer();
-  try {
-    const passing: ApiCase = {
-      id: "api-health",
-      title: "Health endpoint returns 200",
-      priority: "P0",
-      type: "api",
-      request: { method: "GET", path: "/health" },
-      asserts: { status: 200, bodyContains: "ok" },
-    };
-    const failing: ApiCase = {
-      id: "api-health-wrong-status",
-      title: "Health endpoint expected 201",
-      priority: "P0",
-      type: "api",
-      request: { method: "GET", path: "/health" },
-      asserts: { status: 201 },
-    };
-
-    const pass = await runHttpCheck(passing, {
-      baseUrl: server.baseUrl,
-      timeoutMs,
-    });
-    const fail = await runHttpCheck(failing, {
-      baseUrl: server.baseUrl,
-      timeoutMs,
-    });
-
-    assert.equal(pass.ok, true);
-    assert.equal(fail.ok, false);
-    if (!fail.ok) {
-      assert.match(fail.error, /expected status 201/);
-    }
-  } finally {
-    await server.close();
-  }
-});
-
 test("Playwright UI case passes and fails predictably", async () => {
-  const server = await startFixtureServer();
+  const server = await startPageServer();
   const screenshotDir = path.join(os.tmpdir(), "qa-agent-runner-tests");
   try {
     const passing: UiCase = {

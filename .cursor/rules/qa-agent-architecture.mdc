@@ -23,20 +23,17 @@ Implement the control flow in `qa-agent-flow.mdc` (Mermaid sequence). That diagr
 
 ## Source layout
 
-- All application code lives under `src/` (split by Action: e.g. `src/qa-agent/`, `src/claude-cli/`).
-- All unit tests live under the root `tests/` folder (not under `src/`). Test-only files (fixtures, etc.) live there too.
-- Prompt text files live under the Action that uses them (`actions/<action>/prompts/`), not inline in TypeScript.
-- Each Action’s `action.yml` runs the compiled output of its own `src/` tree (`dist/`). No parallel implementations outside `src/`.
+- Application code lives under `src/<agent>/` (code, prompts, and `action.yml` together).
+- Compiled JavaScript goes to root `dist/` (`src/qa-agent/` → `dist/qa-agent/`).
+- Unit tests live under `tests/<agent>/`, mirroring `src/<agent>/`. Fixtures live under `tests/fixtures/`.
+- Prompt text files live under the agent that uses them (`src/<agent>/prompts/`), not inline in TypeScript.
+- Each agent’s `action.yml` runs the matching files under root `dist/`.
 - Keep shared contracts at repo root: `schemas/`, `package.json`, `tsconfig.json` as needed.
 
 Agreed tree (shape):
 
 ```
-actions/qa-agent/action.yml
-actions/claude-cli/action.yml
-actions/claude-cli/prompts/
-schemas/testcase.schema.json
-tests/
+src/qa-agent/action.yml
 src/qa-agent/index.ts
 src/qa-agent/prepare.ts
 src/qa-agent/validate.ts
@@ -46,14 +43,26 @@ src/qa-agent/ingest/prContext.ts
 src/qa-agent/schemas/ensureValidTestcase.ts
 src/qa-agent/runner/playwright.ts
 src/qa-agent/runner/httpChecks.ts
+src/qa-agent/runner/types.ts
 src/qa-agent/report/prComment.ts
 src/qa-agent/report/formatComment.ts
+src/claude-cli/action.yml
 src/claude-cli/index.ts
 src/claude-cli/prompts.ts
 src/claude-cli/runClaude.ts
-actions/claude-cli/prompts/testcase-generation.txt
-actions/claude-cli/prompts/testcase-repair.txt
-actions/claude-cli/prompts/testcase-add.txt
+src/claude-cli/prompts/testcase-generation.txt
+src/claude-cli/prompts/testcase-repair.txt
+src/claude-cli/prompts/testcase-add.txt
+schemas/testcase.schema.json
+tests/qa-agent/run.test.ts
+tests/qa-agent/ingest/prContext.test.ts
+tests/qa-agent/schemas/ensureValidTestcase.test.ts
+tests/qa-agent/runner/playwright.test.ts
+tests/qa-agent/runner/httpChecks.test.ts
+tests/qa-agent/runner/types.test.ts
+tests/qa-agent/report/formatComment.test.ts
+tests/claude-cli/prompts.test.ts
+tests/fixtures/
 .github/workflows/qa-agent.yml
 .github/workflows/self-test.yml
 README.md
@@ -68,7 +77,7 @@ README.md
 
 ## Implementation order
 
-Follow Steps 1→8. Step 4 = Claude CLI Action (+ artifact I/O), not an in-process CLI wrapper. The shipped flow is generate → validate → run P0 → comment.
+Follow Steps 1→8. Step 4 = Claude CLI Action (+ artifact I/O), not an in-process CLI wrapper. The shipped flow is generate → validate → run all cases → comment.
 
 ## Out of scope (MVP)
 

@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   buildSummaryTableRows,
   formatTestcaseComment,
-} from "../dist/qa-agent/report/formatComment";
+} from "../../../dist/qa-agent/report/formatComment";
 
 const cases = {
   cases: [

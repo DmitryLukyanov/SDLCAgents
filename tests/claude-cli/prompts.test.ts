@@ -7,7 +7,9 @@ import {
   buildRepairPrompt,
   buildTestcasePrompt,
   loadPromptTemplate,
-} from "../dist/claude-cli/prompts";
+} from "../../dist/claude-cli/prompts";
+
+const repoRoot = path.join(__dirname, "..", "..");
 
 const pr = {
   number: 7,
@@ -24,11 +26,11 @@ const pr = {
 
 test("buildTestcasePrompt fills generation template", () => {
   const schemaJson = fs.readFileSync(
-    path.join(__dirname, "..", "schemas", "testcase.schema.json"),
+    path.join(repoRoot, "schemas", "testcase.schema.json"),
     "utf8",
   );
   const template = loadPromptTemplate(
-    path.join(__dirname, "..", "actions", "claude-cli", "prompts", "testcase-generation.txt"),
+    path.join(repoRoot, "src", "claude-cli", "prompts", "testcase-generation.txt"),
   );
 
   const prompt = buildTestcasePrompt(template, pr, schemaJson);
@@ -45,11 +47,11 @@ test("buildTestcasePrompt fills generation template", () => {
 
 test("buildRepairPrompt fills repair template", () => {
   const schemaJson = fs.readFileSync(
-    path.join(__dirname, "..", "schemas", "testcase.schema.json"),
+    path.join(repoRoot, "schemas", "testcase.schema.json"),
     "utf8",
   );
   const template = loadPromptTemplate(
-    path.join(__dirname, "..", "actions", "claude-cli", "prompts", "testcase-repair.txt"),
+    path.join(repoRoot, "src", "claude-cli", "prompts", "testcase-repair.txt"),
   );
 
   const prompt = buildRepairPrompt(
@@ -69,11 +71,11 @@ test("buildRepairPrompt fills repair template", () => {
 
 test("buildAddPrompt fills add template", () => {
   const schemaJson = fs.readFileSync(
-    path.join(__dirname, "..", "schemas", "testcase.schema.json"),
+    path.join(repoRoot, "schemas", "testcase.schema.json"),
     "utf8",
   );
   const template = loadPromptTemplate(
-    path.join(__dirname, "..", "actions", "claude-cli", "prompts", "testcase-add.txt"),
+    path.join(repoRoot, "src", "claude-cli", "prompts", "testcase-add.txt"),
   );
 
   const prompt = buildAddPrompt(

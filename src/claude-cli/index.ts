@@ -19,7 +19,7 @@ async function run(): Promise<void> {
   const humanComment = core.getInput("human-comment");
 
   const repoRoot = path.join(__dirname, "..", "..");
-  const promptsDir = path.join(repoRoot, "actions", "claude-cli", "prompts");
+  const promptsDir = path.join(repoRoot, "src", "claude-cli", "prompts");
   const schemaPath = path.join(repoRoot, "schemas", "testcase.schema.json");
   const schemaJson = fs.readFileSync(schemaPath, "utf8");
 

@@ -1,6 +1,6 @@
 ---
 description: Testcase JSON Schema and Ajv validation rules
-globs: schemas/**,src/qa-agent/schemas/**,src/qa-agent/agent/**,src/claude-cli/**,tests/**
+globs: schemas/**,src/qa-agent/schemas/**,src/claude-cli/**,tests/**
 alwaysApply: false
 ---
 
@@ -12,4 +12,4 @@ alwaysApply: false
 - UI cases: declarative actions only — `goto`, `click`, `fill`, `expectText`, `expectUrl`. No arbitrary code from the LLM.
 - API cases: `method`, `path`, and response asserts only.
 - Enforce limits: max cases, timeouts, max Claude turns.
-- Unit tests for this contract live under root `tests/` (not under `src/`).
+- Unit tests for this contract live under `tests/qa-agent/schemas/` (not under the Action folders).
