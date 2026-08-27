@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "id": "ui-home-loads",
+      "title": "Home page shows welcome text",
+      "priority": "P0",
+      "type": "ui",
+      "steps": [
+        { "action": "goto", "url": "/" },
+        { "action": "expectText", "text": "Welcome" }
+      ]
+    },
+    {
+      "id": "api-health",
+      "title": "Health endpoint returns 200",
+      "priority": "P0",
+      "type": "api",
+      "request": {
+        "method": "GET",
+        "path": "/health"
+      },
+      "asserts": {
+        "status": 200,
+        "bodyContains": "ok"
+      }
+    }
+  ]
+}

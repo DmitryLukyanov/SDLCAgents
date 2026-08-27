@@ -1,0 +1,45 @@
+name: QA Agent
+description: Orchestrates PR ingest, testcase validation, runners, and reporting
+author: SDLCAgents
+
+inputs:
+  github-token:
+    description: GitHub token used to read the PR and post comments
+    required: true
+  step:
+    description: "prepare | validate | run | publish"
+    required: true
+  pr-context-file:
+    description: Path to write or read PR context JSON
+    required: false
+  claude-output-file:
+    description: Path to Claude output JSON text
+    required: false
+  results-file:
+    description: Path to write or read P0 run results JSON
+    required: false
+  screenshot-dir:
+    description: Directory for Playwright screenshots
+    required: false
+  log-file:
+    description: Path to write runner log text
+    required: false
+  base-url:
+    description: Base URL for running P0 UI and API cases
+    required: false
+
+outputs:
+  pr-context-file:
+    description: Path to written PR context (prepare)
+  valid:
+    description: '"true" or "false" (validate)'
+  errors:
+    description: Validation errors (validate)
+  results-file:
+    description: Path to P0 run results (run)
+  log-file:
+    description: Path to runner log (run)
+
+runs:
+  using: node20
+  main: ../../dist/qa-agent/index.js

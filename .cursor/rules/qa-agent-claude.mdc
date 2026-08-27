@@ -1,0 +1,28 @@
+---
+description: Dedicated Claude CLI GitHub Action — invocation, I/O, artifacts
+globs: src/claude-cli/**,actions/claude-cli/**
+alwaysApply: true
+---
+
+# QA Agent — Claude CLI Action
+
+## How it is invoked
+
+- Claude runs only via the **dedicated Claude CLI GitHub Action**.
+- The QA Agent workflow/job calls that Action as an **inner step**.
+- Do **not** spawn Claude from the QA Agent TypeScript (no `child_process`, no shell-out to `claude`).
+
+## Input / output / artifacts
+
+- Provide explicit **Action inputs** (and/or input files) to the Claude CLI Action.
+- Capture explicit **Action outputs** (and/or output files) from the Claude CLI Action.
+- Upload **Claude input** and **Claude output** as job **artifacts** on every planning call (including repair retries).
+
+## Planning behavior
+
+- Use Claude Code CLI inside that Action only, e.g. `claude --print --output-format json`.
+- Readonly: JSON only — no shell, no file edits, no mutating tool use.
+- Prompt text lives in dedicated files under `prompts/` (not inline in TypeScript).
+- Prompt includes `schemas/testcase.schema.json`; require JSON conforming to that schema.
+- Auth with `ANTHROPIC_API_KEY` from GitHub Secrets (passed into the Claude CLI Action).
+- Never log full Claude stdout/stderr unredacted.

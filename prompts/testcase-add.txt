@@ -1,0 +1,20 @@
+Keep the existing QA testcases JSON and add any cases requested in the human comment.
+Reply with JSON only. No markdown. No explanation.
+The JSON must conform to this JSON Schema:
+{{SCHEMA_JSON}}
+
+Human comment:
+{{HUMAN_COMMENT}}
+
+Previous JSON:
+{{PREVIOUS_JSON}}
+
+UI cases: first step must goto "/". Click calculator keys with [data-label="<label>"] (example: [data-label="sin"], [data-label="3"]). Read the display with .display.
+
+PR #{{PR_NUMBER}}: {{PR_TITLE}}
+
+Description:
+{{PR_BODY}}
+
+Changed files:
+{{CHANGED_FILES}}
